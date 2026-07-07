@@ -302,7 +302,7 @@ export default function LoginPage() {
             id="home"
             className="relative z-10 mx-auto mt-28 w-full max-w-5xl scroll-mt-28 overflow-hidden rounded-[1.3rem] border border-white/45 p-5 sm:mt-24 sm:scroll-mt-28 sm:p-8"
             style={{
-              backgroundImage: "url('/imagens/casal-fundo.jpeg')",
+              backgroundImage: "url('/imagens/flores.jpg')",
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',
@@ -311,11 +311,13 @@ export default function LoginPage() {
             <div className="pointer-events-none absolute inset-0 bg-white/62" />
             <header className="space-y-4 text-center">
               <div className="mx-auto flex w-fit items-center gap-4">
-                <span className="gold-frame flex h-11 w-11 items-center justify-center rounded-full bg-white/75 font-display text-xl text-champagne-800">I</span>
-                <span className="text-sm text-zinc-500">|</span>
-                <span className="gold-frame flex h-11 w-11 items-center justify-center rounded-full bg-white/75 font-display text-xl text-champagne-800">B</span>
+                <img
+                  src="/imagens/casal.jpeg"
+                  alt="Igor e Bianca"
+                  className="h-50 w-50 rounded-[50%] border-2 border-white/85 object-cover shadow-[0_10px_24px_rgba(0,0,0,0.18)] sm:h-28 sm:w-28"
+                />
               </div>
-              <h1 className="font-display text-5xl leading-[0.95] text-champagne-800 sm:text-6xl">Igor e Bianca</h1>
+              <h1 className="font-display text-5xl leading-[1.0] text-champagne-800 sm:text-6xl">Igor e Bianca</h1>
               <p className="text-xs uppercase tracking-[0.35em] text-zinc-700/85 sm:text-sm">15 | 05 | 2026</p>
             </header>
 

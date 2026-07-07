@@ -160,12 +160,9 @@ export default function LoginPage() {
   return (
     <main className="paper-texture relative min-h-screen overflow-hidden">
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 bg-contain bg-center bg-no-repeat sm:bg-cover"
         style={{
           backgroundImage: "url('/imagens/flores.jpg')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
         }}
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_14%,rgba(255,255,255,0.3),transparent_34%),radial-gradient(circle_at_86%_86%,rgba(13,10,7,0.34),transparent_40%),linear-gradient(180deg,rgba(20,14,10,0.2),rgba(20,14,10,0.34))]" />
@@ -173,7 +170,7 @@ export default function LoginPage() {
       <section className="relative z-10 mx-auto grid min-h-screen w-full max-w-7xl gap-4 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
         <div className="relative overflow-hidden p-0 sm:p-2 lg:p-4">
 
-          <nav className="gold-frame fixed left-1/2 top-3 z-50 flex w-[calc(100%-1.5rem)] max-w-5xl -translate-x-1/2 flex-col gap-2 rounded-xl bg-white/65 px-3 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:top-4 sm:w-[calc(100%-3rem)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:text-[0.68rem]">
+          <nav className="gold-frame fixed left-1/2 top-2 z-50 flex w-[calc(100%-1rem)] max-w-5xl -translate-x-1/2 flex-col gap-2 rounded-xl bg-white/65 px-3 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:top-4 sm:w-[calc(100%-3rem)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:text-[0.68rem]">
             <div className="login-audio-shell">
               <motion.span
                 className="login-audio-disc"
@@ -244,12 +241,12 @@ export default function LoginPage() {
               </audio>
             </div>
 
-            <div className="flex w-full items-center justify-center gap-2 text-[0.58rem] sm:hidden">
+            <div className="flex w-full flex-wrap items-center justify-center gap-1.5 text-[0.54rem] sm:hidden">
               {navItems.map((item) => (
                 <a
                   key={`mobile-${item.href}`}
                   href={item.href}
-                  className="rounded-full border border-champagne-500/35 bg-white/45 px-2.5 py-1 text-zinc-700 transition-colors hover:bg-white/75"
+                  className="whitespace-nowrap rounded-full border border-champagne-500/35 bg-white/45 px-2.5 py-1 text-zinc-700 transition-colors hover:bg-white/75"
                 >
                   {item.label}
                 </a>
@@ -300,12 +297,9 @@ export default function LoginPage() {
 
           <section
             id="home"
-            className="relative z-10 mx-auto mt-28 w-full max-w-5xl scroll-mt-28 overflow-hidden rounded-[1.3rem] border border-white/45 p-5 sm:mt-24 sm:scroll-mt-28 sm:p-8"
+            className="relative z-10 mx-auto mt-40 w-full max-w-5xl scroll-mt-32 overflow-hidden rounded-[1.3rem] border border-white/45 bg-contain bg-center bg-no-repeat p-4 sm:mt-24 sm:scroll-mt-28 sm:bg-cover sm:p-8"
             style={{
               backgroundImage: "url('/imagens/flores.jpg')",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
             }}
           >
             <div className="pointer-events-none absolute inset-0 bg-white/62" />
@@ -314,10 +308,10 @@ export default function LoginPage() {
                 <img
                   src="/imagens/casal.jpeg"
                   alt="Igor e Bianca"
-                  className="h-50 w-50 rounded-[50%] border-2 border-white/85 object-cover shadow-[0_10px_24px_rgba(0,0,0,0.18)] sm:h-28 sm:w-28"
+                  className="h-24 w-24 rounded-[50%] border-2 border-white/85 object-cover shadow-[0_10px_24px_rgba(0,0,0,0.18)] sm:h-28 sm:w-28"
                 />
               </div>
-              <h1 className="font-display text-5xl leading-[1.0] text-champagne-800 sm:text-6xl">Igor e Bianca</h1>
+              <h1 className="font-display text-4xl leading-[1.0] text-champagne-800 sm:text-6xl">Igor e Bianca</h1>
               <p className="text-xs uppercase tracking-[0.35em] text-zinc-700/85 sm:text-sm">15 | 05 | 2026</p>
             </header>
 
@@ -436,7 +430,7 @@ export default function LoginPage() {
                   className="frosted-light gold-frame relative mx-auto mt-7 w-full max-w-md scroll-mt-28 rounded-[1.3rem] p-5 sm:p-6"
                 >
                   <div className="space-y-2 text-center">
-                    <h2 className="font-display text-5xl leading-[0.95] text-champagne-800 sm:text-[3.2rem]">
+                    <h2 className="font-display text-3xl leading-[0.98] text-champagne-800 sm:text-[3.2rem]">
                       Seja Bem-vindo ao
                       <br />
                       Nosso Dia Especial

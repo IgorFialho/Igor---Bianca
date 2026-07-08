@@ -37,6 +37,11 @@ type MessageDialogState = {
   text: string;
 } | null;
 
+type AccessActionDialogState = {
+  mode: 'selected' | 'all';
+  inviteCodes: string[];
+} | null;
+
 export default function AdminPage() {
   const router = useRouter();
   const [codes, setCodes] = useState<InviteCode[]>([]);
@@ -54,7 +59,10 @@ export default function AdminPage() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [messageDialog, setMessageDialog] = useState<MessageDialogState>(null);
+  const [accessActionDialog, setAccessActionDialog] = useState<AccessActionDialogState>(null);
   const [isClearingAccessHistory, setIsClearingAccessHistory] = useState(false);
+  const [isDeletingSelectedAccesses, setIsDeletingSelectedAccesses] = useState(false);
+  const [selectedAccessCodes, setSelectedAccessCodes] = useState<string[]>([]);
 
   const fetchDashboard = async () => {
     const [codesResponse, accessesResponse] = await Promise.all([
@@ -76,10 +84,13 @@ export default function AdminPage() {
 
     const nextCodes: InviteCode[] = codesData.codes || [];
     const nextIds = new Set(nextCodes.map((item) => item.id));
+    const nextAccesses: AccessItem[] = accessesData.accesses || [];
+    const nextAccessCodes = new Set(nextAccesses.map((item) => item.invite_code_used.toUpperCase()));
 
     setCodes(nextCodes);
     setSelectedCodeIds((previous) => previous.filter((id) => nextIds.has(id)));
-    setAccesses(accessesData.accesses || []);
+    setAccesses(nextAccesses);
+    setSelectedAccessCodes((previous) => previous.filter((code) => nextAccessCodes.has(code.toUpperCase())));
   };
 
   useEffect(() => {
@@ -267,12 +278,16 @@ export default function AdminPage() {
     }
   };
 
-  const handleClearAccessHistory = async () => {
-    const confirmed = window.confirm('Tem certeza que deseja limpar todo o historico de acessos e respostas?');
-
-    if (!confirmed) {
+  const handleClearAccessHistory = () => {
+    if (accesses.length === 0) {
       return;
     }
+
+    setAccessActionDialog({ mode: 'all', inviteCodes: [] });
+  };
+
+  const clearAllAccessHistory = async () => {
+    setAccessActionDialog(null);
 
     setIsClearingAccessHistory(true);
     setError('');
@@ -292,6 +307,7 @@ export default function AdminPage() {
       }
 
       setAccesses([]);
+      setSelectedAccessCodes([]);
       setNotice({ type: 'success', message: 'Historico de acessos e respostas limpo com sucesso.' });
     } catch (clearError) {
       const message = clearError instanceof Error ? clearError.message : 'Erro inesperado.';
@@ -301,6 +317,98 @@ export default function AdminPage() {
       setIsClearingAccessHistory(false);
     }
   };
+
+  const handleToggleAccessSelection = (inviteCodeUsed: string) => {
+    setSelectedAccessCodes((previous) =>
+      previous.includes(inviteCodeUsed)
+        ? previous.filter((code) => code !== inviteCodeUsed)
+        : [...previous, inviteCodeUsed]
+    );
+  };
+
+  const handleToggleSelectAllAccesses = () => {
+    if (accesses.length === 0) {
+      return;
+    }
+
+    const allCodes = Array.from(new Set(accesses.map((item) => item.invite_code_used)));
+
+    if (selectedAccessCodes.length === allCodes.length) {
+      setSelectedAccessCodes([]);
+      return;
+    }
+
+    setSelectedAccessCodes(allCodes);
+  };
+
+  const handleDeleteSelectedAccesses = () => {
+    if (selectedAccessCodes.length === 0) {
+      return;
+    }
+
+    setAccessActionDialog({ mode: 'selected', inviteCodes: selectedAccessCodes });
+  };
+
+  const deleteSelectedAccesses = async (inviteCodes: string[]) => {
+    setAccessActionDialog(null);
+
+    setIsDeletingSelectedAccesses(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/admin/accesses', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCodes }),
+      });
+
+      if (response.status === 401) {
+        router.replace('/admin/login');
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nao foi possivel excluir os acessos selecionados.');
+      }
+
+      const deletedCodes: string[] = Array.isArray(data?.deletedCodes)
+        ? data.deletedCodes
+        : inviteCodes;
+      const deletedCodeSet = new Set(deletedCodes.map((code) => code.toUpperCase()));
+
+      setAccesses((previous) =>
+        previous.filter((item) => !deletedCodeSet.has(item.invite_code_used.toUpperCase()))
+      );
+      setSelectedAccessCodes([]);
+      setNotice({
+        type: 'success',
+        message: `${deletedCodeSet.size} acesso(s) selecionado(s) excluido(s) com sucesso.`,
+      });
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : 'Erro inesperado.';
+      setError(message);
+      setNotice({ type: 'error', message });
+    } finally {
+      setIsDeletingSelectedAccesses(false);
+    }
+  };
+
+  const handleConfirmAccessAction = async () => {
+    if (!accessActionDialog) {
+      return;
+    }
+
+    if (accessActionDialog.mode === 'selected') {
+      await deleteSelectedAccesses(accessActionDialog.inviteCodes);
+      return;
+    }
+
+    await clearAllAccessHistory();
+  };
+
+  const uniqueAccessCodes = Array.from(new Set(accesses.map((item) => item.invite_code_used)));
 
   return (
     <main className="paper-texture relative min-h-screen px-4 py-6 sm:px-6 lg:px-10">
@@ -495,20 +603,54 @@ export default function AdminPage() {
         <section className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-3xl text-champagne-800">Pessoas que acessaram o convite</h2>
-            <button
-              type="button"
-              onClick={handleClearAccessHistory}
-              disabled={isClearingAccessHistory || accesses.length === 0}
-              className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              {isClearingAccessHistory ? 'Limpando historico...' : 'Limpar historico em lote'}
-            </button>
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDeleteSelectedAccesses}
+                disabled={isDeletingSelectedAccesses || isClearingAccessHistory || selectedAccessCodes.length === 0}
+                className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {isDeletingSelectedAccesses
+                  ? 'Excluindo selecionadas...'
+                  : `Excluir selecionadas (${selectedAccessCodes.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAccessHistory}
+                disabled={isDeletingSelectedAccesses || isClearingAccessHistory || accesses.length === 0}
+                className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                {isClearingAccessHistory ? 'Limpando historico...' : 'Limpar Todo o historico'}
+              </button>
+            </div>
           </div>
           <div className="mt-4 space-y-2 sm:hidden">
+            <button
+              type="button"
+              onClick={handleToggleSelectAllAccesses}
+              className="w-full rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-xs font-medium text-zinc-700"
+            >
+              {uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length
+                ? 'Desmarcar todos'
+                : 'Selecionar todos'}
+            </button>
+
             {accesses.map((item) => (
               <article key={`${item.invite_code_used}-${item.last_accessed_at}`} className="rounded-lg border border-white/70 bg-white/75 p-3 text-sm">
-                <p className="text-xs text-zinc-500">Codigo</p>
-                <p className="font-medium text-zinc-800">{item.invite_code_used}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-zinc-500">Codigo</p>
+                    <p className="font-medium text-zinc-800">{item.invite_code_used}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    aria-label={`Selecionar acesso ${item.invite_code_used}`}
+                    checked={selectedAccessCodes.includes(item.invite_code_used)}
+                    onChange={() => handleToggleAccessSelection(item.invite_code_used)}
+                    disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
+                    className="mt-1 h-4 w-4 rounded border-zinc-300"
+                  />
+                </div>
 
                 <p className="mt-2 text-xs text-zinc-500">Convidado</p>
                 <p className="text-zinc-700">{item.guest_name || 'Sem nome'}</p>
@@ -559,6 +701,15 @@ export default function AdminPage() {
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-white/80 text-zinc-600">
                 <tr>
+                  <th className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos os acessos"
+                      checked={uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length}
+                      onChange={handleToggleSelectAllAccesses}
+                      className="h-4 w-4 rounded border-zinc-300"
+                    />
+                  </th>
                   <th className="px-3 py-2">Codigo</th>
                   <th className="px-3 py-2">Convidado</th>
                   <th className="px-3 py-2">Respostas</th>
@@ -570,6 +721,16 @@ export default function AdminPage() {
               <tbody>
                 {accesses.map((item) => (
                   <tr key={`${item.invite_code_used}-${item.last_accessed_at}`} className="border-t border-white/70 text-zinc-700">
+                    <td className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Selecionar acesso ${item.invite_code_used}`}
+                        checked={selectedAccessCodes.includes(item.invite_code_used)}
+                        onChange={() => handleToggleAccessSelection(item.invite_code_used)}
+                        disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
+                        className="h-4 w-4 rounded border-zinc-300"
+                      />
+                    </td>
                     <td className="px-3 py-2 font-medium text-zinc-800">{item.invite_code_used}</td>
                     <td className="px-3 py-2">{item.guest_name || 'Sem nome'}</td>
                     <td className="px-3 py-2">
@@ -674,6 +835,48 @@ export default function AdminPage() {
                 className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {accessActionDialog ? (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/35 px-4">
+          <div className="frosted-light gold-frame w-full max-w-md rounded-2xl p-5 sm:p-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Confirmar exclusao</p>
+            <h3 className="mt-1 font-display text-3xl text-champagne-800">
+              {accessActionDialog.mode === 'selected' ? 'Excluir acessos selecionados' : 'Limpar historico em lote'}
+            </h3>
+            <p className="mt-3 text-sm text-zinc-700">
+              {accessActionDialog.mode === 'selected' ? (
+                <>
+                  Tem certeza que deseja excluir{' '}
+                  <span className="font-semibold text-zinc-900">{accessActionDialog.inviteCodes.length} acesso(s) selecionado(s)</span>{' '}
+                  e suas respostas? Esta acao nao pode ser desfeita.
+                </>
+              ) : (
+                <>
+                  Tem certeza que deseja limpar todo o <span className="font-semibold text-zinc-900">historico de acessos e respostas</span>? Esta acao nao pode ser desfeita.
+                </>
+              )}
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAccessActionDialog(null)}
+                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAccessAction}
+                disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
+                className="rounded-lg border border-rose-300 bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Confirmar exclusao
               </button>
             </div>
           </div>

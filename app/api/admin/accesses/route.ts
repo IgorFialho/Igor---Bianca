@@ -57,6 +57,43 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    let inviteCodes: string[] = [];
+
+    try {
+      const body = await request.json();
+
+      inviteCodes = Array.isArray(body?.inviteCodes)
+        ? body.inviteCodes
+            .filter((item: unknown) => typeof item === 'string')
+            .map((item: string) => item.trim())
+            .filter((item: string) => item.length > 0)
+        : [];
+    } catch {
+      inviteCodes = [];
+    }
+
+    const normalizedCodes = Array.from(new Set(inviteCodes.map((item) => item.toUpperCase())));
+
+    if (normalizedCodes.length > 0) {
+      await db.query(
+        `
+          DELETE FROM invite_access_logs
+          WHERE UPPER(invite_code_used) = ANY($1::text[])
+        `,
+        [normalizedCodes]
+      );
+
+      await db.query(
+        `
+          DELETE FROM rsvp_responses
+          WHERE UPPER(invite_code_used) = ANY($1::text[])
+        `,
+        [normalizedCodes]
+      );
+
+      return NextResponse.json({ ok: true, deletedCodes: normalizedCodes });
+    }
+
     await db.query('DELETE FROM invite_access_logs');
     await db.query('DELETE FROM rsvp_responses');
     return NextResponse.json({ ok: true });

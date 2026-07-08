@@ -176,7 +176,7 @@ export default function LoginPage() {
   return (
     <main className="paper-texture relative min-h-screen overflow-hidden">
       <div
-        className="absolute inset-0 bg-contain bg-center bg-no-repeat sm:bg-cover"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: "url('/imagens/flores.jpg')",
         }}
@@ -243,7 +243,7 @@ export default function LoginPage() {
 
           <section
             id="home"
-            className="relative z-10 mx-auto mt-40 w-full max-w-5xl scroll-mt-32 overflow-hidden rounded-[1.3rem] border border-white/45 bg-contain bg-center bg-no-repeat p-4 sm:mt-24 sm:scroll-mt-28 sm:bg-cover sm:p-8"
+            className="relative z-10 mx-auto mt-40 w-full max-w-5xl scroll-mt-32 overflow-hidden rounded-[1.3rem] border border-white/45 bg-cover bg-center bg-no-repeat p-4 sm:mt-24 sm:scroll-mt-28 sm:p-8"
             style={{
               backgroundImage: "url('/imagens/flores.jpg')",
             }}
@@ -284,10 +284,22 @@ export default function LoginPage() {
               </div>
             </section>
 
-            <section id="o-casal" className="mx-auto mt-7 max-w-3xl scroll-mt-28 rounded-2xl border border-white/55 bg-white/60 p-4 text-center sm:p-5">
+            <section
+              id="o-casal"
+              className="mx-auto mt-7 max-w-3xl scroll-mt-28 overflow-hidden rounded-2xl border border-white/55 bg-white/60 p-4 text-center sm:p-5"
+            >
               <p className="text-[0.64rem] uppercase tracking-[0.3em] text-zinc-600">O Casal</p>
               <h3 className="mt-2 font-display text-3xl text-champagne-800 sm:text-4xl">Uma historia de amor</h3>
-              <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-zinc-700 sm:text-base">
+
+              <div className="mx-auto mt-4 max-w-2xl overflow-hidden rounded-xl border border-white/70 bg-white/75 p-2">
+                <img
+                  src="/imagens/casal-fundo.jpeg"
+                  alt="Igor e Bianca"
+                  className="h-56 w-full rounded-lg object-cover sm:h-72"
+                />
+              </div>
+
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-zinc-700 sm:text-base">
                 Igor e Bianca celebram um novo capitulo ao lado das pessoas que mais amam.
                 Cada detalhe deste dia foi preparado com carinho para vivermos juntos um momento inesquecivel.
               </p>
@@ -356,7 +368,7 @@ export default function LoginPage() {
                     <p className="mt-5 font-display text-2xl text-champagne-700 sm:text-3xl">Com amor, Igor e Bianca</p>
 
                     <div className="mt-6 space-y-3">
-                      <p className="text-xs uppercase tracking-[0.32em] text-zinc-700/80">Clique para abrir a carta</p>
+                      <p className="text-xs uppercase tracking-[0.32em] text-zinc-700/80">Clique para abrir o Convite</p>
                       <button
                         type="button"
                         onClick={() => setHasOpenedExperience(true)}

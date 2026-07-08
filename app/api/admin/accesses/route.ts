@@ -50,3 +50,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Erro ao buscar acessos.' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  if (!isAdminRequestAuthorized(request)) {
+    return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
+  }
+
+  try {
+    await db.query('DELETE FROM invite_access_logs');
+    await db.query('DELETE FROM rsvp_responses');
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Falha ao limpar historico de acessos', error);
+    return NextResponse.json({ error: 'Erro ao limpar historico de acessos.' }, { status: 500 });
+  }
+}

@@ -48,8 +48,8 @@ SELECT
   'Cerimonia e Recepcao Ana & Bruno',
   DATE '2026-05-15',
   TIME '16:30',
-  'Jardins de Lavanda - Vale dos Pinheiros',
-  'Estrada Flor do Campo, 315 - Serra da Mantiqueira'
+  'Pampulha - Belo Horizonte',
+  'Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450'
 WHERE NOT EXISTS (SELECT 1 FROM wedding_events);
 
 INSERT INTO invitation_codes (code, guest_name, is_active)

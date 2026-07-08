@@ -100,7 +100,7 @@ export function SaveTheDateCinematic() {
           <p className="font-display text-3xl leading-tight text-champagne-800 sm:text-5xl">
             O Amor Floresce.
           </p>
-          <p className="mt-1 text-lg text-zinc-700/90 sm:text-2xl">[Igor e Bianca]. 15.05.2026</p>
+          <p className="mt-1 text-lg text-zinc-700/90 sm:text-2xl">[Igor e Bianca]. 18.04.2027</p>
         </motion.div>
       </motion.div>
     </section>

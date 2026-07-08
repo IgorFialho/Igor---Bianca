@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Cormorant_Garamond, Manrope } from 'next/font/google';
 import './globals.css';
 import { SplashScreen } from '@/components/splash-screen';
+import { SiteMusicPlayer } from '@/components/site-music-player';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="pt-BR">
       <body className={`${manrope.variable} ${cormorant.variable} bg-cream font-body text-zinc-800 antialiased`}>
         <SplashScreen />
+        <SiteMusicPlayer />
         {children}
       </body>
     </html>

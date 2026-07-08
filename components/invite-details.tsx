@@ -26,7 +26,7 @@ export function InviteDetails() {
 
         <article className="rounded-xl border border-white/70 bg-white/72 p-4">
           <p className="text-[0.68rem] uppercase tracking-[0.34em] text-zinc-600">Data</p>
-          <p className="mt-2 font-display text-3xl text-zinc-800">15 MAI 2026</p>
+          <p className="mt-2 font-display text-3xl text-zinc-800">18 ABR 2027</p>
         </article>
 
         <div className="space-y-2 rounded-xl border border-white/70 bg-white/72 p-4 text-sm text-zinc-700">

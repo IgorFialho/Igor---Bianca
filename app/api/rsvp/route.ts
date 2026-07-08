@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type ExistingRsvpRow = {
   attendance: 'yes' | 'no';
   adults_count: number;
   children_count: number;
   dietary_notes: string | null;
+  submitted_at: string;
+};
+
+type PublicMessageRow = {
+  id: string;
+  guest_name: string | null;
+  invite_code_used: string;
+  dietary_notes: string;
   submitted_at: string;
 };
 
@@ -15,6 +26,51 @@ type InvitationCodeRow = {
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code')?.trim();
+  const includeMessages = request.nextUrl.searchParams.get('messages') === 'yes';
+
+  if (includeMessages) {
+    try {
+      const result = await db.query<PublicMessageRow>(
+        `
+          SELECT
+            r.id::text,
+            i.guest_name,
+            r.invite_code_used,
+            r.dietary_notes,
+            r.submitted_at::text
+          FROM rsvp_responses r
+          INNER JOIN invitation_codes i ON i.id = r.invitation_code_id
+          WHERE r.attendance = 'yes'
+            AND i.is_active = TRUE
+            AND r.dietary_notes IS NOT NULL
+            AND LENGTH(TRIM(r.dietary_notes)) > 0
+          ORDER BY r.submitted_at DESC
+          LIMIT 12
+        `
+      );
+
+      const messages = result.rows.map((row) => ({
+        id: row.id,
+        guestName: row.guest_name || row.invite_code_used,
+        message: row.dietary_notes,
+        submittedAt: row.submitted_at,
+      }));
+
+      return NextResponse.json(
+        { messages },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0',
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Falha ao consultar mensagens de RSVP', error);
+      return NextResponse.json({ error: 'Erro ao consultar mensagens de RSVP.' }, { status: 500 });
+    }
+  }
 
   if (!code) {
     return NextResponse.json({ submitted: false });

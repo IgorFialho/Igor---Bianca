@@ -1,11 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { INVITE_ACCESS_KEY } from '@/lib/invite';
 
-const EVENT_DATE = new Date('2027-05-15T16:30:00-03:00');
+const EVENT_DATE = new Date('2027-04-18T16:30:00-03:00');
 
 function getCountdown() {
   const now = new Date();
@@ -23,17 +23,22 @@ function pad(value: number) {
   return String(value).padStart(2, '0');
 }
 
+type PublicRsvpMessage = {
+  id: string;
+  guestName: string;
+  message: string;
+  submittedAt: string;
+};
+
 export default function LoginPage() {
   const router = useRouter();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasOpenedExperience, setHasOpenedExperience] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.25);
-  const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const [countdown, setCountdown] = useState<ReturnType<typeof getCountdown> | null>(null);
+  const [rsvpMessages, setRsvpMessages] = useState<PublicRsvpMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const petals = useMemo(
     () =>
@@ -70,45 +75,56 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    const audioElement = audioRef.current;
+    let isMounted = true;
 
-    if (!audioElement) {
-      return;
-    }
-
-    audioElement.volume = volume;
-    setIsMusicPlaying(!audioElement.paused);
-  }, [volume]);
-
-  const togglePlayback = async () => {
-    const audioElement = audioRef.current;
-
-    if (!audioElement) {
-      return;
-    }
-
-    if (audioElement.paused) {
-      try {
-        await audioElement.play();
-        setIsMusicPlaying(true);
-      } catch {
-        setIsMusicPlaying(false);
+    const loadMessages = async (showLoader = false) => {
+      if (showLoader && isMounted) {
+        setIsLoadingMessages(true);
       }
-      return;
-    }
 
-    audioElement.pause();
-    setIsMusicPlaying(false);
-  };
+      try {
+        const response = await fetch(`/api/rsvp?messages=yes&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
+        const data = await response.json();
 
-  const handleVolumeChange = (nextVolume: number) => {
-    const normalized = Math.min(1, Math.max(0, nextVolume));
-    setVolume(normalized);
+        if (!response.ok) {
+          throw new Error(data?.error || 'Falha ao carregar mensagens.');
+        }
 
-    if (audioRef.current) {
-      audioRef.current.volume = normalized;
-    }
-  };
+        if (isMounted) {
+          setRsvpMessages(Array.isArray(data?.messages) ? data.messages : []);
+        }
+      } catch {
+        if (isMounted) {
+          setRsvpMessages([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingMessages(false);
+        }
+      }
+    };
+
+    const refreshMessages = () => {
+      void loadMessages(false);
+    };
+
+    void loadMessages(true);
+    const intervalId = window.setInterval(refreshMessages, 15000);
+    window.addEventListener('focus', refreshMessages);
+    document.addEventListener('visibilitychange', refreshMessages);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshMessages);
+      document.removeEventListener('visibilitychange', refreshMessages);
+    };
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -148,8 +164,8 @@ export default function LoginPage() {
   };
 
   const countdownValues = countdown ?? { days: 0, hours: 0, minutes: 0, seconds: 0 };
-  const googleMapsUrl = 'https://www.google.com/maps/search/?api=1&query=Estrada+Flor+do+Campo+315+Serra+da+Mantiqueira';
-  const googleMapsEmbedUrl = 'https://www.google.com/maps?q=Estrada+Flor+do+Campo+315+Serra+da+Mantiqueira&output=embed';
+  const googleMapsUrl = 'https://www.google.com/maps/search/?api=1&query=Av.+Otacilio+Negrao+de+Lima,+7630+-+Pampulha,+Belo+Horizonte+-+MG,+31365-450';
+  const googleMapsEmbedUrl = 'https://www.google.com/maps?q=Av.+Otacilio+Negrao+de+Lima,+7630+-+Pampulha,+Belo+Horizonte+-+MG,+31365-450&output=embed';
   const navItems = [
     { label: 'Home', href: '#home' },
     { label: 'O Casal', href: '#o-casal' },
@@ -170,83 +186,13 @@ export default function LoginPage() {
       <section className="relative z-10 mx-auto grid min-h-screen w-full max-w-7xl gap-4 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
         <div className="relative overflow-hidden p-0 sm:p-2 lg:p-4">
 
-          <nav className="gold-frame fixed left-1/2 top-2 z-50 flex w-[calc(100%-1rem)] max-w-5xl -translate-x-1/2 flex-col gap-2 rounded-xl bg-white/65 px-3 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:top-4 sm:w-[calc(100%-3rem)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:text-[0.68rem]">
-            <div className="login-audio-shell">
-              <motion.span
-                className="login-audio-disc"
-                animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
-                transition={
-                  isMusicPlaying
-                    ? { duration: 2.2, ease: 'linear', repeat: Infinity }
-                    : { duration: 0.35, ease: 'easeOut' }
-                }
-              />
-              <button
-                type="button"
-                onClick={togglePlayback}
-                className="login-audio-btn"
-                aria-label={isMusicPlaying ? 'Pausar musica' : 'Tocar musica'}
-              >
-                {isMusicPlaying ? 'Pause' : 'Play'}
-              </button>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsVolumeOpen((current) => !current)}
-                  className="login-audio-btn"
-                  aria-label="Abrir controle de volume"
-                >
-                  Vol {Math.round(volume * 100)}%
-                </button>
-                <AnimatePresence>
-                  {isVolumeOpen ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                      transition={{ duration: 0.2, ease: 'easeOut' }}
-                      className="login-volume-popover"
-                    >
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        value={volume}
-                        onChange={(event) => handleVolumeChange(Number(event.target.value))}
-                        className="login-volume-slider"
-                        aria-label="Controle de volume"
-                      />
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </div>
-              <audio
-                ref={audioRef}
-                loop
-                autoPlay
-                onLoadedMetadata={() => {
-                  if (audioRef.current) {
-                    audioRef.current.volume = volume;
-                  }
-                }}
-                onPlay={() => setIsMusicPlaying(true)}
-                onPause={() => setIsMusicPlaying(false)}
-                onEnded={() => setIsMusicPlaying(false)}
-                className="sr-only"
-                aria-label="Player de musica de fundo"
-              >
-                <source src="/sons/musica-fundo.mp3" type="audio/mpeg" />
-                Seu navegador nao suporta audio.
-              </audio>
-            </div>
-
-            <div className="flex w-full flex-wrap items-center justify-center gap-1.5 text-[0.54rem] sm:hidden">
+          <nav className="gold-frame fixed left-1/2 top-2 z-40 flex w-[calc(100%-1rem)] max-w-5xl -translate-x-1/2 flex-col gap-2 rounded-xl bg-white/65 px-3 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:top-4 sm:w-[calc(100%-3rem)] sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:text-[0.68rem]">
+            <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-0.5 text-[0.6rem] sm:hidden">
               {navItems.map((item) => (
                 <a
                   key={`mobile-${item.href}`}
                   href={item.href}
-                  className="whitespace-nowrap rounded-full border border-champagne-500/35 bg-white/45 px-2.5 py-1 text-zinc-700 transition-colors hover:bg-white/75"
+                  className="flex-shrink-0 whitespace-nowrap rounded-full border border-champagne-500/35 bg-white/45 px-2.5 py-1 text-zinc-700 transition-colors hover:bg-white/75"
                 >
                   {item.label}
                 </a>
@@ -312,11 +258,12 @@ export default function LoginPage() {
                 />
               </div>
               <h1 className="font-display text-4xl leading-[1.0] text-champagne-800 sm:text-6xl">Igor e Bianca</h1>
-              <p className="text-xs uppercase tracking-[0.35em] text-zinc-700/85 sm:text-sm">15 | 05 | 2026</p>
+              <p className="text-xs uppercase tracking-[0.35em] text-zinc-700/85 sm:text-sm">18 | 04 | 2027</p>
             </header>
 
             <section className="mx-auto mt-7 max-w-3xl rounded-2xl border border-white/55 bg-white/55 p-4 text-center sm:p-5">
-              <h2 className="text-xs uppercase tracking-[0.35em] text-zinc-700 sm:text-sm">## Contagem Regressiva</h2>
+              <p className="text-[0.64rem] uppercase tracking-[0.35em] text-zinc-600 sm:text-xs">Nosso grande dia</p>
+              <h2 className="mt-1 font-display text-2xl leading-none text-champagne-800 sm:text-3xl">Contagem para o casamento</h2>
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                 <div className="gold-frame rounded-lg bg-white/75 px-2 py-3">
                   <p className="font-display text-3xl text-champagne-800 sm:text-4xl">{countdownValues.days}</p>
@@ -352,7 +299,7 @@ export default function LoginPage() {
               <div className="mt-4 grid gap-2 text-sm text-zinc-700 sm:grid-cols-2 sm:gap-3 sm:text-base">
                 <div className="gold-frame rounded-lg bg-white/70 px-3 py-2.5">
                   <p className="text-[0.62rem] uppercase tracking-[0.2em] text-zinc-500">Data</p>
-                  <p className="mt-1 font-medium">15 de Maio de 2026</p>
+                  <p className="mt-1 font-medium">18 de Abril de 2027</p>
                 </div>
                 <div className="gold-frame rounded-lg bg-white/70 px-3 py-2.5">
                   <p className="text-[0.62rem] uppercase tracking-[0.2em] text-zinc-500">Horario</p>
@@ -360,8 +307,8 @@ export default function LoginPage() {
                 </div>
                 <div className="gold-frame rounded-lg bg-white/70 px-3 py-2.5 sm:col-span-2">
                   <p className="text-[0.62rem] uppercase tracking-[0.2em] text-zinc-500">Local</p>
-                  <p className="mt-1 font-medium">Jardins de Lavanda - Vale dos Pinheiros</p>
-                  <p className="mt-1 text-xs text-zinc-600 sm:text-sm">Estrada Flor do Campo, 315 - Serra da Mantiqueira</p>
+                  <p className="mt-1 font-medium">Pampulha - Belo Horizonte</p>
+                  <p className="mt-1 text-xs text-zinc-600 sm:text-sm">Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450</p>
                   <a
                     href={googleMapsUrl}
                     target="_blank"
@@ -415,7 +362,7 @@ export default function LoginPage() {
                         onClick={() => setHasOpenedExperience(true)}
                         className="shimmer-button rounded-xl px-7 py-3 text-sm font-semibold text-zinc-900 transition-transform duration-300 hover:-translate-y-0.5"
                       >
-                        Abrir carta
+                        Acessar Convite
                       </button>
                     </div>
                   </div>
@@ -466,6 +413,35 @@ export default function LoginPage() {
                 </motion.article>
               )}
             </AnimatePresence>
+
+            <section className="mx-auto mt-7 w-full max-w-3xl rounded-2xl border border-white/55 bg-white/60 p-4 sm:p-5">
+              <div className="text-center">
+                <p className="text-[0.64rem] uppercase tracking-[0.3em] text-zinc-600">RSVP</p>
+                <h3 className="mt-2 font-display text-3xl text-champagne-800 sm:text-4xl">Mensagens deixadas pelos convidados</h3>
+              </div>
+
+              {isLoadingMessages ? (
+                <p className="mt-4 text-center text-sm text-zinc-600">Carregando mensagens...</p>
+              ) : null}
+
+              {!isLoadingMessages && rsvpMessages.length === 0 ? (
+                <p className="mt-4 text-center text-sm text-zinc-600">Ainda nao ha mensagens de confirmacao com recados.</p>
+              ) : null}
+
+              {!isLoadingMessages && rsvpMessages.length > 0 ? (
+                <div className="mt-4 grid gap-3">
+                  {rsvpMessages.map((entry) => (
+                    <article key={entry.id} className="gold-frame rounded-xl bg-white/75 p-3 sm:p-4">
+                      <p className="font-display text-2xl text-champagne-800 break-words [overflow-wrap:anywhere]">{entry.guestName}</p>
+                      <p className="mt-2 text-sm leading-6 text-zinc-700 break-words [overflow-wrap:anywhere]">{entry.message}</p>
+                      <p className="mt-3 text-[0.62rem] uppercase tracking-[0.16em] text-zinc-500">
+                        {new Date(entry.submittedAt).toLocaleDateString('pt-BR')}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           </section>
         </div>
       </section>

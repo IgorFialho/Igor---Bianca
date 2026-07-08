@@ -247,9 +247,9 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
       {isLocked ? (
         <div className="space-y-3 py-1 text-center">
           <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">Igor Fialho e Bianca Larissa</h2>
-          <p className="text-sm font-medium tracking-[0.08em] text-zinc-700 sm:text-base">15 MAI 2026 - 16h30</p>
-          <p className="text-sm text-zinc-700 sm:text-base">Jardins de Lavanda - Vale dos Pinheiros</p>
-          <p className="text-xs text-zinc-600 sm:text-sm">Estrada Flor do Campo, 315 - Serra da Mantiqueira</p>
+          <p className="text-sm font-medium tracking-[0.08em] text-zinc-700 sm:text-base">18 ABR 2027 - 16h30</p>
+          <p className="text-sm text-zinc-700 sm:text-base">Pampulha - Belo Horizonte</p>
+          <p className="text-xs text-zinc-600 sm:text-sm">Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450</p>
         </div>
       ) : (
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -458,7 +458,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                       <div className="relative z-10 text-center">
                         <p className="font-display text-3xl leading-tight text-champagne-800 sm:text-5xl lg:text-6xl">O Amor Floresce</p>
                         <p className="mt-1 text-sm text-zinc-700 sm:mt-2 sm:text-lg lg:text-xl">Igor e Bianca</p>
-                        <p className="mt-2 text-[0.7rem] tracking-[0.22em] text-zinc-600 sm:mt-4 sm:text-sm sm:tracking-[0.25em] lg:text-base">15.05.2026</p>
+                        <p className="mt-2 text-[0.7rem] tracking-[0.22em] text-zinc-600 sm:mt-4 sm:text-sm sm:tracking-[0.25em] lg:text-base">18.04.2027</p>
                       </div>
                     </article>
                   </motion.div>

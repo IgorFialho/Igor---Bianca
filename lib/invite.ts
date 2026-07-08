@@ -3,9 +3,9 @@ export const INVITE_ACCESS_KEY = 'wedding-invite-access';
 export type AttendanceChoice = 'yes' | 'no' | '';
 
 export const weddingDetails = {
-  date: '15 MAI 2026',
-  venue: 'Jardins de Lavanda - Vale dos Pinheiros',
+  date: '18 ABR 2027',
+  venue: 'Pampulha - Belo Horizonte',
   time: '16h30',
-  address: 'Estrada Flor do Campo, 315 - Serra da Mantiqueira',
+  address: 'Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450',
   hostNames: 'Igor e Bianca',
 };

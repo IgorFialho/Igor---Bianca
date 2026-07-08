@@ -54,6 +54,7 @@ export default function AdminPage() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [messageDialog, setMessageDialog] = useState<MessageDialogState>(null);
+  const [isClearingAccessHistory, setIsClearingAccessHistory] = useState(false);
 
   const fetchDashboard = async () => {
     const [codesResponse, accessesResponse] = await Promise.all([
@@ -266,6 +267,41 @@ export default function AdminPage() {
     }
   };
 
+  const handleClearAccessHistory = async () => {
+    const confirmed = window.confirm('Tem certeza que deseja limpar todo o historico de acessos e respostas?');
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsClearingAccessHistory(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/admin/accesses', { method: 'DELETE' });
+
+      if (response.status === 401) {
+        router.replace('/admin/login');
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nao foi possivel limpar o historico de acessos e respostas.');
+      }
+
+      setAccesses([]);
+      setNotice({ type: 'success', message: 'Historico de acessos e respostas limpo com sucesso.' });
+    } catch (clearError) {
+      const message = clearError instanceof Error ? clearError.message : 'Erro inesperado.';
+      setError(message);
+      setNotice({ type: 'error', message });
+    } finally {
+      setIsClearingAccessHistory(false);
+    }
+  };
+
   return (
     <main className="paper-texture relative min-h-screen px-4 py-6 sm:px-6 lg:px-10">
       <section className="mx-auto w-full max-w-7xl space-y-4">
@@ -457,7 +493,17 @@ export default function AdminPage() {
         </div>
 
         <section className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
-          <h2 className="font-display text-3xl text-champagne-800">Pessoas que acessaram o convite</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-3xl text-champagne-800">Pessoas que acessaram o convite</h2>
+            <button
+              type="button"
+              onClick={handleClearAccessHistory}
+              disabled={isClearingAccessHistory || accesses.length === 0}
+              className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {isClearingAccessHistory ? 'Limpando historico...' : 'Limpar historico em lote'}
+            </button>
+          </div>
           <div className="mt-4 space-y-2 sm:hidden">
             {accesses.map((item) => (
               <article key={`${item.invite_code_used}-${item.last_accessed_at}`} className="rounded-lg border border-white/70 bg-white/75 p-3 text-sm">

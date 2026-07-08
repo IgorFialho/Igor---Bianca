@@ -114,18 +114,54 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID do codigo e obrigatorio.' }, { status: 400 });
     }
 
+    const codeRowsResult = await db.query<{ id: string; code: string }>(
+      `
+        SELECT id::text, code
+        FROM invitation_codes
+        WHERE id::text = ANY($1::text[])
+      `,
+      [idsToDelete]
+    );
+
+    if (codeRowsResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Codigo nao encontrado.' }, { status: 404 });
+    }
+
+    const idsFound = codeRowsResult.rows.map((item) => item.id);
+    const codesFound = codeRowsResult.rows.map((item) => item.code);
+
+    await db.query(
+      `
+        DELETE FROM rsvp_responses
+        WHERE invitation_code_id::text = ANY($1::text[])
+           OR UPPER(invite_code_used) = ANY(
+             SELECT UPPER(value)
+             FROM UNNEST($2::text[]) AS value
+           )
+      `,
+      [idsFound, codesFound]
+    );
+
+    await db.query(
+      `
+        DELETE FROM invite_access_logs
+        WHERE invitation_code_id::text = ANY($1::text[])
+           OR UPPER(invite_code_used) = ANY(
+             SELECT UPPER(value)
+             FROM UNNEST($2::text[]) AS value
+           )
+      `,
+      [idsFound, codesFound]
+    );
+
     const deleteResult = await db.query<InviteCodeRow>(
       `
         DELETE FROM invitation_codes
         WHERE id::text = ANY($1::text[])
         RETURNING id, code, guest_name, is_active, created_at
       `,
-      [idsToDelete]
+      [idsFound]
     );
-
-    if (deleteResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Codigo nao encontrado.' }, { status: 404 });
-    }
 
     return NextResponse.json({
       deleted: deleteResult.rows,

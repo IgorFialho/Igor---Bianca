@@ -253,3 +253,30 @@ body {
   accent-color: rgb(188, 151, 83);
   cursor: pointer;
 }
+
+@media (max-width: 639px) {
+  .login-audio-shell {
+    gap: 0.34rem;
+    padding: 0.16rem 0.32rem 0.16rem 0.22rem;
+  }
+
+  .login-audio-disc {
+    width: 1.48rem;
+    height: 1.48rem;
+  }
+
+  .login-audio-btn {
+    padding: 0.3rem 0.48rem;
+    font-size: 0.57rem;
+    letter-spacing: 0.05em;
+  }
+
+  .login-volume-popover {
+    top: auto;
+    bottom: calc(100% + 0.4rem);
+  }
+
+  .login-volume-slider {
+    height: 5rem;
+  }
+}

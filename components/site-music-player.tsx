@@ -120,6 +120,18 @@ export function SiteMusicPlayer() {
   }, [isCollapsed]);
 
   useEffect(() => {
+    if (isAdminRoute) {
+      return;
+    }
+
+    const collapseTimer = window.setTimeout(() => {
+      setIsCollapsed(true);
+    }, 6000);
+
+    return () => window.clearTimeout(collapseTimer);
+  }, [isAdminRoute, pathname]);
+
+  useEffect(() => {
     if (!isVolumeOpen || isVolumeInteracting) {
       return;
     }

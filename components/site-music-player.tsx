@@ -4,8 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
-const FIRST_VISIT_AUTOPLAY_KEY = 'igb-first-login-autoplay';
-
 export function SiteMusicPlayer() {
   const pathname = usePathname();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -47,12 +45,6 @@ export function SiteMusicPlayer() {
       return;
     }
 
-    const wasFirstVisitHandled = window.localStorage.getItem(FIRST_VISIT_AUTOPLAY_KEY) === '1';
-
-    const markFirstVisitHandled = () => {
-      window.localStorage.setItem(FIRST_VISIT_AUTOPLAY_KEY, '1');
-    };
-
     const tryStartPlayback = async (allowMutedFallback: boolean) => {
       audioElement.volume = volume;
       audioElement.muted = false;
@@ -60,7 +52,6 @@ export function SiteMusicPlayer() {
       try {
         await audioElement.play();
         setIsMusicPlaying(true);
-        markFirstVisitHandled();
         return true;
       } catch {
         if (!allowMutedFallback) {
@@ -74,7 +65,6 @@ export function SiteMusicPlayer() {
           audioElement.volume = volume;
           audioElement.muted = false;
           setIsMusicPlaying(true);
-          markFirstVisitHandled();
           return true;
         } catch {
           setIsMusicPlaying(false);
@@ -94,7 +84,7 @@ export function SiteMusicPlayer() {
     };
 
     const autoplayTimer = window.setTimeout(() => {
-      void tryStartPlayback(!wasFirstVisitHandled).then((started) => {
+      void tryStartPlayback(true).then((started) => {
         if (!started) {
           interactionEvents.forEach((eventName) => {
             window.addEventListener(eventName, handleFirstInteraction, { once: true });

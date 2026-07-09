@@ -42,10 +42,6 @@ export function SiteMusicPlayer() {
       return;
     }
 
-    if (pathname !== '/login') {
-      return;
-    }
-
     if (!audioElement.paused) {
       setIsMusicPlaying(true);
       return;
@@ -97,15 +93,18 @@ export function SiteMusicPlayer() {
       });
     };
 
-    void tryStartPlayback(!wasFirstVisitHandled).then((started) => {
-      if (!started) {
-        interactionEvents.forEach((eventName) => {
-          window.addEventListener(eventName, handleFirstInteraction, { once: true });
-        });
-      }
-    });
+    const autoplayTimer = window.setTimeout(() => {
+      void tryStartPlayback(!wasFirstVisitHandled).then((started) => {
+        if (!started) {
+          interactionEvents.forEach((eventName) => {
+            window.addEventListener(eventName, handleFirstInteraction, { once: true });
+          });
+        }
+      });
+    }, 8000);
 
     return () => {
+      window.clearTimeout(autoplayTimer);
       interactionEvents.forEach((eventName) => {
         window.removeEventListener(eventName, handleFirstInteraction);
       });

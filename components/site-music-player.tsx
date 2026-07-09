@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 export function SiteMusicPlayer() {
@@ -15,6 +15,43 @@ export function SiteMusicPlayer() {
   const [isMobile, setIsMobile] = useState(false);
 
   const isAdminRoute = pathname.startsWith('/admin');
+
+  const startPlayback = useCallback(
+    async (allowMutedFallback: boolean) => {
+      const audioElement = audioRef.current;
+
+      if (!audioElement) {
+        return false;
+      }
+
+      audioElement.volume = volume;
+      audioElement.muted = false;
+
+      try {
+        await audioElement.play();
+        setIsMusicPlaying(true);
+        return true;
+      } catch {
+        if (!allowMutedFallback) {
+          setIsMusicPlaying(false);
+          return false;
+        }
+
+        try {
+          audioElement.muted = true;
+          await audioElement.play();
+          audioElement.volume = volume;
+          audioElement.muted = false;
+          setIsMusicPlaying(true);
+          return true;
+        } catch {
+          setIsMusicPlaying(false);
+          return false;
+        }
+      }
+    },
+    [volume]
+  );
 
   useEffect(() => {
     const audioElement = audioRef.current;
@@ -45,38 +82,10 @@ export function SiteMusicPlayer() {
       return;
     }
 
-    const tryStartPlayback = async (allowMutedFallback: boolean) => {
-      audioElement.volume = volume;
-      audioElement.muted = false;
-
-      try {
-        await audioElement.play();
-        setIsMusicPlaying(true);
-        return true;
-      } catch {
-        if (!allowMutedFallback) {
-          setIsMusicPlaying(false);
-          return false;
-        }
-
-        try {
-          audioElement.muted = true;
-          await audioElement.play();
-          audioElement.volume = volume;
-          audioElement.muted = false;
-          setIsMusicPlaying(true);
-          return true;
-        } catch {
-          setIsMusicPlaying(false);
-          return false;
-        }
-      }
-    };
-
     const interactionEvents: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown'];
 
     const handleFirstInteraction = () => {
-      void tryStartPlayback(false).finally(() => {
+      void startPlayback(false).finally(() => {
         interactionEvents.forEach((eventName) => {
           window.removeEventListener(eventName, handleFirstInteraction);
         });
@@ -84,7 +93,7 @@ export function SiteMusicPlayer() {
     };
 
     const autoplayTimer = window.setTimeout(() => {
-      void tryStartPlayback(true).then((started) => {
+      void startPlayback(true).then((started) => {
         if (!started) {
           interactionEvents.forEach((eventName) => {
             window.addEventListener(eventName, handleFirstInteraction, { once: true });
@@ -99,7 +108,7 @@ export function SiteMusicPlayer() {
         window.removeEventListener(eventName, handleFirstInteraction);
       });
     };
-  }, [isAdminRoute, pathname]);
+  }, [isAdminRoute, pathname, startPlayback]);
 
   useEffect(() => {
     if (isCollapsed) {
@@ -158,12 +167,7 @@ export function SiteMusicPlayer() {
     }
 
     if (audioElement.paused) {
-      try {
-        await audioElement.play();
-        setIsMusicPlaying(true);
-      } catch {
-        setIsMusicPlaying(false);
-      }
+      await startPlayback(isMobile);
       return;
     }
 

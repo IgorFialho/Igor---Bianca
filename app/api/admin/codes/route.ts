@@ -127,8 +127,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Codigo nao encontrado.' }, { status: 404 });
     }
 
-    const idsFound = codeRowsResult.rows.map((item) => item.id);
-    const codesFound = codeRowsResult.rows.map((item) => item.code);
+    const idsFound = codeRowsResult.rows.map((item: { id: string; code: string }) => item.id);
+    const codesFound = codeRowsResult.rows.map((item: { id: string; code: string }) => item.code);
 
     await db.query(
       `

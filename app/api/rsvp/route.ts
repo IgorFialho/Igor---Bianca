@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         `
       );
 
-      const messages = result.rows.map((row) => ({
+      const messages = result.rows.map((row: PublicMessageRow) => ({
         id: row.id,
         guestName: row.guest_name || row.invite_code_used,
         message: row.dietary_notes,

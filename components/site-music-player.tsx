@@ -12,6 +12,7 @@ export function SiteMusicPlayer() {
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [volume, setVolume] = useState(0.25);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const [isVolumeInteracting, setIsVolumeInteracting] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -114,8 +115,21 @@ export function SiteMusicPlayer() {
   useEffect(() => {
     if (isCollapsed) {
       setIsVolumeOpen(false);
+      setIsVolumeInteracting(false);
     }
   }, [isCollapsed]);
+
+  useEffect(() => {
+    if (!isVolumeOpen || isVolumeInteracting) {
+      return;
+    }
+
+    const closeTimer = window.setTimeout(() => {
+      setIsVolumeOpen(false);
+    }, 4000);
+
+    return () => window.clearTimeout(closeTimer);
+  }, [isVolumeOpen, isVolumeInteracting]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 639px)');
@@ -175,10 +189,22 @@ export function SiteMusicPlayer() {
         <button
           type="button"
           onClick={() => setIsCollapsed((current) => !current)}
-          className="login-audio-btn"
+          className="login-audio-btn flex h-8 w-8 items-center justify-center p-0"
           aria-label={isCollapsed ? 'Expandir player' : 'Retrair player'}
         >
-          {isCollapsed ? '>' : '<'}
+          {isCollapsed ? (
+            <motion.span
+              className="login-audio-disc"
+              animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
+              transition={
+                isMusicPlaying
+                  ? { duration: 2.2, ease: 'linear', repeat: Infinity }
+                  : { duration: 0.35, ease: 'easeOut' }
+              }
+            />
+          ) : (
+            '<'
+          )}
         </button>
 
         <AnimatePresence initial={false}>
@@ -188,7 +214,7 @@ export function SiteMusicPlayer() {
               animate={{ opacity: 1, x: 0, width: 'auto' }}
               exit={{ opacity: 0, x: -10, width: 0 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="overflow-hidden"
+              className="overflow-visible"
             >
               <div className="login-audio-shell">
                 <motion.span
@@ -211,7 +237,10 @@ export function SiteMusicPlayer() {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setIsVolumeOpen((current) => !current)}
+                    onClick={() => {
+                      setIsVolumeInteracting(false);
+                      setIsVolumeOpen((current) => !current);
+                    }}
                     className="login-audio-btn"
                     aria-label="Abrir controle de volume"
                   >
@@ -225,6 +254,16 @@ export function SiteMusicPlayer() {
                         exit={{ opacity: 0, y: 8, scale: 0.96 }}
                         transition={{ duration: 0.2, ease: 'easeOut' }}
                         className="login-volume-popover"
+                        onPointerEnter={() => setIsVolumeInteracting(true)}
+                        onPointerLeave={() => setIsVolumeInteracting(false)}
+                        onPointerDown={() => setIsVolumeInteracting(true)}
+                        onPointerUp={() => setIsVolumeInteracting(false)}
+                        onFocusCapture={() => setIsVolumeInteracting(true)}
+                        onBlurCapture={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                            setIsVolumeInteracting(false);
+                          }
+                        }}
                       >
                         <input
                           type="range"
@@ -233,6 +272,10 @@ export function SiteMusicPlayer() {
                           step={0.01}
                           value={volume}
                           onChange={(event) => handleVolumeChange(Number(event.target.value))}
+                          onPointerDown={() => setIsVolumeInteracting(true)}
+                          onPointerUp={() => setIsVolumeInteracting(false)}
+                          onFocus={() => setIsVolumeInteracting(true)}
+                          onBlur={() => setIsVolumeInteracting(false)}
                           className="login-volume-slider"
                           aria-label="Controle de volume"
                         />

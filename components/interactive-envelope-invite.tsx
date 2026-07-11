@@ -326,6 +326,12 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   };
 
   const isEnvelopeVisible = hasResolvedInitialStatus && !showFinalCard && !isLocked;
+  const responderHeading = responderFullNames
+    .slice(0, expectedResponderCount)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .join(' e ');
+  const headingDisplayName = responderHeading || 'Convidado';
 
   // Classe utilitária reutilizável para aplicar a textura de papel via SVG dinâmico
   const paperTextureClass =
@@ -334,10 +340,10 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   const finalInviteContent = (
     <div className="relative z-10 space-y-6">
       <header className="space-y-2 text-center">
-        <p className="text-xs uppercase tracking-[0.34em] text-zinc-600">Convite aberto</p>
+        <p className="text-xs uppercase tracking-[0.34em] text-zinc-600">Convidado</p>
         {!isLocked ? (
           <>
-            <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">Igor Fialho e Bianca Larissa</h2>
+            <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">{headingDisplayName}</h2>
             <p className="text-sm text-zinc-700 sm:text-base">{weddingDetails.date} - {weddingDetails.time}</p>
             <p className="text-sm text-zinc-700 sm:text-base">{weddingDetails.venue}</p>
             <p className="text-xs text-zinc-600 sm:text-sm">{weddingDetails.address}</p>
@@ -347,7 +353,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
       {isLocked ? (
         <div className="space-y-3 py-1 text-center">
-          <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">Igor Fialho e Bianca Larissa</h2>
+          <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">{headingDisplayName}</h2>
           <p className="text-sm font-medium tracking-[0.08em] text-zinc-700 sm:text-base">18 ABR 2027 - 16h30</p>
           <p className="text-sm text-zinc-700 sm:text-base">Pampulha - Belo Horizonte</p>
           <p className="text-xs text-zinc-600 sm:text-sm">Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450</p>
@@ -724,13 +730,16 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                 className="absolute inset-0 z-10 flex items-center justify-center"
               >
                 <div className="w-full max-w-xl sm:max-w-2xl">
-                  <article className="themed-scrollbar frosted-light gold-frame relative max-h-[78vh] overflow-x-hidden overflow-y-auto rounded-[1.35rem] bg-white/60 p-5 shadow-2xl backdrop-blur-md sm:max-h-[84vh] sm:p-7 lg:p-8">
+                  <article className="frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] bg-white/60 shadow-2xl backdrop-blur-md">
                     <div className={paperTextureClass} />
                     <div className="pointer-events-none absolute inset-0">
                       <span className="absolute -left-14 -top-14 h-36 w-36 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.45),transparent_65%)]" />
                       <span className="absolute -bottom-16 -right-16 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(193,182,236,0.4),transparent_65%)]" />
                     </div>
-                    {finalInviteContent}
+
+                    <div className="themed-scrollbar relative z-10 max-h-[78vh] overflow-x-hidden overflow-y-auto p-5 pr-3 sm:max-h-[84vh] sm:p-7 sm:pr-4 lg:p-8 lg:pr-5">
+                      {finalInviteContent}
+                    </div>
                   </article>
                 </div>
               </motion.section>

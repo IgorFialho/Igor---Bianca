@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS invitation_codes (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   code VARCHAR(80) NOT NULL UNIQUE,
   guest_name VARCHAR(150),
+  requires_children_details BOOLEAN NOT NULL DEFAULT FALSE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -20,12 +21,21 @@ CREATE TABLE IF NOT EXISTS rsvp_responses (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   invitation_code_id BIGINT REFERENCES invitation_codes(id) ON DELETE SET NULL,
   invite_code_used VARCHAR(80) NOT NULL,
+  responder_full_name VARCHAR(180),
   attendance VARCHAR(10) NOT NULL CHECK (attendance IN ('yes', 'no')),
   adults_count INTEGER NOT NULL DEFAULT 1 CHECK (adults_count >= 0),
   children_count INTEGER NOT NULL DEFAULT 0 CHECK (children_count >= 0),
   dietary_notes TEXT,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rsvp_children (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  rsvp_response_id BIGINT NOT NULL REFERENCES rsvp_responses(id) ON DELETE CASCADE,
+  full_name VARCHAR(180) NOT NULL,
+  age INTEGER NOT NULL CHECK (age >= 0 AND age <= 17),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS invite_access_logs (
@@ -40,6 +50,7 @@ CREATE TABLE IF NOT EXISTS invite_access_logs (
 
 CREATE INDEX IF NOT EXISTS idx_rsvp_invite_code ON rsvp_responses(invite_code_used);
 CREATE INDEX IF NOT EXISTS idx_rsvp_submitted_at ON rsvp_responses(submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rsvp_children_response_id ON rsvp_children(rsvp_response_id);
 CREATE INDEX IF NOT EXISTS idx_access_code ON invite_access_logs(invite_code_used);
 CREATE INDEX IF NOT EXISTS idx_access_date ON invite_access_logs(accessed_at DESC);
 

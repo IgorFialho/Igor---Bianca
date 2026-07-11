@@ -8,24 +8,12 @@ type ConfirmationChoice = 'yes' | 'no';
 
 export function RsvpForm() {
   const [attendance, setAttendance] = useState<AttendanceChoice>('');
-  const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [dietaryNeeds, setDietaryNeeds] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [confirmationChoice, setConfirmationChoice] = useState<ConfirmationChoice | null>(null);
 
-  const updateCount = (
-    type: 'adults' | 'children',
-    operation: 'increment' | 'decrement'
-  ) => {
-    if (type === 'adults') {
-      setAdults((current) => {
-        if (operation === 'increment') return Math.min(10, current + 1);
-        return Math.max(1, current - 1);
-      });
-      return;
-    }
-
+  const updateChildrenCount = (operation: 'increment' | 'decrement') => {
     setChildren((current) => {
       if (operation === 'increment') return Math.min(10, current + 1);
       return Math.max(0, current - 1);
@@ -84,7 +72,6 @@ export function RsvpForm() {
                 checked={attendance === 'no'}
                 onChange={() => {
                   setAttendance('no');
-                  setAdults(1);
                   setChildren(0);
                   setIsSubmitted(false);
                   setConfirmationChoice(null);
@@ -109,42 +96,24 @@ export function RsvpForm() {
               className="space-y-4"
             >
               <div className="space-y-2">
-                <p className="text-xs text-zinc-700">Quantidade de Adultos e Crianças</p>
+                <p className="text-xs text-zinc-700">Quantidade de Crianças</p>
                 <div className="rounded-lg border border-white/80 bg-white/72 p-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-700">Adultos</span>
+                    <span className="text-xs text-zinc-700">Crianças</span>
                     <button
                       type="button"
-                      onClick={() => updateCount('adults', 'decrement')}
-                      className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700 transition hover:bg-champagne-100"
-                      aria-label="Diminuir adultos"
-                    >
-                      -
-                    </button>
-                    <span className="w-5 text-center text-sm text-zinc-800">{adults}</span>
-                    <button
-                      type="button"
-                      onClick={() => updateCount('adults', 'increment')}
-                      className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700 transition hover:bg-champagne-100"
-                      aria-label="Aumentar adultos"
-                    >
-                      +
-                    </button>
-                    <span className="ml-2 text-xs text-zinc-700">Criancas</span>
-                    <button
-                      type="button"
-                      onClick={() => updateCount('children', 'decrement')}
+                      onClick={() => updateChildrenCount('decrement')}
                       className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700 transition hover:bg-teaRose-100"
-                      aria-label="Diminuir criancas"
+                      aria-label="Diminuir crianças"
                     >
                       -
                     </button>
                     <span className="w-5 text-center text-sm text-zinc-800">{children}</span>
                     <button
                       type="button"
-                      onClick={() => updateCount('children', 'increment')}
+                      onClick={() => updateChildrenCount('increment')}
                       className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700 transition hover:bg-teaRose-100"
-                      aria-label="Aumentar criancas"
+                      aria-label="Aumentar crianças"
                     >
                       +
                     </button>

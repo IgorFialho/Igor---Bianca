@@ -7,6 +7,7 @@ type InviteCodeRow = {
   id: string;
   code: string;
   guest_name: string | null;
+  requires_children_details: boolean;
   is_active: boolean;
   created_at: string;
 };
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   try {
     const result = await db.query<InviteCodeRow>(
       `
-        SELECT id, code, guest_name, is_active, created_at
+        SELECT id, code, guest_name, requires_children_details, is_active, created_at
         FROM invitation_codes
         ORDER BY created_at DESC
         LIMIT 200
@@ -52,12 +53,31 @@ export async function POST(request: NextRequest) {
           .slice(0, 100)
       : [];
 
+    const guestNameLines = typeof body?.guestName === 'string'
+      ? body.guestName
+          .split(/\r?\n/)
+          .map((item: string) => item.trim())
+          .filter((item: string) => item.length > 0)
+      : [];
+    const hasLinkedGuestNames = guestNameLines.length > 1;
+    const guestName = guestNameLines.length > 0 ? guestNameLines.join(' | ') : null;
+
+    if (guestName && guestName.length > 150) {
+      return NextResponse.json(
+        {
+          error:
+            "O campo de nomes vinculados ultrapassa 150 caracteres. Reduza os nomes e tente novamente.",
+        },
+        { status: 400 }
+      );
+    }
+
     const quantityRaw = Number(body?.quantity ?? 1);
     const fallbackQuantity = Number.isFinite(quantityRaw)
       ? Math.max(1, Math.min(50, Math.floor(quantityRaw)))
       : 1;
-    const quantity = guests.length > 0 ? guests.length : fallbackQuantity;
-    const guestName = typeof body?.guestName === 'string' ? body.guestName.trim() : null;
+    const quantity = guests.length > 0 ? guests.length : hasLinkedGuestNames ? 1 : fallbackQuantity;
+    const requiresChildrenDetails = Boolean(body?.requiresChildrenDetails);
 
     const createdCodes: InviteCodeRow[] = [];
     let attempts = 0;
@@ -69,12 +89,12 @@ export async function POST(request: NextRequest) {
 
       const insertResult = await db.query<InviteCodeRow>(
         `
-          INSERT INTO invitation_codes (code, guest_name, is_active)
-          VALUES ($1, $2, TRUE)
+          INSERT INTO invitation_codes (code, guest_name, requires_children_details, is_active)
+          VALUES ($1, $2, $3, TRUE)
           ON CONFLICT (code) DO NOTHING
-          RETURNING id, code, guest_name, is_active, created_at
+          RETURNING id, code, guest_name, requires_children_details, is_active, created_at
         `,
-        [code, guestNameForInsert || null]
+        [code, guestNameForInsert || null, requiresChildrenDetails]
       );
 
       if (insertResult.rows[0]) {
@@ -85,7 +105,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       generated: createdCodes,
       requested: quantity,
-      mode: guests.length > 0 ? 'by_guests' : 'basic',
+      mode: guests.length > 0 ? 'by_guests' : hasLinkedGuestNames ? 'single_linked_names' : 'basic',
     });
   } catch (error) {
     console.error('Falha ao gerar codigos', error);
@@ -170,5 +190,48 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Falha ao excluir codigo', error);
     return NextResponse.json({ error: 'Erro ao excluir codigo.' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  if (!isAdminRequestAuthorized(request)) {
+    return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const codeId = typeof body?.id === 'string' ? body.id.trim() : '';
+    const requiresChildrenDetails =
+      typeof body?.requiresChildrenDetails === 'boolean' ? body.requiresChildrenDetails : null;
+
+    if (!codeId) {
+      return NextResponse.json({ error: 'ID do codigo e obrigatorio.' }, { status: 400 });
+    }
+
+    if (requiresChildrenDetails === null) {
+      return NextResponse.json(
+        { error: 'Valor de configuracao de filhos e obrigatorio.' },
+        { status: 400 }
+      );
+    }
+
+    const updateResult = await db.query<InviteCodeRow>(
+      `
+        UPDATE invitation_codes
+        SET requires_children_details = $2
+        WHERE id::text = $1
+        RETURNING id, code, guest_name, requires_children_details, is_active, created_at
+      `,
+      [codeId, requiresChildrenDetails]
+    );
+
+    if (!updateResult.rows[0]) {
+      return NextResponse.json({ error: 'Codigo nao encontrado.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ updated: updateResult.rows[0] });
+  } catch (error) {
+    console.error('Falha ao atualizar configuracao de filhos do codigo', error);
+    return NextResponse.json({ error: 'Erro ao atualizar codigo.' }, { status: 500 });
   }
 }

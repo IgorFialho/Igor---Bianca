@@ -7,6 +7,7 @@ type InviteCode = {
   id: string;
   code: string;
   guest_name: string | null;
+  requires_children_details: boolean;
   is_active: boolean;
   created_at: string;
 };
@@ -14,6 +15,7 @@ type InviteCode = {
 type AccessItem = {
   invite_code_used: string;
   guest_name: string | null;
+  responder_full_name: string | null;
   access_count: number;
   last_accessed_at: string;
   attendance: 'yes' | 'no' | null;
@@ -37,6 +39,11 @@ type MessageDialogState = {
   text: string;
 } | null;
 
+type NameDialogState = {
+  title: string;
+  text: string;
+} | null;
+
 type AccessActionDialogState = {
   mode: 'selected' | 'all';
   inviteCodes: string[];
@@ -48,6 +55,7 @@ export default function AdminPage() {
   const [accesses, setAccesses] = useState<AccessItem[]>([]);
   const [guestName, setGuestName] = useState('');
   const [guestListText, setGuestListText] = useState('');
+  const [requiresChildrenDetailsDefault, setRequiresChildrenDetailsDefault] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -55,10 +63,12 @@ export default function AdminPage() {
   const [generatedInfo, setGeneratedInfo] = useState('');
   const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [togglingChildrenCodeId, setTogglingChildrenCodeId] = useState<string | null>(null);
   const [selectedCodeIds, setSelectedCodeIds] = useState<string[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [messageDialog, setMessageDialog] = useState<MessageDialogState>(null);
+  const [nameDialog, setNameDialog] = useState<NameDialogState>(null);
   const [accessActionDialog, setAccessActionDialog] = useState<AccessActionDialogState>(null);
   const [isClearingAccessHistory, setIsClearingAccessHistory] = useState(false);
   const [isDeletingSelectedAccesses, setIsDeletingSelectedAccesses] = useState(false);
@@ -131,14 +141,21 @@ export default function AdminPage() {
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
 
+    const normalizedGuestName = guestName
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .join('\n');
+
     try {
       const response = await fetch('/api/admin/codes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           quantity,
-          guestName,
+          guestName: normalizedGuestName,
           guests,
+          requiresChildrenDetails: requiresChildrenDetailsDefault,
         }),
       });
 
@@ -155,12 +172,15 @@ export default function AdminPage() {
 
       if (data.mode === 'by_guests') {
         setGeneratedInfo(`Codigos gerados para ${data.generated.length} convidados.`);
+      } else if (data.mode === 'single_linked_names') {
+        setGeneratedInfo('Codigo unico gerado e vinculado aos nomes informados.');
       } else {
         setGeneratedInfo(`Codigos gerados: ${data.generated.length} de ${data.requested}.`);
       }
 
       setGuestName('');
       setGuestListText('');
+      setRequiresChildrenDetailsDefault(false);
       await fetchDashboard();
     } catch (generateError) {
       const message = generateError instanceof Error ? generateError.message : 'Erro inesperado.';
@@ -275,6 +295,52 @@ export default function AdminPage() {
     } finally {
       setDeletingCodeId(null);
       setIsDeletingBatch(false);
+    }
+  };
+
+  const handleToggleRequiresChildrenDetails = async (codeId: string, nextValue: boolean) => {
+    setError('');
+    setGeneratedInfo('');
+    setTogglingChildrenCodeId(codeId);
+
+    const previousCodes = codes;
+    setCodes((previous) =>
+      previous.map((item) =>
+        item.id === codeId ? { ...item, requires_children_details: nextValue } : item
+      )
+    );
+
+    try {
+      const response = await fetch('/api/admin/codes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: codeId, requiresChildrenDetails: nextValue }),
+      });
+
+      if (response.status === 401) {
+        router.replace('/admin/login');
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nao foi possivel atualizar o codigo.');
+      }
+
+      const updatedCode: InviteCode | undefined = data?.updated;
+      if (updatedCode) {
+        setCodes((previous) =>
+          previous.map((item) => (item.id === codeId ? { ...item, ...updatedCode } : item))
+        );
+      }
+    } catch (toggleError) {
+      setCodes(previousCodes);
+      const message = toggleError instanceof Error ? toggleError.message : 'Erro inesperado.';
+      setError(message);
+      setNotice({ type: 'error', message });
+    } finally {
+      setTogglingChildrenCodeId(null);
     }
   };
 
@@ -410,6 +476,51 @@ export default function AdminPage() {
 
   const uniqueAccessCodes = Array.from(new Set(accesses.map((item) => item.invite_code_used)));
 
+  const formatGuestNames = (rawValue: string | null) => {
+    if (!rawValue) {
+      return 'Sem nome';
+    }
+
+    const names = rawValue
+      .split('|')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    if (names.length === 0) {
+      return 'Sem nome';
+    }
+
+    return names.join('\n');
+  };
+
+  const hasCoupleNames = (rawValue: string | null) => {
+    if (!rawValue) {
+      return false;
+    }
+
+    return rawValue
+      .split('|')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0).length > 1;
+  };
+
+  const formatGuestNamesInline = (rawValue: string | null) => {
+    if (!rawValue) {
+      return 'Sem nome';
+    }
+
+    const names = rawValue
+      .split('|')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    if (names.length === 0) {
+      return 'Sem nome';
+    }
+
+    return names.join(' | ');
+  };
+
   return (
     <main className="paper-texture relative min-h-screen px-4 py-6 sm:px-6 lg:px-10">
       <section className="mx-auto w-full max-w-7xl space-y-4">
@@ -452,12 +563,28 @@ export default function AdminPage() {
                 Se preencher os nomes acima, o sistema gera 1 codigo para cada linha.
               </p>
 
-              <input
-                value={guestName}
-                onChange={(event) => setGuestName(event.target.value)}
-                className="focus-gold w-full rounded-lg border border-zinc-200/90 bg-white/85 px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-500"
-                placeholder="Nome unico para todos os codigos (opcional)"
-              />
+              <p className="text-xs text-zinc-600">
+                No campo abaixo, voce pode informar varios nomes (um por linha) para gerar um unico codigo compartilhado.
+              </p>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <textarea
+                  value={guestName}
+                  onChange={(event) => setGuestName(event.target.value)}
+                  rows={4}
+                  className="focus-gold w-full rounded-lg border border-zinc-200/90 bg-white/85 px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-500"
+                  placeholder={"Nomes vinculados ao codigo unico (opcional)\nExemplo:\nAna Lima\nBruno Lima"}
+                />
+                <label className="flex items-center gap-2 whitespace-nowrap text-xs text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={requiresChildrenDetailsDefault}
+                    onChange={(event) => setRequiresChildrenDetailsDefault(event.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  Exigir dados dos filhos
+                </label>
+              </div>
 
               <div className="flex items-center gap-2">
                 <label className="text-sm text-zinc-700" htmlFor="quantity">Quantidade</label>
@@ -526,7 +653,20 @@ export default function AdminPage() {
                   </div>
 
                   <p className="mt-2 text-xs text-zinc-500">Convidado</p>
-                  <p className="text-zinc-700">{item.guest_name || 'Sem nome'}</p>
+                  <p className="whitespace-pre-line text-zinc-700">{formatGuestNames(item.guest_name)}</p>
+
+                  <label className="mt-3 flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="checkbox"
+                      checked={item.requires_children_details}
+                      onChange={(event) =>
+                        handleToggleRequiresChildrenDetails(item.id, event.target.checked)
+                      }
+                      disabled={togglingChildrenCodeId === item.id || isDeletingBatch || deletingCodeId !== null}
+                      className="h-4 w-4 rounded border-zinc-300"
+                    />
+                    Exigir nome e idade dos filhos no RSVP
+                  </label>
 
                   <p className="mt-2 text-xs text-zinc-500">Criado em</p>
                   <p className="text-zinc-700">{new Date(item.created_at).toLocaleString('pt-BR')}</p>
@@ -557,7 +697,8 @@ export default function AdminPage() {
                       />
                     </th>
                     <th className="px-3 py-2">Codigo</th>
-                    <th className="px-3 py-2">Convidado</th>
+                    <th className="px-3 py-2">Nome do Convite</th>
+                    <th className="px-3 py-2">Filhos</th>
                     <th className="px-3 py-2">Criado em</th>
                     <th className="px-3 py-2 text-right">Acao</th>
                   </tr>
@@ -576,7 +717,26 @@ export default function AdminPage() {
                         />
                       </td>
                       <td className="px-3 py-2 font-medium text-zinc-800">{item.code}</td>
-                      <td className="px-3 py-2">{item.guest_name || 'Sem nome'}</td>
+                      <td className="px-3 py-2 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
+                      <td className="px-3 py-2">
+                        <label className="flex items-center justify-center gap-2 text-xs text-zinc-700">
+                          <input
+                            type="checkbox"
+                            aria-label={`Exigir dados dos filhos para ${item.code}`}
+                            checked={item.requires_children_details}
+                            onChange={(event) =>
+                              handleToggleRequiresChildrenDetails(item.id, event.target.checked)
+                            }
+                            disabled={
+                              togglingChildrenCodeId === item.id ||
+                              isDeletingBatch ||
+                              deletingCodeId !== null
+                            }
+                            className="h-4 w-4 rounded border-zinc-300"
+                          />
+                          Exigir
+                        </label>
+                      </td>
                       <td className="px-3 py-2">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
                       <td className="px-3 py-2 text-right">
                         <button
@@ -652,8 +812,36 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <p className="mt-2 text-xs text-zinc-500">Convidado</p>
-                <p className="text-zinc-700">{item.guest_name || 'Sem nome'}</p>
+                <p className="mt-2 text-xs text-zinc-500">Nome do convite</p>
+                {hasCoupleNames(item.guest_name) ? (
+                  <span
+                    className="mt-1 block max-w-full truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2"
+                    title={formatGuestNamesInline(item.guest_name)}
+                  >
+                    {formatGuestNamesInline(item.guest_name)}
+                  </span>
+                ) : (
+                  <p className="whitespace-pre-line text-zinc-700">{formatGuestNames(item.guest_name)}</p>
+                )}
+
+                <p className="mt-2 text-xs text-zinc-500">Nome do casal</p>
+                {hasCoupleNames(item.responder_full_name) ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNameDialog({
+                        title: 'Nome do casal',
+                        text: formatGuestNames(item.responder_full_name),
+                      })
+                    }
+                    className="mt-1 max-w-full truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2"
+                    title="Clique para ler completo"
+                  >
+                    Clique para ler completo
+                  </button>
+                ) : (
+                  <p className="whitespace-pre-line text-zinc-700">{formatGuestNames(item.responder_full_name)}</p>
+                )}
 
                 <p className="mt-2 text-xs text-zinc-500">Resposta</p>
                 <div className="mt-1">
@@ -711,7 +899,8 @@ export default function AdminPage() {
                     />
                   </th>
                   <th className="px-3 py-2">Codigo</th>
-                  <th className="px-3 py-2">Convidado</th>
+                  <th className="px-3 py-2">Nome do convite</th>
+                  <th className="px-3 py-2">Nome do convidado</th>
                   <th className="px-3 py-2">Respostas</th>
                   <th className="px-3 py-2">Mensagem / Justificativa</th>
                   <th className="px-3 py-2">Acessos</th>
@@ -732,7 +921,37 @@ export default function AdminPage() {
                       />
                     </td>
                     <td className="px-3 py-2 font-medium text-zinc-800">{item.invite_code_used}</td>
-                    <td className="px-3 py-2">{item.guest_name || 'Sem nome'}</td>
+                    <td className="px-3 py-2">
+                      {hasCoupleNames(item.guest_name) ? (
+                        <span
+                          className="block max-w-[220px] truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+                          title={formatGuestNamesInline(item.guest_name)}
+                        >
+                          {formatGuestNamesInline(item.guest_name)}
+                        </span>
+                      ) : (
+                        <span className="whitespace-pre-line">{formatGuestNames(item.guest_name)}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {hasCoupleNames(item.responder_full_name) ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNameDialog({
+                              title: 'Nome do convidado',
+                              text: formatGuestNames(item.responder_full_name),
+                            })
+                          }
+                          className="max-w-[220px] truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+                          title="Clique para ler completo"
+                        >
+                          Clique para ler completo
+                        </button>
+                      ) : (
+                        <span className="whitespace-pre-line">{formatGuestNames(item.responder_full_name)}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       {item.attendance === 'yes' ? (
                         <span className="rounded-full border border-olive-300 bg-olive-50 px-2 py-0.5 text-xs font-semibold text-olive-800">Aceitou</span>
@@ -817,11 +1036,33 @@ export default function AdminPage() {
         </div>
       ) : null}
 
+      {nameDialog ? (
+        <div className="fixed inset-0 z-[72] flex items-center justify-center bg-zinc-950/35 px-4">
+          <div className="frosted-light gold-frame w-full max-w-lg rounded-2xl p-5 sm:p-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">{nameDialog.title}</p>
+
+            <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setNameDialog(null)}
+                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {messageDialog ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/35 px-4">
           <div className="frosted-light gold-frame w-full max-w-lg rounded-2xl p-5 sm:p-6">
             <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Mensagem completa</p>
-            <h3 className="mt-1 font-display text-3xl text-champagne-800">{messageDialog.guestName || 'Convidado sem nome'}</h3>
+            <h3 className="mt-1 whitespace-pre-line font-display text-3xl text-champagne-800">{formatGuestNames(messageDialog.guestName)}</h3>
             <p className="mt-1 text-xs text-zinc-600">Codigo: {messageDialog.code}</p>
 
             <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">

@@ -23,6 +23,11 @@ interface Petal {
 
 type ConfirmationChoice = 'yes' | 'no';
 
+type ChildDetail = {
+  fullName: string;
+  age: string;
+};
+
 export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInviteProps) {
   const [envelopeState, setEnvelopeState] = useState<EnvelopeState>('fechado');
   const [showFinalCard, setShowFinalCard] = useState(false);
@@ -33,8 +38,11 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   const [isLocked, setIsLocked] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [attendance, setAttendance] = useState<AttendanceChoice>('');
-  const [adults, setAdults] = useState(1);
+  const [expectedResponderCount, setExpectedResponderCount] = useState(1);
+  const [responderFullNames, setResponderFullNames] = useState<string[]>(['']);
   const [children, setChildren] = useState(0);
+  const [requiresChildrenDetails, setRequiresChildrenDetails] = useState(false);
+  const [childrenDetails, setChildrenDetails] = useState<ChildDetail[]>([]);
   const [dietaryNeeds, setDietaryNeeds] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [confirmationChoice, setConfirmationChoice] = useState<ConfirmationChoice | null>(null);
@@ -96,17 +104,41 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           if (saved?.attendance === 'yes' || saved?.attendance === 'no') {
             setAttendance(saved.attendance);
           }
-          if (typeof saved?.adults_count === 'number') {
-            setAdults(saved.adults_count);
+          if (typeof saved?.expected_responder_count === 'number') {
+            setExpectedResponderCount(Math.max(1, Math.min(2, saved.expected_responder_count)));
+          }
+          if (typeof saved?.responder_full_name === 'string') {
+            const names = saved.responder_full_name
+              .split('|')
+              .map((item: string) => item.trim())
+              .filter((item: string) => item.length > 0);
+            setResponderFullNames(names.length > 0 ? names.slice(0, 2) : ['']);
           }
           if (typeof saved?.children_count === 'number') {
             setChildren(saved.children_count);
+          }
+          setRequiresChildrenDetails(Boolean(saved?.requires_children_details));
+          if (Array.isArray(saved?.children)) {
+            setChildrenDetails(
+              saved.children
+                .slice(0, 10)
+                .map((item: { fullName?: unknown; age?: unknown }) => ({
+                  fullName: typeof item?.fullName === 'string' ? item.fullName : '',
+                  age: Number.isFinite(Number(item?.age)) ? String(Number(item.age)) : '',
+                }))
+            );
           }
           if (typeof saved?.dietary_notes === 'string') {
             setDietaryNeeds(saved.dietary_notes);
           }
         } else {
           setIsLocked(false);
+          setRequiresChildrenDetails(Boolean(data?.requiresChildrenDetails));
+          setExpectedResponderCount(
+            typeof data?.expectedResponderCount === 'number'
+              ? Math.max(1, Math.min(2, data.expectedResponderCount))
+              : 1
+          );
         }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
@@ -122,6 +154,38 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
     return () => controller.abort();
   }, [inviteCode]);
+
+  useEffect(() => {
+    setResponderFullNames((previous) => {
+      const next = Array.from({ length: expectedResponderCount }, (_, index) => previous[index] || '');
+      return next;
+    });
+  }, [expectedResponderCount]);
+
+  useEffect(() => {
+    setChildrenDetails((previous) => {
+      if (children <= 0) {
+        return [];
+      }
+
+      const next: ChildDetail[] = [];
+
+      for (let index = 0; index < children; index += 1) {
+        next.push(previous[index] || { fullName: '', age: '' });
+      }
+
+      return next;
+    });
+  }, [children]);
+
+  useEffect(() => {
+    if (requiresChildrenDetails) {
+      return;
+    }
+
+    setChildren(0);
+    setChildrenDetails([]);
+  }, [requiresChildrenDetails]);
 
   const handleEnvelopeClick = () => {
     if (envelopeState !== 'fechado') {
@@ -144,15 +208,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     }
   };
 
-  const updateCount = (type: 'adults' | 'children', operation: 'increment' | 'decrement') => {
-    if (type === 'adults') {
-      setAdults((current) => {
-        if (operation === 'increment') return Math.min(10, current + 1);
-        return Math.max(1, current - 1);
-      });
-      return;
-    }
-
+  const updateChildrenCount = (operation: 'increment' | 'decrement') => {
     setChildren((current) => {
       if (operation === 'increment') return Math.min(10, current + 1);
       return Math.max(0, current - 1);
@@ -167,6 +223,48 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     setSubmitError('');
     setIsSubmitting(true);
 
+    const normalizedChildrenCount =
+      attendance === 'yes' && requiresChildrenDetails ? Math.max(0, Math.min(10, children)) : 0;
+    const normalizedResponderFullNames = responderFullNames
+      .slice(0, expectedResponderCount)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    const normalizedChildrenDetails = childrenDetails
+      .slice(0, normalizedChildrenCount)
+      .map((item) => ({
+        fullName: item.fullName.trim(),
+        age: Number(item.age),
+      }));
+
+    if (attendance === 'yes' && normalizedResponderFullNames.length !== expectedResponderCount) {
+      setSubmitError(
+        expectedResponderCount === 2
+          ? 'Informe o nome completo das duas pessoas para confirmar o convite.'
+          : 'Informe seu nome completo para confirmar sua presenca.'
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (attendance === 'yes' && normalizedResponderFullNames.some((item) => item.length < 3)) {
+      setSubmitError('Cada nome completo deve ter ao menos 3 caracteres.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (requiresChildrenDetails && attendance === 'yes' && normalizedChildrenCount > 0) {
+      const hasInvalidName = normalizedChildrenDetails.some((item) => item.fullName.length === 0);
+      const hasInvalidAge = normalizedChildrenDetails.some(
+        (item) => !Number.isInteger(item.age) || item.age < 0 || item.age > 17
+      );
+
+      if (hasInvalidName || hasInvalidAge) {
+        setSubmitError('Preencha nome completo e idade valida de todos os filhos para continuar.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     try {
       const response = await fetch('/api/rsvp', {
         method: 'POST',
@@ -175,9 +273,12 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
         },
         body: JSON.stringify({
           inviteCode,
+          responderFullName: normalizedResponderFullNames[0] || '',
+          responderFullNames: normalizedResponderFullNames,
           attendance,
-          adultsCount: adults,
-          childrenCount: children,
+          adultsCount: attendance === 'yes' ? 1 : 0,
+          childrenCount: normalizedChildrenCount,
+          childrenDetails: normalizedChildrenDetails,
           dietaryNotes: dietaryNeeds,
         }),
       });
@@ -286,8 +387,9 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                   checked={attendance === 'no'}
                   onChange={() => {
                     setAttendance('no');
-                    setAdults(1);
+                    setResponderFullNames(Array.from({ length: expectedResponderCount }, () => ''));
                     setChildren(0);
+                    setChildrenDetails([]);
                     setIsSubmitted(false);
                     setSubmitError('');
                     setConfirmationChoice(null);
@@ -299,6 +401,107 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
               </label>
             </div>
           </fieldset>
+
+          {attendance === 'yes' ? (
+            <div className="space-y-3 rounded-lg border border-white/80 bg-white/72 p-3">
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-zinc-800">
+                  {expectedResponderCount === 2
+                    ? 'Nome completo do Casal "Ele e Ela"'
+                    : 'Nome completo do convidado'}
+                </p>
+
+                {responderFullNames.slice(0, expectedResponderCount).map((name, index) => (
+                  <input
+                    key={`responder-full-name-${index}`}
+                    value={name}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setResponderFullNames((previous) =>
+                        previous.map((item, itemIndex) => (itemIndex === index ? value : item))
+                      );
+                    }}
+                    disabled={isCheckingStatus || isSubmitting}
+                    placeholder="Digite o nome completo"
+                    className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                  />
+                ))}
+              </div>
+
+              {requiresChildrenDetails ? (
+                <>
+                  <p className="text-xs text-zinc-700">Quantidade de Criancas</p>
+
+                  <div className="flex items-center justify-between rounded-lg border border-white/80 bg-white/70 px-2 py-2">
+                    <span className="text-xs text-zinc-700">Criancas</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateChildrenCount('decrement')}
+                        className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700"
+                        aria-label="Diminuir criancas"
+                      >
+                        -
+                      </button>
+                      <span className="w-5 text-center text-sm text-zinc-800">{children}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateChildrenCount('increment')}
+                        className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700"
+                        aria-label="Aumentar criancas"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {children > 0 ? (
+                    <div className="space-y-2 rounded-lg border border-dashed border-champagne-400/55 bg-champagne-100/35 p-3">
+                      <p className="text-xs font-medium text-zinc-800">
+                        Informe nome completo e idade de cada filho
+                      </p>
+
+                      {childrenDetails.map((child, index) => (
+                        <div key={`child-${index}`} className="grid gap-2 sm:grid-cols-[1fr_110px]">
+                          <input
+                            value={child.fullName}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setChildrenDetails((previous) =>
+                                previous.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, fullName: value } : item
+                                )
+                              );
+                            }}
+                            disabled={isCheckingStatus || isSubmitting}
+                            placeholder={`Nome completo do filho ${index + 1}`}
+                            className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={17}
+                            value={child.age}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setChildrenDetails((previous) =>
+                                previous.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, age: value } : item
+                                )
+                              );
+                            }}
+                            disabled={isCheckingStatus || isSubmitting}
+                            placeholder="Idade"
+                            className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           {attendance ? (
             <div className="space-y-2">
@@ -521,7 +724,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                 className="absolute inset-0 z-10 flex items-center justify-center"
               >
                 <div className="w-full max-w-xl sm:max-w-2xl">
-                  <article className="frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] p-5 shadow-2xl sm:p-7 lg:p-8 bg-white/60 backdrop-blur-md">
+                  <article className="themed-scrollbar frosted-light gold-frame relative max-h-[78vh] overflow-x-hidden overflow-y-auto rounded-[1.35rem] bg-white/60 p-5 shadow-2xl backdrop-blur-md sm:max-h-[84vh] sm:p-7 lg:p-8">
                     <div className={paperTextureClass} />
                     <div className="pointer-events-none absolute inset-0">
                       <span className="absolute -left-14 -top-14 h-36 w-36 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.45),transparent_65%)]" />

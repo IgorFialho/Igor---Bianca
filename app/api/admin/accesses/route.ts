@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 type AccessSummaryRow = {
   invite_code_used: string;
   guest_name: string | null;
+  responder_full_name: string | null;
   access_count: number;
   last_accessed_at: string;
   attendance: 'yes' | 'no' | null;
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
         WITH latest_rsvp AS (
           SELECT DISTINCT ON (UPPER(invite_code_used))
             UPPER(invite_code_used) AS invite_code_used_upper,
+            responder_full_name,
             attendance,
             dietary_notes,
             submitted_at
@@ -31,6 +33,7 @@ export async function GET(request: NextRequest) {
         SELECT
           l.invite_code_used,
           COALESCE(i.guest_name, l.guest_name) AS guest_name,
+          MAX(r.responder_full_name) AS responder_full_name,
           COUNT(*)::int AS access_count,
           MAX(l.accessed_at) AS last_accessed_at,
           MAX(r.attendance) AS attendance,

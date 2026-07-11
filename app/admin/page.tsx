@@ -16,6 +16,7 @@ type AccessItem = {
   invite_code_used: string;
   guest_name: string | null;
   responder_full_name: string | null;
+  children_details: string | null;
   access_count: number;
   last_accessed_at: string;
   attendance: 'yes' | 'no' | null;
@@ -42,6 +43,7 @@ type MessageDialogState = {
 type NameDialogState = {
   title: string;
   text: string;
+  childrenText: string;
 } | null;
 
 type AccessActionDialogState = {
@@ -521,6 +523,31 @@ export default function AdminPage() {
     return names.join(' | ');
   };
 
+  const formatChildrenDetails = (rawValue: string | null) => {
+    if (!rawValue) {
+      return 'Sem filhos informados';
+    }
+
+    const children = rawValue
+      .split('\n')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    if (children.length === 0) {
+      return 'Sem filhos informados';
+    }
+
+    return children.join('\n');
+  };
+
+  const openResponderDialog = (item: AccessItem, title: string) => {
+    setNameDialog({
+      title,
+      text: formatGuestNames(item.responder_full_name),
+      childrenText: formatChildrenDetails(item.children_details),
+    });
+  };
+
   return (
     <main className="paper-texture relative min-h-screen px-4 py-6 sm:px-6 lg:px-10">
       <section className="mx-auto w-full max-w-7xl space-y-4">
@@ -825,23 +852,14 @@ export default function AdminPage() {
                 )}
 
                 <p className="mt-2 text-xs text-zinc-500">Nome do casal</p>
-                {hasCoupleNames(item.responder_full_name) ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setNameDialog({
-                        title: 'Nome do casal',
-                        text: formatGuestNames(item.responder_full_name),
-                      })
-                    }
-                    className="mt-1 max-w-full truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2"
-                    title="Clique para ler completo"
-                  >
-                    Clique para ler completo
-                  </button>
-                ) : (
-                  <p className="whitespace-pre-line text-zinc-700">{formatGuestNames(item.responder_full_name)}</p>
-                )}
+                <button
+                  type="button"
+                  onClick={() => openResponderDialog(item, 'Nome do casal')}
+                  className="mt-1 max-w-full truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2"
+                  title="Clique para ver nomes e filhos"
+                >
+                  {formatGuestNamesInline(item.responder_full_name)}
+                </button>
 
                 <p className="mt-2 text-xs text-zinc-500">Resposta</p>
                 <div className="mt-1">
@@ -934,23 +952,14 @@ export default function AdminPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      {hasCoupleNames(item.responder_full_name) ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setNameDialog({
-                              title: 'Nome do convidado',
-                              text: formatGuestNames(item.responder_full_name),
-                            })
-                          }
-                          className="max-w-[220px] truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
-                          title="Clique para ler completo"
-                        >
-                          Clique para ler completo
-                        </button>
-                      ) : (
-                        <span className="whitespace-pre-line">{formatGuestNames(item.responder_full_name)}</span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openResponderDialog(item, 'Nome dos convidados')}
+                        className="max-w-[220px] truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
+                        title="Clique para ver nomes e filhos"
+                      >
+                        {formatGuestNamesInline(item.responder_full_name)}
+                      </button>
                     </td>
                     <td className="px-3 py-2">
                       {item.attendance === 'yes' ? (
@@ -1043,6 +1052,11 @@ export default function AdminPage() {
 
             <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
+
+              <div className="mt-4 border-t border-zinc-200/80 pt-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">Filhos (nome e idade)</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.childrenText}</p>
+              </div>
             </div>
 
             <div className="mt-5 flex justify-end">

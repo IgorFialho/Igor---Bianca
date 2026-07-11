@@ -9,6 +9,8 @@ type EnvelopeState = 'fechado' | 'abrindo' | 'aberto';
 
 type InteractiveEnvelopeInviteProps = {
   className?: string;
+  backgroundImageUrl?: string;
+  backgroundImageMobileUrl?: string;
 };
 
 interface Petal {
@@ -28,7 +30,11 @@ type ChildDetail = {
   age: string;
 };
 
-export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInviteProps) {
+export function InteractiveEnvelopeInvite({
+  className,
+  backgroundImageUrl,
+  backgroundImageMobileUrl,
+}: InteractiveEnvelopeInviteProps) {
   const [envelopeState, setEnvelopeState] = useState<EnvelopeState>('fechado');
   const [showFinalCard, setShowFinalCard] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -564,7 +570,24 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
       className={`paper-texture relative flex min-h-screen items-center justify-center overflow-hidden bg-[#FAF9F6] px-3 py-6 sm:px-4 sm:py-10 ${className || ''}`}
       style={{ perspective: '2500px' }}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(245,201,219,0.36),transparent_35%),radial-gradient(circle_at_84%_86%,rgba(164,188,138,0.3),transparent_36%),linear-gradient(180deg,#faf9f6_0%,#f5f0e8_100%)]" />
+      {backgroundImageUrl || backgroundImageMobileUrl ? (
+        <>
+          {backgroundImageMobileUrl ? (
+            <div
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat sm:hidden"
+              style={{ backgroundImage: `url(${backgroundImageMobileUrl})` }}
+            />
+          ) : null}
+          {backgroundImageUrl ? (
+            <div
+              className="absolute inset-0 hidden bg-cover bg-center bg-no-repeat sm:block"
+              style={{ backgroundImage: `url(${backgroundImageUrl})` }}
+            />
+          ) : null}
+        </>
+      ) : (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(245,201,219,0.36),transparent_35%),radial-gradient(circle_at_84%_86%,rgba(164,188,138,0.3),transparent_36%),linear-gradient(180deg,#faf9f6_0%,#f5f0e8_100%)]" />
+      )}
 
       {/* ANIMAÇÃO CONTÍNUA DE PÉTALAS DE FLORES */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">

@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 
       const messages = result.rows.map((row: PublicMessageRow) => ({
         id: row.id,
-        guestName: row.responder_full_name || row.guest_name || row.invite_code_used,
+        guestName: row.guest_name || row.invite_code_used,
         message: row.dietary_notes,
         submittedAt: row.submitted_at,
       }));

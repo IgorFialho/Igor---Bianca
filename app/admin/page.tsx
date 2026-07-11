@@ -197,6 +197,19 @@ export default function AdminPage() {
     router.replace('/admin/login');
   };
 
+  const handleCopyCode = async (code: string, label: string) => {
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard indisponivel neste navegador.');
+      }
+
+      await navigator.clipboard.writeText(code);
+      setNotice({ type: 'success', message: `${label} copiado: ${code}` });
+    } catch {
+      setNotice({ type: 'error', message: `Nao foi possivel copiar ${label.toLowerCase()}.` });
+    }
+  };
+
   const handleDeleteRequest = (codeId: string, codeLabel: string) => {
     setDeleteDialog({ mode: 'single', ids: [codeId], labels: [codeLabel] });
   };
@@ -667,7 +680,15 @@ export default function AdminPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-zinc-500">Codigo</p>
-                      <p className="font-medium text-zinc-800">{item.code}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCode(item.code, 'Codigo')}
+                        className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2"
+                        title="Clique para copiar o codigo"
+                        aria-label={`Copiar codigo ${item.code}`}
+                      >
+                        {item.code}
+                      </button>
                     </div>
                     <input
                       type="checkbox"
@@ -743,7 +764,17 @@ export default function AdminPage() {
                           className="h-4 w-4 rounded border-zinc-300"
                         />
                       </td>
-                      <td className="px-3 py-2 font-medium text-zinc-800">{item.code}</td>
+                      <td className="px-3 py-2 font-medium text-zinc-800">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCode(item.code, 'Codigo')}
+                          className="cursor-copy underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
+                          title="Clique para copiar o codigo"
+                          aria-label={`Copiar codigo ${item.code}`}
+                        >
+                          {item.code}
+                        </button>
+                      </td>
                       <td className="px-3 py-2 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
                       <td className="px-3 py-2">
                         <label className="flex items-center justify-center gap-2 text-xs text-zinc-700">
@@ -827,7 +858,15 @@ export default function AdminPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs text-zinc-500">Codigo</p>
-                    <p className="font-medium text-zinc-800">{item.invite_code_used}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCode(item.invite_code_used, 'Codigo')}
+                      className="font-medium text-zinc-800 underline decoration-zinc-300 underline-offset-2"
+                      title="Clique para copiar o codigo"
+                      aria-label={`Copiar codigo ${item.invite_code_used}`}
+                    >
+                      {item.invite_code_used}
+                    </button>
                   </div>
                   <input
                     type="checkbox"
@@ -938,7 +977,17 @@ export default function AdminPage() {
                         className="h-4 w-4 rounded border-zinc-300"
                       />
                     </td>
-                    <td className="px-3 py-2 font-medium text-zinc-800">{item.invite_code_used}</td>
+                    <td className="px-3 py-2 font-medium text-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCode(item.invite_code_used, 'Codigo')}
+                        className="cursor-copy underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
+                        title="Clique para copiar o codigo"
+                        aria-label={`Copiar codigo ${item.invite_code_used}`}
+                      >
+                        {item.invite_code_used}
+                      </button>
+                    </td>
                     <td className="px-3 py-2">
                       {hasCoupleNames(item.guest_name) ? (
                         <span
@@ -1051,12 +1100,13 @@ export default function AdminPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">{nameDialog.title}</p>
 
             <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">Pais (nome)</p>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
-
-              <div className="mt-4 border-t border-zinc-200/80 pt-3">
+            </div>
+            
+            <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">Filhos (nome e idade)</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.childrenText}</p>
-              </div>
             </div>
 
             <div className="mt-5 flex justify-end">

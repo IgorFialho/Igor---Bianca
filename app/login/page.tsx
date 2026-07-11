@@ -459,7 +459,7 @@ export default function LoginPage() {
       </section>
 
       <footer className="relative z-10 mt-2 pb-4 text-center text-xs text-zinc-100/90">
-        Desenvolvido por <a href="https://github.com/IgorFialho" target="_blank" rel="noopener noreferrer" className="font-semibold text-zinc-800 underline">Igor Fialho</a>
+       © Desenvolvido por <a href="https://github.com/IgorFialho" target="_blank" rel="noopener noreferrer" className="font-semibold text-white-800 underline">Igor Fialho</a>
       </footer>
     </main>
   );

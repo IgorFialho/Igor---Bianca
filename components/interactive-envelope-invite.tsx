@@ -594,7 +594,7 @@ export function InteractiveEnvelopeInvite({
         {petals.map((petal) => (
           <motion.div
             key={petal.id}
-            className="absolute bg-gradient-to-br from-rose-200/60 to-pink-300/40 backdrop-blur-[0.3px]"
+            className="absolute bg-gradient-to-br from-rose-300/80 to-pink-400/60 backdrop-blur-[0.3px]"
             style={{
               left: `${petal.left}%`,
               width: petal.size,
@@ -753,11 +753,11 @@ export function InteractiveEnvelopeInvite({
                 className="absolute inset-0 z-10 flex items-center justify-center"
               >
                 <div className="w-full max-w-xl sm:max-w-2xl">
-                  <article className="frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] bg-white/60 shadow-2xl backdrop-blur-md">
+                  <article className="frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] bg-white/150 shadow-2xl backdrop-blur-md">
                     <div className={paperTextureClass} />
                     <div className="pointer-events-none absolute inset-0">
-                      <span className="absolute -left-14 -top-14 h-36 w-36 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.45),transparent_65%)]" />
-                      <span className="absolute -bottom-16 -right-16 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(193,182,236,0.4),transparent_65%)]" />
+                      <span className="absolute -left-14 -top-14 h-36 w-36 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.45),transparent_90%)]" />
+                      <span className="absolute -bottom-16 -right-16 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(193,182,236,0.4),transparent_90%)]" />
                     </div>
 
                     <div className="themed-scrollbar relative z-10 max-h-[78vh] overflow-x-hidden overflow-y-auto p-5 pr-3 sm:max-h-[84vh] sm:p-7 sm:pr-4 lg:p-8 lg:pr-5">

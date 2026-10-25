@@ -571,18 +571,18 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
   return (
     <main className={`relative flex min-h-screen flex-col items-center px-4 py-14 text-zinc-800 sm:px-6 sm:py-16 ${className || ''}`}>
-      {/* Fundo de flores do design "Save the Date" (versão menor no celular). */}
+      {/* Fundo: jardim de rosas brancas (foto de Roman Odintsov no Pexels); versão menor no celular.
+          O foco fica no canteiro de rosas, que é o que aparece no corte vertical do celular. */}
       <picture className="pointer-events-none fixed inset-0 z-0">
-        <source media="(max-width: 767px)" srcSet="/imagens/convite/flores-fundo-mobile.jpg" />
-        <img src="/imagens/convite/flores-fundo.jpg" alt="" className="h-full w-full object-cover" />
+        <source media="(max-width: 767px)" srcSet="/imagens/convite/jardim-fundo-mobile.jpg" />
+        <img src="/imagens/convite/jardim-fundo.jpg" alt="" className="h-full w-full object-cover" style={{ objectPosition: '50% 60%' }} />
       </picture>
+      {/* Véu no tom de texto do site (#2f241b), mais forte no topo e embaixo para os textos brancos lerem bem. */}
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(180deg,rgba(47,36,27,0.42)_0%,rgba(47,36,27,0.12)_35%,rgba(47,36,27,0.12)_65%,rgba(47,36,27,0.45)_100%)]" />
 
-      {/* Acima do envelope (z-30) para a aba aberta não cobrir o título durante a animação. */}
+      {/* Título só para leitores de tela (o "Save the date" visível foi removido do design). */}
       <header className="relative z-30 mb-8 text-center sm:mb-12">
         <h1 className="sr-only">Igor &amp; Bianca · 18 de abril de 2027</h1>
-        <p className={`${poppins.className} text-[clamp(1.5rem,3.4vw,2.6rem)] uppercase tracking-[0.04em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]`}>
-          Save the date
-        </p>
       </header>
 
       {/* Espaço extra no topo para o cartão subir para fora do envelope ao abrir. */}
@@ -639,7 +639,6 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                     <article className="relative w-full select-none overflow-hidden rounded-[0.6rem] border border-zinc-800/10 bg-[#fffaf1] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:p-8">
                       <div className={paperTextureClass} />
                       <div className="relative z-10 flex flex-col items-center gap-1 text-center text-zinc-800">
-                        <p className={`${poppins.className} text-[0.7rem] uppercase tracking-[0.2em] text-zinc-600 sm:text-xs`}>Save the date</p>
                         <FittedText text="Igor & Bianca" />
                         <p className={`${poppins.className} text-[0.7rem] uppercase tracking-[0.2em] text-zinc-600 sm:text-xs`}>18 . 04 . 2027</p>
                       </div>

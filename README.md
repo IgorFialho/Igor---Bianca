@@ -73,7 +73,7 @@ db/schema.sql       Esquema do banco
 scripts/            Criação das tabelas
 public/
   imagens/casal/    Fotos do casal usadas na home
-  imagens/convite/  Fundo de flores do convite
+  imagens/convite/  Fundo do convite (jardim de rosas brancas)
   intro/arco/       Camadas da introdução
   sons/             Música do site
 ```
@@ -170,3 +170,4 @@ O projeto roda em qualquer plataforma compatível com Next.js, como a [Vercel](h
 - Desenvolvido por [Igor Fialho](https://github.com/IgorFialho).
 - Layout da home e da introdução inspirados no template “Origins” da [Cordially](https://cordially.io); as camadas do arco de flores em `public/intro/arco/` são arte da Cordially.
 - Fotos do casal: acervo pessoal de Igor & Bianca.
+- Fundo da página de convite: foto de [Roman Odintsov](https://www.pexels.com/@roman-odintsov/) no [Pexels](https://www.pexels.com/photo/8189071/) (Licença Pexels).

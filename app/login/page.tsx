@@ -14,6 +14,7 @@ import { ClickPetals } from '@/components/home/click-petals';
 import { DetailsSection, type GuestMessage } from '@/components/home/details-section';
 import { FaqSection, type FaqItem } from '@/components/home/faq-section';
 import { FlowerConfetti } from '@/components/home/flower-confetti';
+import { FooterCarousel, type FooterPhoto } from '@/components/home/footer-carousel';
 import { useSectionBackground, type SectionBackground } from '@/components/home/use-section-background';
 
 const EVENT_DATE = new Date('2027-04-18T16:30:00-03:00');
@@ -30,8 +31,14 @@ const HERO_GALLERY: [HeroPhoto, HeroPhoto, HeroPhoto, HeroPhoto] = [
   { src: '/imagens/casal/casal-10.jpeg', position: '50% 48%' },
   { src: '/imagens/casal/casal-11.jpeg', position: '50% 11%' },
 ];
-const FOOTER_PHOTO = '/imagens/casal.jpeg';
-const FOOTER_PHOTO_POSITION = '50% 35%';
+// Carrossel do rodapé (troca a cada 8s): o jardim do convite (Roman Odintsov / Pexels), a foto do casal
+// que não aparece no resto da home, a parede de rosas (karaz flowers / Unsplash) e as flores do Save the Date.
+const FOOTER_PHOTOS: FooterPhoto[] = [
+  { src: '/imagens/convite/jardim-fundo.jpg', mobileSrc: '/imagens/convite/jardim-fundo-mobile.jpg', position: '50% 60%', quote: 'o nosso para sempre fica ainda mais bonito com vocês ao nosso lado.' },
+  { src: '/imagens/casal.jpeg', position: '50% 35%', quote: 'você é a minha pessoa favorita para viver todos os capítulos da vida.' },
+  { src: '/imagens/convite/rosas-fundo.jpg', mobileSrc: '/imagens/convite/rosas-fundo-mobile.jpg', position: '50% 50%', quote: 'o amor floresce quando é cultivado todos os dias.' },
+  { src: '/imagens/convite/flores-fundo.jpg', mobileSrc: '/imagens/convite/flores-fundo-mobile.jpg', position: '50% 60%', quote: 'obrigado por fazerem parte da nossa história. nos vemos no grande dia!' },
+];
 
 const STORY_CHAPTERS: StoryChapter[] = [
   {
@@ -408,13 +415,7 @@ export default function LoginPage() {
 
       <footer className="relative h-[100svh] w-full px-3 pb-4 pt-3 md:px-4 md:pb-6 md:pt-4 lg:px-5 lg:pt-5">
         <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] px-6 text-center">
-          <img src={FOOTER_PHOTO} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" style={{ objectPosition: FOOTER_PHOTO_POSITION }} />
-          <div className="absolute inset-0 bg-[rgba(17,12,9,0.52)]" />
-          <Reveal className="relative">
-            <h2 className="max-w-5xl font-display text-[3rem] leading-[0.92] text-white drop-shadow-lg md:text-[5rem]">
-              o nosso para sempre fica ainda mais bonito com vocês ao nosso lado.
-            </h2>
-          </Reveal>
+          <FooterCarousel photos={FOOTER_PHOTOS} intervalSeconds={8} />
           <p className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-white md:bottom-5 md:text-xs">
             © Desenvolvido por{' '}
             <a href="https://github.com/IgorFialho" target="_blank" rel="noopener noreferrer" className="underline-offset-4 hover:underline">

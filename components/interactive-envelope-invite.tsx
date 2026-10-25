@@ -1,27 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from 'react';
+import { Poppins } from 'next/font/google';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { AttendanceChoice } from '@/lib/invite';
 import { INVITE_ACCESS_KEY, weddingDetails } from '@/lib/invite';
+import { FittedText } from '@/components/home/fitted-text';
+import { EmojiPicker } from '@/components/emoji-picker';
+
+// Fonte do design "Save the Date" (textos em branco sobre as flores).
+const poppins = Poppins({ subsets: ['latin'], weight: ['400', '500'] });
 
 type EnvelopeState = 'fechado' | 'abrindo' | 'aberto';
 
 type InteractiveEnvelopeInviteProps = {
   className?: string;
-  backgroundImageUrl?: string;
-  backgroundImageMobileUrl?: string;
 };
-
-interface Petal {
-  id: number;
-  left: number;
-  size: number;
-  duration: number;
-  delay: number;
-  sway: number;
-  rotate: number;
-}
 
 type ConfirmationChoice = 'yes' | 'no';
 
@@ -30,11 +24,7 @@ type ChildDetail = {
   age: string;
 };
 
-export function InteractiveEnvelopeInvite({
-  className,
-  backgroundImageUrl,
-  backgroundImageMobileUrl,
-}: InteractiveEnvelopeInviteProps) {
+export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInviteProps) {
   const [envelopeState, setEnvelopeState] = useState<EnvelopeState>('fechado');
   const [showFinalCard, setShowFinalCard] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -50,23 +40,23 @@ export function InteractiveEnvelopeInvite({
   const [requiresChildrenDetails, setRequiresChildrenDetails] = useState(false);
   const [childrenDetails, setChildrenDetails] = useState<ChildDetail[]>([]);
   const [dietaryNeeds, setDietaryNeeds] = useState('');
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+
+  // Insere o emoji onde está o cursor (ou no fim) e devolve o foco ao campo logo depois dele.
+  const insertEmoji = (emoji: string) => {
+    const field = messageRef.current;
+    const start = field?.selectionStart ?? dietaryNeeds.length;
+    const end = field?.selectionEnd ?? dietaryNeeds.length;
+    setDietaryNeeds((current) => current.slice(0, start) + emoji + current.slice(end));
+    window.requestAnimationFrame(() => {
+      if (!field) return;
+      const caret = start + emoji.length;
+      field.focus();
+      field.setSelectionRange(caret, caret);
+    });
+  };
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [confirmationChoice, setConfirmationChoice] = useState<ConfirmationChoice | null>(null);
-  const [petals, setPetals] = useState<Petal[]>([]);
-
-  // Inicializa o efeito de pétalas apenas no cliente para evitar erros de SSR
-  useEffect(() => {
-    const generatedPetals = Array.from({ length: 25 }).map((_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      size: Math.random() * 10 + 10,
-      duration: Math.random() * 6 + 8,
-      delay: Math.random() * -14,
-      sway: Math.random() * 40 + 20,
-      rotate: Math.random() * 360,
-    }));
-    setPetals(generatedPetals);
-  }, []);
 
   useEffect(() => {
     const storedCode = window.sessionStorage.getItem(INVITE_ACCESS_KEY);
@@ -339,36 +329,49 @@ export function InteractiveEnvelopeInvite({
     .join(' e ');
   const headingDisplayName = responderHeading || 'Convidado';
 
-  // Classe utilitária reutilizável para aplicar a textura de papel via SVG dinâmico
+  // Textura de papel sutil (ruído em SVG) usada nas partes do envelope.
   const paperTextureClass =
-    "absolute inset-0 pointer-events-none opacity-[0.11] mix-blend-multiply bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')]";
+    "absolute inset-0 pointer-events-none opacity-[0.08] mix-blend-multiply bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')]";
+
+  // Estilos no mesmo padrão da home: rótulos em maiúsculas espaçadas, campos e botões em pílula.
+  const eyebrowClass = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/80';
+  const fieldClass =
+    'w-full rounded-full border border-zinc-800/15 bg-[#fffaf1] px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20 disabled:opacity-60';
+  const choiceClass =
+    'flex items-center justify-center rounded-full border border-zinc-800/15 bg-[#fffaf1] px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800 transition-colors duration-200 hover:border-zinc-800/30 peer-checked:border-champagne-600 peer-checked:bg-champagne-600 peer-checked:text-[#fff9f1] peer-focus-visible:ring-2 peer-focus-visible:ring-champagne-600/30';
+  const primaryButtonClass =
+    'inline-flex items-center justify-center rounded-full bg-champagne-600 px-10 py-4 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100';
+  const secondaryButtonClass =
+    'inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-8 py-4 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800 transition-colors hover:bg-zinc-800/5';
+  const stepperButtonClass =
+    'flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800/15 bg-[#fffaf1] text-base text-zinc-800 transition-colors hover:border-zinc-800/30';
 
   const finalInviteContent = (
-    <div className="relative z-10 space-y-6">
-      <header className="space-y-2 text-center">
-        <p className="text-xs uppercase tracking-[0.34em] text-zinc-600">Convidado</p>
-        {!isLocked ? (
-          <>
-            <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">{headingDisplayName}</h2>
-            <p className="text-sm text-zinc-700 sm:text-base">{weddingDetails.date} - {weddingDetails.time}</p>
-            <p className="text-sm text-zinc-700 sm:text-base">{weddingDetails.venue}</p>
-            <p className="text-xs text-zinc-600 sm:text-sm">{weddingDetails.address}</p>
-          </>
-        ) : null}
+    <div className="relative z-10 space-y-8">
+      <header className="space-y-4 text-center">
+        <p className={eyebrowClass}>Convidado</p>
+        <h2 className="font-display text-5xl italic leading-[0.95] text-zinc-800 [overflow-wrap:anywhere] sm:text-6xl">
+          {headingDisplayName}
+        </h2>
+        <div className="mx-auto h-px w-16 bg-zinc-800/20" />
+        <div className="space-y-1.5">
+          <p className={eyebrowClass}>
+            {weddingDetails.date} · {weddingDetails.time}
+          </p>
+          <p className="text-base text-zinc-800">{weddingDetails.venue}</p>
+          <p className="text-sm text-zinc-600">{weddingDetails.address}</p>
+        </div>
       </header>
 
       {isLocked ? (
-        <div className="space-y-3 py-1 text-center">
-          <h2 className="font-display text-3xl text-champagne-800 sm:text-5xl">{headingDisplayName}</h2>
-          <p className="text-sm font-medium tracking-[0.08em] text-zinc-700 sm:text-base">18 ABR 2027 - 16h30</p>
-          <p className="text-sm text-zinc-700 sm:text-base">Pampulha - Belo Horizonte</p>
-          <p className="text-xs text-zinc-600 sm:text-sm">Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450</p>
-        </div>
+        <p className="rounded-2xl border border-zinc-800/10 bg-cream px-5 py-4 text-center text-sm text-zinc-600">
+          Sua resposta já foi registrada. Obrigado!
+        </p>
       ) : (
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium text-zinc-800">Confirma sua presenca?</legend>
-            <div className="grid grid-cols-2 gap-2">
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          <fieldset className="space-y-3">
+            <legend className={`${eyebrowClass} mb-3 w-full text-center`}>Confirma sua presença?</legend>
+            <div className="grid grid-cols-2 gap-3">
               <label className="cursor-pointer">
                 <input
                   className="peer sr-only"
@@ -384,9 +387,7 @@ export function InteractiveEnvelopeInvite({
                     setConfirmationChoice(null);
                   }}
                 />
-                <span className="flex items-center justify-center rounded-lg border border-white/80 bg-white/70 px-3 py-2 text-sm text-zinc-700 transition-colors duration-200 peer-checked:border-olive-400/55 peer-checked:bg-olive-100/45 peer-checked:text-olive-800">
-                  Sim
-                </span>
+                <span className={choiceClass}>Sim</span>
               </label>
 
               <label className="cursor-pointer">
@@ -407,19 +408,17 @@ export function InteractiveEnvelopeInvite({
                     setConfirmationChoice(null);
                   }}
                 />
-                <span className="flex items-center justify-center rounded-lg border border-white/80 bg-white/70 px-3 py-2 text-sm text-zinc-700 transition-colors duration-200 peer-checked:border-teaRose-300/65 peer-checked:bg-teaRose-100/45 peer-checked:text-teaRose-800">
-                  Nao
-                </span>
+                <span className={choiceClass}>Não</span>
               </label>
             </div>
           </fieldset>
 
           {attendance === 'yes' ? (
-            <div className="space-y-3 rounded-lg border border-white/80 bg-white/72 p-3">
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-zinc-800">
+            <div className="space-y-5 border-t border-zinc-800/15 pt-6">
+              <div className="space-y-3">
+                <p className={eyebrowClass}>
                   {expectedResponderCount === 2
-                    ? 'Nome completo do Casal "Ele e Ela"'
+                    ? 'Nome completo do casal "Ele e Ela"'
                     : 'Nome completo do convidado'}
                 </p>
 
@@ -435,32 +434,31 @@ export function InteractiveEnvelopeInvite({
                     }}
                     disabled={isCheckingStatus || isSubmitting}
                     placeholder="Digite o nome completo"
-                    className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                    aria-label={`Nome completo ${index + 1}`}
+                    className={fieldClass}
                   />
                 ))}
               </div>
 
               {requiresChildrenDetails ? (
-                <>
-                  <p className="text-xs text-zinc-700">Quantidade de Criancas</p>
-
-                  <div className="flex items-center justify-between rounded-lg border border-white/80 bg-white/70 px-2 py-2">
-                    <span className="text-xs text-zinc-700">Criancas</span>
-                    <div className="flex items-center gap-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className={eyebrowClass}>Quantidade de crianças</p>
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => updateChildrenCount('decrement')}
-                        className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700"
-                        aria-label="Diminuir criancas"
+                        className={stepperButtonClass}
+                        aria-label="Diminuir crianças"
                       >
-                        -
+                        −
                       </button>
-                      <span className="w-5 text-center text-sm text-zinc-800">{children}</span>
+                      <span className="w-6 text-center text-lg tabular-nums text-zinc-800">{children}</span>
                       <button
                         type="button"
                         onClick={() => updateChildrenCount('increment')}
-                        className="h-7 w-7 rounded border border-white/70 bg-white/90 text-sm text-zinc-700"
-                        aria-label="Aumentar criancas"
+                        className={stepperButtonClass}
+                        aria-label="Aumentar crianças"
                       >
                         +
                       </button>
@@ -468,10 +466,8 @@ export function InteractiveEnvelopeInvite({
                   </div>
 
                   {children > 0 ? (
-                    <div className="space-y-2 rounded-lg border border-dashed border-champagne-400/55 bg-champagne-100/35 p-3">
-                      <p className="text-xs font-medium text-zinc-800">
-                        Informe nome completo e idade de cada filho
-                      </p>
+                    <div className="space-y-3 rounded-3xl border border-zinc-800/10 bg-cream p-4">
+                      <p className="text-sm text-zinc-600">Informe nome completo e idade de cada filho</p>
 
                       {childrenDetails.map((child, index) => (
                         <div key={`child-${index}`} className="grid gap-2 sm:grid-cols-[1fr_110px]">
@@ -487,7 +483,8 @@ export function InteractiveEnvelopeInvite({
                             }}
                             disabled={isCheckingStatus || isSubmitting}
                             placeholder={`Nome completo do filho ${index + 1}`}
-                            className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                            aria-label={`Nome completo do filho ${index + 1}`}
+                            className={fieldClass}
                           />
                           <input
                             type="number"
@@ -504,44 +501,51 @@ export function InteractiveEnvelopeInvite({
                             }}
                             disabled={isCheckingStatus || isSubmitting}
                             placeholder="Idade"
-                            className="focus-rose w-full rounded-lg border border-white/70 bg-white/80 px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-500"
+                            aria-label={`Idade do filho ${index + 1}`}
+                            className={fieldClass}
                           />
                         </div>
                       ))}
                     </div>
                   ) : null}
-                </>
+                </div>
               ) : null}
             </div>
           ) : null}
 
           {attendance ? (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-800" htmlFor="dietaryNeeds">
+            <div className="space-y-3">
+              <label className={eyebrowClass} htmlFor="dietaryNeeds">
                 {attendance === 'no' ? 'Justifique' : 'Deixe uma mensagem para o casal'}
               </label>
-              <textarea
-                id="dietaryNeeds"
-                rows={3}
-                disabled={isCheckingStatus || isSubmitting}
-                value={dietaryNeeds}
-                onChange={(event) => setDietaryNeeds(event.target.value)}
-                className="focus-rose w-full rounded-lg border border-white/70 bg-white/72 px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-500"
-                placeholder={attendance === 'no' ? 'Digite sua justificativa aqui (opcional)' : 'Escreva uma mensagem carinhosa (opcional)'}
-              />
+              <div className="relative">
+                <textarea
+                  ref={messageRef}
+                  id="dietaryNeeds"
+                  rows={3}
+                  disabled={isCheckingStatus || isSubmitting}
+                  value={dietaryNeeds}
+                  onChange={(event) => setDietaryNeeds(event.target.value)}
+                  className={`${fieldClass} rounded-3xl py-4 pr-16`}
+                  placeholder={attendance === 'no' ? 'Digite sua justificativa aqui (opcional)' : 'Escreva uma mensagem carinhosa (opcional)'}
+                />
+                <div className="absolute bottom-3 right-3">
+                  <EmojiPicker onSelect={insertEmoji} disabled={isCheckingStatus || isSubmitting} />
+                </div>
+              </div>
             </div>
           ) : null}
 
           <button
             type="submit"
             disabled={!attendance || !inviteCode || isCheckingStatus || isSubmitting}
-            className="shimmer-button flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#dcd0b8] to-[#d5b271] px-4 py-2.5 text-sm font-semibold text-zinc-900 transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_10px_30px_rgba(188,151,83,0.35)] disabled:cursor-not-allowed disabled:opacity-60"
+            className={`${primaryButtonClass} w-full`}
           >
-            {isSubmitting ? 'Enviando...' : 'Confirmar Presenca'}
+            {isSubmitting ? 'Enviando...' : 'Confirmar presença'}
           </button>
 
           {submitError ? (
-            <p className="rounded-lg border border-rose-200 bg-rose-50/90 px-3 py-2 text-xs text-rose-700">
+            <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {submitError}
             </p>
           ) : null}
@@ -554,9 +558,9 @@ export function InteractiveEnvelopeInvite({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="rounded-lg border border-olive-300/40 bg-olive-100/55 px-3 py-2 text-xs text-olive-900"
+                className="rounded-2xl border border-olive-300/40 bg-olive-50 px-4 py-3 text-sm text-olive-900"
               >
-                {attendance === 'no' ? 'Recusa confirmada com sucesso!' : 'Presenca confirmada com sucesso!'}
+                {attendance === 'no' ? 'Recusa confirmada com sucesso!' : 'Presença confirmada com sucesso!'}
               </motion.p>
             ) : null}
           </AnimatePresence>
@@ -566,77 +570,36 @@ export function InteractiveEnvelopeInvite({
   );
 
   return (
-    <main
-      className={`paper-texture relative flex min-h-screen items-center justify-center overflow-hidden bg-[#FAF9F6] px-3 py-6 sm:px-4 sm:py-10 ${className || ''}`}
-      style={{ perspective: '2500px' }}
-    >
-      {backgroundImageUrl || backgroundImageMobileUrl ? (
-        <>
-          {backgroundImageMobileUrl ? (
-            <div
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat sm:hidden"
-              style={{ backgroundImage: `url(${backgroundImageMobileUrl})` }}
-            />
-          ) : null}
-          {backgroundImageUrl ? (
-            <div
-              className="absolute inset-0 hidden bg-cover bg-center bg-no-repeat sm:block"
-              style={{ backgroundImage: `url(${backgroundImageUrl})` }}
-            />
-          ) : null}
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(245,201,219,0.36),transparent_35%),radial-gradient(circle_at_84%_86%,rgba(164,188,138,0.3),transparent_36%),linear-gradient(180deg,#faf9f6_0%,#f5f0e8_100%)]" />
-      )}
+    <main className={`relative flex min-h-screen flex-col items-center px-4 py-14 text-zinc-800 sm:px-6 sm:py-16 ${className || ''}`}>
+      {/* Fundo de flores do design "Save the Date" (versão menor no celular). */}
+      <picture className="pointer-events-none fixed inset-0 z-0">
+        <source media="(max-width: 767px)" srcSet="/imagens/convite/flores-fundo-mobile.jpg" />
+        <img src="/imagens/convite/flores-fundo.jpg" alt="" className="h-full w-full object-cover" />
+      </picture>
 
-      {/* ANIMAÇÃO CONTÍNUA DE PÉTALAS DE FLORES */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-        {petals.map((petal) => (
-          <motion.div
-            key={petal.id}
-            className="absolute bg-gradient-to-br from-rose-300/80 to-pink-400/60 backdrop-blur-[0.3px]"
-            style={{
-              left: `${petal.left}%`,
-              width: petal.size,
-              height: petal.size * 1.3,
-              top: '-5%',
-              borderRadius: '100% 10% 100% 100%',
-            }}
-            animate={{
-              y: ['0vh', '105vh'],
-              x: [0, petal.sway, -petal.sway / 2, petal.sway / 3, 0],
-              rotate: [petal.rotate, petal.rotate + 280],
-            }}
-            transition={{
-              duration: petal.duration,
-              repeat: Infinity,
-              delay: petal.delay,
-              ease: 'linear',
-            }}
-          />
-        ))}
-      </div>
+      {/* Acima do envelope (z-30) para a aba aberta não cobrir o título durante a animação. */}
+      <header className="relative z-30 mb-8 text-center sm:mb-12">
+        <h1 className="sr-only">Igor &amp; Bianca · 18 de abril de 2027</h1>
+        <p className={`${poppins.className} text-[clamp(1.5rem,3.4vw,2.6rem)] uppercase tracking-[0.04em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]`}>
+          Save the date
+        </p>
+      </header>
 
-      <div className="absolute inset-0 pointer-events-none opacity-80">
-        <span className="bouquet-corner left-[-95px] top-[-92px] scale-[0.7] sm:left-[-55px] sm:top-[-52px] sm:scale-100" />
-        <span className="bouquet-corner bottom-[-98px] right-[-92px] scale-[0.7] sm:bottom-[-58px] sm:right-[-52px] sm:scale-100" />
-      </div>
-
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-6 sm:gap-8">
-        <p className="text-xs uppercase tracking-[0.4em] text-zinc-600">Save The Date</p>
-
-        <div className="relative w-full min-h-[20.2rem] sm:min-h-[28.6rem] lg:min-h-[36.4rem]">
-
-          <AnimatePresence>
-            {isEnvelopeVisible ? (
-              <motion.div
-                key="envelope"
-                initial={{ opacity: 1, scale: 0.96, y: 15 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 30, rotateX: 10 }}
-                transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}
-                className="absolute inset-0 z-20 flex w-full justify-center [perspective:3000px] [transform-style:preserve-3d]"
-              >
+      {/* Espaço extra no topo para o cartão subir para fora do envelope ao abrir. */}
+      <div
+        className="relative z-10 w-full max-w-7xl pt-[min(24vw,9rem)]"
+        style={{ minHeight: isEnvelopeVisible ? 'calc(min(24vw, 9rem) + min(56.8vw, 28.4rem) + 6rem)' : undefined }}
+      >
+        <AnimatePresence>
+          {isEnvelopeVisible ? (
+            <motion.div
+              key="envelope"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 30 }}
+              transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}
+              className="absolute inset-x-0 top-0 z-20 flex flex-col items-center pt-[min(24vw,9rem)]"
+            >
               <motion.div
                 role="button"
                 tabIndex={0}
@@ -647,166 +610,130 @@ export function InteractiveEnvelopeInvite({
                     handleEnvelopeClick();
                   }
                 }}
-                aria-label="Envelope do convite"
-                whileHover={envelopeState === 'fechado' ? { rotateX: 6, rotateY: -4, scale: 1.015, z: 12 } : {}}
-                transition={{ type: "spring", stiffness: 120, damping: 20 }}
-                className={`group relative h-[20.2rem] w-[min(94vw,22.8rem)] cursor-pointer rounded-2xl bg-transparent text-left focus:outline-none sm:h-[28.6rem] sm:w-[min(94vw,44rem)] lg:h-[36.4rem] lg:w-[min(94vw,58.5rem)] [transform-style:preserve-3d] ${
-                  envelopeState === 'fechado'
-                    ? ''
-                    : 'shadow-[0_35px_75px_rgba(45,42,33,0.14),0_10px_24px_rgba(45,42,33,0.06)]'
-                }`}
+                aria-label="Abrir o convite"
+                whileHover={envelopeState === 'fechado' ? { scale: 1.02, y: -4 } : {}}
+                transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                className="relative aspect-[1.55] w-[min(88vw,44rem)] cursor-pointer rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.22)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                style={{ perspective: '1600px' }}
               >
-                
-                {/* 1. PAREDE INTERNA TRASEIRA DO ENVELOPE (z-10) */}
-                <div className="absolute inset-x-0 top-[22%] z-10 h-[78%] rounded-b-2xl border-x border-b border-[#ded3be] bg-[#f9f5ea] overflow-hidden shadow-[inset_0_20px_30px_rgba(0,0,0,0.07)]">
-                  <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#bda886]/40 to-transparent opacity-80" />
+                {/* 1. Parte de dentro do envelope */}
+                <div className="absolute inset-0 z-10 overflow-hidden rounded-[4px] bg-[#e7e9de] shadow-[inset_0_18px_30px_rgba(0,0,0,0.10)]">
                   <div className={paperTextureClass} />
                 </div>
 
-                {/* 2. CARTÃO INTERNO (z-20) */}
-                <div className="absolute left-1/2 top-[30%] w-[86%] -translate-x-1/2">
+                {/* 2. Cartão que sobe de dentro do envelope */}
+                {/* O z-index fica aqui: o translate deste elemento cria uma camada própria que prenderia o cartão. */}
+                <div className={`absolute left-1/2 top-[6%] w-[90%] -translate-x-1/2 ${envelopeState === 'aberto' ? 'z-[60]' : 'z-20'}`}>
                   <motion.div
-                    className="w-full [transform-style:preserve-3d]"
+                    className="relative w-full"
                     initial={false}
                     animate={{
-                      y: envelopeState === 'aberto' ? '-72%' : '0%',
-                      scale: envelopeState === 'aberto' ? 1.04 : 1,
+                      y: envelopeState === 'aberto' ? '-68%' : '0%',
                       opacity: envelopeState === 'aberto' ? 1 : 0,
                       rotate: envelopeState === 'aberto' ? -1.5 : 0, // Leve rotação orgânica ao sair
-                      zIndex: envelopeState === 'aberto' ? 60 : 20
+                      zIndex: envelopeState === 'aberto' ? 60 : 20,
                     }}
                     transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
                     onAnimationComplete={handleInviteCardAnimationComplete}
                   >
-                    <article className="w-full select-none frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] p-5 shadow-2xl sm:p-7 lg:p-8 bg-white/60 backdrop-blur-md">
+                    <article className="relative w-full select-none overflow-hidden rounded-[0.6rem] border border-zinc-800/10 bg-[#fffaf1] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:p-8">
                       <div className={paperTextureClass} />
-                      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-                        <span className="absolute -left-10 -top-10 h-28 w-28 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.35),transparent_64%)]" />
-                        <span className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-[radial-gradient(circle_at_45%_45%,rgba(193,182,236,0.32),transparent_62%)]" />
-                        <span className="absolute right-4 top-3 text-[0.6rem] text-champagne-700/80">*</span>
-                        <span className="absolute left-5 bottom-3 text-[0.6rem] text-champagne-700/80">*</span>
-                      </div>
-
-                      <div className="relative z-10 text-center">
-                        <p className="font-display text-3xl leading-tight text-champagne-800 sm:text-5xl lg:text-6xl">O Amor Floresce</p>
-                        <p className="mt-1 text-sm text-zinc-700 sm:mt-2 sm:text-lg lg:text-xl">Igor e Bianca</p>
-                        <p className="mt-2 text-[0.7rem] tracking-[0.22em] text-zinc-600 sm:mt-4 sm:text-sm sm:tracking-[0.25em] lg:text-base">18.04.2027</p>
+                      <div className="relative z-10 flex flex-col items-center gap-1 text-center text-zinc-800">
+                        <p className={`${poppins.className} text-[0.7rem] uppercase tracking-[0.2em] text-zinc-600 sm:text-xs`}>Save the date</p>
+                        <FittedText text="Igor & Bianca" />
+                        <p className={`${poppins.className} text-[0.7rem] uppercase tracking-[0.2em] text-zinc-600 sm:text-xs`}>18 . 04 . 2027</p>
                       </div>
                     </article>
                   </motion.div>
                 </div>
 
-                {/* 3. CORPO FRONTAL E ABAS LATERAIS/INFERIOR (z-30 / z-40) */}
-                <div className="absolute inset-x-0 bottom-0 z-30 h-[78%] rounded-b-2xl border-b border-x border-[#dcd0b8] bg-[#faf6ed] overflow-hidden">
-                  <div className={paperTextureClass} />
+                {/* 3. Abas da frente: laterais e de baixo, em tons de marfim como o envelope do design */}
+                <div className="absolute inset-0 z-30 drop-shadow-[3px_0_8px_rgba(0,0,0,0.16)]">
+                  <div className="h-full w-full bg-[#eff0e7] [clip-path:polygon(0_0,52%_55%,0_100%)]" />
                 </div>
-                
-                <div className="absolute bottom-0 left-0 z-30 h-[78%] w-1/2 [clip-path:polygon(0_0,102%_50%,0_100%)] bg-[#f5eedc] filter drop-shadow-[-3px_4px_8px_rgba(45,42,33,0.09)]">
-                  <div className={paperTextureClass} />
+                <div className="absolute inset-0 z-30 drop-shadow-[-3px_0_8px_rgba(0,0,0,0.16)]">
+                  <div className="h-full w-full bg-[#ecede4] [clip-path:polygon(100%_0,48%_55%,100%_100%)]" />
                 </div>
-                
-                <div className="absolute bottom-0 right-0 z-30 h-[78%] w-1/2 [clip-path:polygon(100%_0,0_50%,100%_100%)] bg-[#f0e8d4] filter drop-shadow-[3px_4px_8px_rgba(45,42,33,0.09)]">
-                  <div className={paperTextureClass} />
+                <div className="absolute inset-0 z-40 drop-shadow-[0_-5px_10px_rgba(0,0,0,0.18)]">
+                  <div className="h-full w-full bg-[#f6f7f1] [clip-path:polygon(0_100%,50%_47%,100%_100%)]" />
                 </div>
 
-                <div className="absolute bottom-0 left-0 right-0 z-40 h-[50%] [clip-path:polygon(0_100%,50%_0,100%_100%)] bg-[#f7f2e3] filter drop-shadow-[0_-5px_10px_rgba(45,42,33,0.08)]">
-                  <div className={paperTextureClass} />
-                </div>
-
-                {/* 4. ABA SUPERIOR ANIMADA (Inicia Z-50, cai para Z-15 após rotacionar) */}
+                {/* 4. Aba de cima: dobra para cima ao abrir e depois fica atrás do cartão */}
                 <motion.div
-                  className="absolute inset-x-0 top-[22%] h-[78%] rounded-t-2xl [clip-path:polygon(0_0,100%_0,50%_60%)] [transform-origin:top_center] [transform-style:preserve-3d] transition-colors duration-500 overflow-hidden"
-                  style={{
-                    backgroundColor: envelopeState === 'fechado' ? '#faf6ed' : '#e6d8ba',
-                  }}
+                  className="absolute inset-x-0 top-0 h-[58%] [transform-origin:top_center]"
                   initial={false}
                   animate={
-                    envelopeState === 'fechado' 
-                      ? { rotateX: 0, zIndex: 50, boxShadow: '0 12px 15px rgba(45,42,33,0.11)' } 
-                      : { rotateX: -179.9, transitionEnd: { zIndex: 15 }, boxShadow: '0 0px 0px rgba(0,0,0,0)' }
+                    envelopeState === 'fechado'
+                      ? { rotateX: 0, zIndex: 50 }
+                      : { rotateX: -179.9, transitionEnd: { zIndex: 15 } }
                   }
                   transition={{ duration: 0.85, ease: [0.25, 1, 0.5, 1] }}
                   onAnimationComplete={handleFlapAnimationComplete}
                 >
-                  <div className={paperTextureClass} />
+                  <div className="h-full w-full drop-shadow-[0_8px_12px_rgba(0,0,0,0.22)]">
+                    <div
+                      className="h-full w-full transition-colors duration-500 [clip-path:polygon(0_0,100%_0,50%_100%)]"
+                      style={{ backgroundColor: envelopeState === 'fechado' ? '#e8eadf' : '#dfe1d5' }}
+                    />
+                  </div>
                 </motion.div>
-
-                {/* TEXTO INFORMATIVO */}
-                {envelopeState === 'fechado' ? (
-                  <p className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-zinc-500 animate-pulse sm:-bottom-12 sm:text-xs sm:tracking-[0.25em]">
-                    toque para abrir o convite
-                  </p>
-                ) : null}
               </motion.div>
+
+              {envelopeState === 'fechado' ? (
+                <p className={`${poppins.className} mt-8 animate-pulse text-center text-sm uppercase tracking-[0.04em] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)] sm:mt-10 sm:text-lg`}>
+                  Toque para abrir o convite
+                </p>
+              ) : null}
             </motion.div>
           ) : null}
-          </AnimatePresence>
+        </AnimatePresence>
 
-          <AnimatePresence mode="wait">
-            {showFinalCard ? (
-              <motion.section
-                key="final-card"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.55, delay: 0.35, ease: 'easeOut' }}
-                className="absolute inset-0 z-10 flex items-center justify-center"
-              >
-                <div className="w-full max-w-xl sm:max-w-2xl">
-                  <article className="frosted-light gold-frame relative overflow-hidden rounded-[1.35rem] bg-white/150 shadow-2xl backdrop-blur-md">
-                    <div className={paperTextureClass} />
-                    <div className="pointer-events-none absolute inset-0">
-                      <span className="absolute -left-14 -top-14 h-36 w-36 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(244,181,205,0.45),transparent_90%)]" />
-                      <span className="absolute -bottom-16 -right-16 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(193,182,236,0.4),transparent_90%)]" />
-                    </div>
-
-                    <div className="themed-scrollbar relative z-10 max-h-[78vh] overflow-x-hidden overflow-y-auto p-5 pr-3 sm:max-h-[84vh] sm:p-7 sm:pr-4 lg:p-8 lg:pr-5">
-                      {finalInviteContent}
-                    </div>
-                  </article>
-                </div>
-              </motion.section>
-            ) : null}
-          </AnimatePresence>
-        </div>
-
-        {confirmationChoice ? (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/35 px-4 backdrop-blur-sm">
-            <div className="frosted-light gold-frame w-full max-w-md rounded-2xl bg-white/90 p-5 sm:p-6 shadow-2xl">
-              <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Confirmar resposta</p>
-              <h3 className="mt-1 font-display text-3xl text-champagne-800">
-                {confirmationChoice === 'yes' ? 'Confirmar presenca' : 'Confirmar recusa'}
-              </h3>
-              <p className="mt-3 text-sm text-zinc-700">
-                {confirmationChoice === 'yes'
-                  ? 'Deseja confirmar sua presenca no evento?'
-                  : 'Deseja confirmar que nao podera comparecer?'}
-              </p>
-
-              <div className="mt-5 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmationChoice(null)}
-                  className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
-                >
-                  Voltar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSubmit}
-                  className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                    confirmationChoice === 'yes'
-                      ? 'border-olive-300 bg-olive-100 text-olive-800 hover:bg-olive-200'
-                      : 'border-rose-300 bg-rose-100 text-rose-800 hover:bg-rose-200'
-                  }`}
-                >
-                  {confirmationChoice === 'yes' ? 'Sim, confirmar' : 'Sim, confirmar recusa'}
-                </button>
+        <AnimatePresence mode="wait">
+          {showFinalCard ? (
+            <motion.section
+              key="final-card"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.76, delay: 0.35, ease: [0.22, 0.72, 0.36, 1] }}
+              className="relative z-10 flex justify-center"
+            >
+              <div className="w-full max-w-xl sm:max-w-2xl">
+                <article className="relative overflow-hidden rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] shadow-[0_24px_60px_rgba(47,36,27,0.12)]">
+                  <div className="relative z-10 p-6 sm:p-10">
+                    {finalInviteContent}
+                  </div>
+                </article>
               </div>
+            </motion.section>
+          ) : null}
+        </AnimatePresence>
+      </div>
+
+      {confirmationChoice ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 text-center shadow-2xl sm:p-8">
+            <p className={eyebrowClass}>Confirmar resposta</p>
+            <h3 className="mt-3 font-display text-4xl italic leading-none text-zinc-800">
+              {confirmationChoice === 'yes' ? 'Confirmar presença' : 'Confirmar recusa'}
+            </h3>
+            <p className="mt-4 text-base text-zinc-600">
+              {confirmationChoice === 'yes'
+                ? 'Deseja confirmar sua presença no evento?'
+                : 'Deseja confirmar que não poderá comparecer?'}
+            </p>
+
+            <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+              <button type="button" onClick={() => setConfirmationChoice(null)} className={secondaryButtonClass}>
+                Voltar
+              </button>
+              <button type="button" onClick={handleConfirmSubmit} className={primaryButtonClass}>
+                {confirmationChoice === 'yes' ? 'Sim, confirmar' : 'Sim, confirmar recusa'}
+              </button>
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { INTRO_ENTER_EVENT } from '@/components/intro-arco';
 
 export function SiteMusicPlayer() {
   const pathname = usePathname();
@@ -79,36 +80,26 @@ export function SiteMusicPlayer() {
 
     if (!audioElement.paused) {
       setIsMusicPlaying(true);
+    }
+  }, [isAdminRoute, pathname]);
+
+  useEffect(() => {
+    if (isAdminRoute) {
       return;
     }
 
-    const interactionEvents: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown'];
+    const handleIntroEnter = () => {
+      const audioElement = audioRef.current;
 
-    const handleFirstInteraction = () => {
-      void startPlayback(false).finally(() => {
-        interactionEvents.forEach((eventName) => {
-          window.removeEventListener(eventName, handleFirstInteraction);
-        });
-      });
+      if (audioElement && audioElement.paused) {
+        void startPlayback(false);
+      }
     };
 
-    const autoplayTimer = window.setTimeout(() => {
-      void startPlayback(true).then((started) => {
-        if (!started) {
-          interactionEvents.forEach((eventName) => {
-            window.addEventListener(eventName, handleFirstInteraction, { once: true });
-          });
-        }
-      });
-    }, 8000);
+    window.addEventListener(INTRO_ENTER_EVENT, handleIntroEnter);
 
-    return () => {
-      window.clearTimeout(autoplayTimer);
-      interactionEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, handleFirstInteraction);
-      });
-    };
-  }, [isAdminRoute, pathname, startPlayback]);
+    return () => window.removeEventListener(INTRO_ENTER_EVENT, handleIntroEnter);
+  }, [isAdminRoute, startPlayback]);
 
   useEffect(() => {
     if (isCollapsed) {
@@ -189,7 +180,7 @@ export function SiteMusicPlayer() {
   }
 
   return (
-    <div className="gold-frame fixed left-2 top-[4.3rem] z-50 w-fit max-w-[calc(100vw-1rem)] rounded-xl bg-white/65 px-2 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:left-4 sm:top-4 sm:px-3 sm:text-[0.68rem]">
+    <div className="gold-frame fixed left-7 top-[30px] z-[60] w-fit max-w-[calc(100vw-1rem)] rounded-xl bg-white/65 px-2 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:left-8 sm:px-3 sm:text-[0.68rem]">
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
@@ -296,7 +287,6 @@ export function SiteMusicPlayer() {
         <audio
           ref={audioRef}
           loop
-          autoPlay
           playsInline
           preload="auto"
           onLoadedMetadata={() => {

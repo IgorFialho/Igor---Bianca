@@ -4,12 +4,12 @@
 
 :root {
   color-scheme: light;
-  --background: 249 244 235;
-  --foreground: 70 56 45;
-  --muted: 138 121 105;
+  --background: 252 247 237;
+  --foreground: 47 36 27;
+  --muted: 118 97 77;
   --card: 255 255 255;
-  --gold: 199 164 96;
-  --rose: 214 144 172;
+  --gold: 138 90 43;
+  --rose: 231 200 138;
   --olive: 99 120 75;
 }
 
@@ -19,11 +19,7 @@ html {
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 0% 10%, rgba(214, 144, 172, 0.22), transparent 35%),
-    radial-gradient(circle at 100% 85%, rgba(130, 148, 108, 0.18), transparent 38%),
-    radial-gradient(circle at 50% 100%, rgba(188, 170, 230, 0.2), transparent 38%),
-    linear-gradient(180deg, rgb(var(--background)) 0%, #f6efe4 100%);
+  background: rgb(var(--background));
   color: rgb(var(--foreground));
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -35,8 +31,8 @@ body {
 }
 
 ::selection {
-  background: rgba(214, 144, 172, 0.25);
-  color: rgb(67, 52, 42);
+  background: rgba(231, 200, 138, 0.45);
+  color: rgb(47, 36, 27);
 }
 
 .glass-panel {
@@ -62,9 +58,9 @@ body {
   background-size: 200% 100%;
   background-image: linear-gradient(
     120deg,
-    rgba(188, 151, 83, 0.95) 0%,
+    rgba(138, 90, 43, 0.95) 0%,
     rgba(242, 230, 194, 0.98) 40%,
-    rgba(188, 151, 83, 0.95) 80%
+    rgba(138, 90, 43, 0.95) 80%
   );
 }
 
@@ -83,13 +79,13 @@ body {
 }
 
 .gold-border {
-  border-color: rgba(188, 151, 83, 0.42);
+  border-color: rgba(138, 90, 43, 0.42);
 }
 
 .focus-gold:focus {
   outline: none;
-  border-color: rgba(188, 151, 83, 0.72);
-  box-shadow: 0 0 0 4px rgba(188, 151, 83, 0.2);
+  border-color: rgba(138, 90, 43, 0.72);
+  box-shadow: 0 0 0 4px rgba(138, 90, 43, 0.2);
 }
 
 .focus-rose:focus {
@@ -100,7 +96,7 @@ body {
 
 .themed-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(188, 151, 83, 0.85) rgba(255, 255, 255, 0.45);
+  scrollbar-color: rgba(138, 90, 43, 0.85) rgba(255, 255, 255, 0.45);
 }
 
 .themed-scrollbar::-webkit-scrollbar {
@@ -119,7 +115,7 @@ body {
 }
 
 .themed-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(221, 190, 127, 0.98), rgba(188, 151, 83, 0.98));
+  background: linear-gradient(180deg, rgba(231, 200, 138, 0.98), rgba(138, 90, 43, 0.98));
 }
 
 .text-balance {
@@ -159,7 +155,7 @@ body {
 }
 
 .gold-frame {
-  border: 1px solid rgba(188, 151, 83, 0.42);
+  border: 1px solid rgba(138, 90, 43, 0.42);
   box-shadow: inset 0 0 0 1px rgba(248, 236, 207, 0.6);
 }
 
@@ -199,7 +195,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  border: 1px solid rgba(188, 151, 83, 0.35);
+  border: 1px solid rgba(138, 90, 43, 0.35);
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(247, 238, 220, 0.12));
   padding: 0.2rem 0.45rem 0.2rem 0.28rem;
@@ -234,12 +230,12 @@ body {
   height: 0.42rem;
   border-radius: 999px;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(232, 217, 183, 1) 0%, rgba(188, 151, 83, 1) 72%);
+  background: radial-gradient(circle, rgba(232, 217, 183, 1) 0%, rgba(138, 90, 43, 1) 72%);
   box-shadow: 0 0 0 1px rgba(84, 62, 33, 0.45);
 }
 
 .login-audio-btn {
-  border: 1px solid rgba(188, 151, 83, 0.34);
+  border: 1px solid rgba(138, 90, 43, 0.34);
   border-radius: 999px;
   background: rgba(255, 253, 246, 0.48);
   padding: 0.35rem 0.62rem;
@@ -252,7 +248,7 @@ body {
 
 .login-audio-btn:hover {
   background: rgba(255, 253, 246, 0.72);
-  border-color: rgba(188, 151, 83, 0.55);
+  border-color: rgba(138, 90, 43, 0.55);
 }
 
 .login-volume-popover {
@@ -264,7 +260,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(188, 151, 83, 0.38);
+  border: 1px solid rgba(138, 90, 43, 0.38);
   border-radius: 1rem;
   background: rgba(255, 251, 242, 0.72);
   backdrop-filter: blur(10px);
@@ -280,7 +276,7 @@ body {
   direction: rtl;
   width: 1rem;
   height: 6rem;
-  accent-color: rgb(188, 151, 83);
+  accent-color: rgb(138, 90, 43);
   cursor: pointer;
   margin: 0;
 }

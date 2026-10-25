@@ -1,18 +1,19 @@
 import type { Metadata } from 'next';
-import { Cormorant_Garamond, Manrope } from 'next/font/google';
+import { Instrument_Sans, Instrument_Serif } from 'next/font/google';
 import './globals.css';
-import { SplashScreen } from '@/components/splash-screen';
+import { IntroArco } from '@/components/intro-arco';
 import { SiteMusicPlayer } from '@/components/site-music-player';
 
-const manrope = Manrope({
+const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
-  variable: '--font-manrope',
+  variable: '--font-body',
 });
 
-const cormorant = Cormorant_Garamond({
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-cormorant',
+  weight: '400',
+  style: ['normal', 'italic'],
+  variable: '--font-display',
 });
 
 export const metadata: Metadata = {
@@ -23,8 +24,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${manrope.variable} ${cormorant.variable} bg-cream font-body text-zinc-800 antialiased`}>
-        <SplashScreen />
+      <body className={`${instrumentSans.variable} ${instrumentSerif.variable} bg-cream font-body text-zinc-800 antialiased`}>
+        <IntroArco />
         <SiteMusicPlayer />
         {children}
       </body>

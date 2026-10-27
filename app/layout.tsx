@@ -3,6 +3,7 @@ import { Instrument_Sans, Instrument_Serif } from 'next/font/google';
 import './globals.css';
 import { IntroArco } from '@/components/intro-arco';
 import { SiteMusicPlayer } from '@/components/site-music-player';
+import { SmoothScroll } from '@/components/smooth-scroll';
 
 const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="pt-BR">
       <body className={`${instrumentSans.variable} ${instrumentSerif.variable} bg-cream font-body text-zinc-800 antialiased`}>
+        <SmoothScroll />
         <IntroArco />
         <SiteMusicPlayer />
         {children}

@@ -28,7 +28,7 @@ Feito com Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion e Pos
 - Topo com a foto do casal que encolhe ao rolar enquanto outras quatro fotos entram ao redor.
 - “Nossa história” com polaroids empilhadas pela rolagem e foto ampliada ao clicar.
 - Contagem regressiva com troca suave da cor de fundo e confete de flores.
-- Local da cerimônia com mapa do Google Maps.
+- Local da cerimônia com carrossel automático de fotos do Recanto Pampulha e endereço com link para o Google Maps.
 - Acesso ao convite por código.
 - Mural de mensagens dos convidados em post-its, num carrossel de duas linhas que se atualiza a cada 5 segundos.
 - Perguntas frequentes em sanfona, pétalas brancas a cada clique e player de música.
@@ -170,4 +170,5 @@ O projeto roda em qualquer plataforma compatível com Next.js, como a [Vercel](h
 - Desenvolvido por [Igor Fialho](https://github.com/IgorFialho).
 - Layout da home e da introdução inspirados no template “Origins” da [Cordially](https://cordially.io); as camadas do arco de flores em `public/intro/arco/` são arte da Cordially.
 - Fotos do casal: acervo pessoal de Igor & Bianca.
+- Fotos do local (`public/imagens/recanto/`): álbum do site oficial do [Recanto Pampulha](https://www.recantopampulha.com.br/) (fotógrafo Claudiney Campelo).
 - Fundo da página de convite: foto de [Roman Odintsov](https://www.pexels.com/@roman-odintsov/) no [Pexels](https://www.pexels.com/photo/8189071/) (Licença Pexels).

@@ -15,6 +15,7 @@ import { DetailsSection, type GuestMessage } from '@/components/home/details-sec
 import { FaqSection, type FaqItem } from '@/components/home/faq-section';
 import { FlowerConfetti } from '@/components/home/flower-confetti';
 import { FooterCarousel, type FooterPhoto } from '@/components/home/footer-carousel';
+import { VenueCarousel, type VenuePhoto } from '@/components/home/venue-carousel';
 import { useSectionBackground, type SectionBackground } from '@/components/home/use-section-background';
 
 const EVENT_DATE = new Date('2027-04-18T16:30:00-03:00');
@@ -22,20 +23,18 @@ const EVENT_DATE = new Date('2027-04-18T16:30:00-03:00');
 // Textos e fotos da página. Os textos dos capítulos são provisórios: troque pelos de vocês.
 // Cada foto do casal (public/imagens/casal) aparece uma única vez na página.
 const HERO_PHOTO = '/imagens/casal/casal-08.jpeg';
-// Os pontos de foco (object-position) foram ajustados foto a foto para os rostos não serem cortados.
-const HERO_PHOTO_POSITION = '58% 40%';
 // Fotos que aparecem em volta da principal ao rolar o topo (esquerda: 1 e 2; direita: 3 e 4).
 const HERO_GALLERY: [HeroPhoto, HeroPhoto, HeroPhoto, HeroPhoto] = [
-  { src: '/imagens/casal/casal-01.jpeg', position: '50% 22%' },
-  { src: '/imagens/casal/casal-02.jpeg', position: '50% 33%' },
-  { src: '/imagens/casal/casal-10.jpeg', position: '50% 48%' },
-  { src: '/imagens/casal/casal-11.jpeg', position: '50% 11%' },
+  { src: '/imagens/casal/casal-01.jpeg' },
+  { src: '/imagens/casal/casal-02.jpeg' },
+  { src: '/imagens/casal/casal-10.jpeg' },
+  { src: '/imagens/casal/casal-11.jpeg' },
 ];
 // Carrossel do rodapé (troca a cada 8s): o jardim do convite (Roman Odintsov / Pexels), a foto do casal
 // que não aparece no resto da home, a parede de rosas (karaz flowers / Unsplash) e as flores do Save the Date.
 const FOOTER_PHOTOS: FooterPhoto[] = [
   { src: '/imagens/convite/jardim-fundo.jpg', mobileSrc: '/imagens/convite/jardim-fundo-mobile.jpg', position: '50% 60%', quote: 'o nosso para sempre fica ainda mais bonito com vocês ao nosso lado.' },
-  { src: '/imagens/casal.jpeg', position: '50% 35%', quote: 'você é a minha pessoa favorita para viver todos os capítulos da vida.' },
+  { src: '/imagens/casal.jpeg', quote: 'você é a minha pessoa favorita para viver todos os capítulos da vida.' },
   { src: '/imagens/convite/rosas-fundo.jpg', mobileSrc: '/imagens/convite/rosas-fundo-mobile.jpg', position: '50% 50%', quote: 'o amor floresce quando é cultivado todos os dias.' },
   { src: '/imagens/convite/flores-fundo.jpg', mobileSrc: '/imagens/convite/flores-fundo-mobile.jpg', position: '50% 60%', quote: 'obrigado por fazerem parte da nossa história. nos vemos no grande dia!' },
 ];
@@ -45,26 +44,26 @@ const STORY_CHAPTERS: StoryChapter[] = [
     title: 'capítulo um: como nos conhecemos',
     text: 'O começo de tudo: o dia em que nossos caminhos se cruzaram e uma conversa virou muitas outras.',
     photos: [
-      { src: '/imagens/casal/casal-12.jpeg', caption: 'O começo de tudo', position: '50% 29%' },
-      { src: '/imagens/casal/casal-13.jpeg', caption: 'Primeiros passeios', position: '50% 42%' },
-      { src: '/imagens/casal/casal-03.jpeg', caption: 'Juntos', position: '50% 43%' },
+      { src: '/imagens/casal/casal-12.jpeg', caption: 'O começo de tudo' },
+      { src: '/imagens/casal/casal-13.jpeg', caption: 'Primeiros passeios' },
+      { src: '/imagens/casal/casal-03.jpeg', caption: 'Juntos' },
     ],
   },
   {
     title: 'capítulo dois: nos apaixonando',
     text: 'Jantares, viagens, rotinas compartilhadas e todos os pequenos momentos que fizeram a vida parecer maior.',
     photos: [
-      { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha', position: '50% 26%' },
-      { src: '/imagens/casal/casal-09.jpeg', caption: 'Flores e carinho', position: '50% 35%' },
-      { src: '/imagens/casal/casal-07.jpeg', caption: 'Nossas aventuras', position: '50% 39%' },
+      { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha' },
+      { src: '/imagens/casal/casal-09.jpeg', caption: 'Flores e carinho' },
+      { src: '/imagens/casal/casal-07.jpeg', caption: 'Nossas aventuras' },
     ],
   },
   {
     title: 'capítulo três: o próximo passo',
     text: 'Uma pergunta, um sim muito fácil, e de repente o futuro que imaginávamos virou algo para celebrar com vocês.',
     photos: [
-      { src: '/imagens/casal/casal-04.jpeg', caption: 'O pedido', position: '50% 28%' },
-      { src: '/imagens/casal/casal-05.jpeg', caption: 'Sim!', position: '50% 28%' },
+      { src: '/imagens/casal/casal-04.jpeg', caption: 'O pedido' },
+      { src: '/imagens/casal/casal-05.jpeg', caption: 'Sim!' },
     ],
   },
 ];
@@ -94,12 +93,12 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
-// Cores de fundo da página por seção (como na Cordially): a contagem regressiva ganha o tom areia
-// e o fundo volta ao creme na seção do local. A troca é suave (0,5s).
+// Cores de fundo da página por seção (como na Cordially): a contagem regressiva ganha o tom areia,
+// que segue na seção do local, e o fundo volta ao creme na confirmação de presença. Troca suave (0,5s).
 const PAGE_BACKGROUND = '#fcf7ed';
 const SECTION_BACKGROUNDS: SectionBackground[] = [
   { id: 'cerimonia', color: '#f6edd7' },
-  { id: 'local', color: PAGE_BACKGROUND },
+  { id: 'rsvp', color: PAGE_BACKGROUND },
 ];
 
 const NAV_LINKS = [
@@ -110,10 +109,19 @@ const NAV_LINKS = [
   { label: 'Perguntas', href: '#perguntas' },
 ];
 
+// Local da cerimônia. Fotos do site oficial do Recanto Pampulha (álbum do Flickr e fundos do site, clareados), trocando
+// sozinhas a cada 5s; o foco mais alto deixa a marca d'água do canto inferior fora do recorte 21:9.
+const VENUE_NAME = 'Recanto Pampulha';
+const VENUE_ADDRESS = 'Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450';
+const VENUE_PHOTOS: VenuePhoto[] = [
+  { src: '/imagens/recanto/recanto-01.jpg', alt: 'Casa sede do Recanto Pampulha vista do gramado', position: '50% 38%' },
+  { src: '/imagens/recanto/recanto-02.jpg', alt: 'Altar da cerimônia no jardim, com passarela de madeira, bancos e varal de luzes', position: '50% 56%' },
+  { src: '/imagens/recanto/recanto-03.jpg', alt: 'Vista aérea da casa e do jardim', position: '50% 50%' },
+  { src: '/imagens/recanto/recanto-04.jpg', alt: 'Varanda decorada para a festa', position: '50% 38%' },
+  { src: '/imagens/recanto/recanto-05.jpg', alt: 'Bolo de casamento com flores', position: '50% 45%' },
+];
 const GOOGLE_MAPS_URL =
   'https://www.google.com/maps/search/?api=1&query=Av.+Otacilio+Negrao+de+Lima,+7630+-+Pampulha,+Belo+Horizonte+-+MG,+31365-450';
-const GOOGLE_MAPS_EMBED_URL =
-  'https://www.google.com/maps?q=Av.+Otacilio+Negrao+de+Lima,+7630+-+Pampulha,+Belo+Horizonte+-+MG,+31365-450&output=embed';
 
 // Espaçamento lateral e vertical padrão das seções de conteúdo.
 const SECTION = 'relative w-full px-6 py-24 md:px-12 md:py-32';
@@ -266,7 +274,6 @@ export default function LoginPage() {
       <Hero
         id="home"
         imageSrc={HERO_PHOTO}
-        imagePosition={HERO_PHOTO_POSITION}
         imageAlt="Igor e Bianca"
         headline="Igor & Bianca"
         scrollLabel="Role para explorar"
@@ -275,7 +282,7 @@ export default function LoginPage() {
 
       <section className={`${SECTION} flex min-h-[60svh] items-center justify-center text-center`}>
         <ScrollWords
-          text="vocês estão convidados para celebrar a história de..."
+          text="vocês estão convidados para celebrar a história de Igor e Bianca"
           className="mx-auto w-full max-w-[90vw] font-display text-[3rem] leading-[1.05] tracking-tight text-zinc-800 md:text-[3.75rem]"
         />
       </section>
@@ -313,47 +320,50 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section id="local" className={SECTION}>
-        <div className="mx-auto w-full max-w-4xl text-center">
-          <Reveal delay={0.18}>
-            <p className={`${HEADING} mb-4`}>Pampulha, Belo Horizonte</p>
-          </Reveal>
-          <Reveal delay={0.34}>
-            <p className={`${EYEBROW} mb-3`}>18 de abril de 2027 · 16h30</p>
-            <a
-              href={GOOGLE_MAPS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`${EYEBROW} block transition-opacity hover:opacity-100`}
-            >
-              Av. Otacílio Negrão de Lima, 7630 - Pampulha, Belo Horizonte - MG, 31365-450 ↗
-            </a>
-          </Reveal>
-          {/* O mapa "abre" de cima para baixo, como a foto do local no site de referência. A detecção de
-              visibilidade fica na caixa de fora: o elemento recortado é visto como invisível e nunca dispararia. */}
+      <section id="local" className="relative z-20 w-full px-6 py-20 text-center md:px-10 md:py-28">
+        <div className="mx-auto w-full max-w-[72rem]">
+          {/* Foto do local em 21:9, igual à seção "venue" da Cordially: a moldura "abre" de cima para baixo
+              (1,2s) enquanto a foto assenta de 103% para 100% (1,4s). A detecção de visibilidade fica na
+              caixa de fora: o elemento recortado é visto como invisível e nunca dispararia. */}
           <motion.div
-            className="group mx-auto mt-10 aspect-[4/3] w-full max-w-2xl overflow-hidden rounded-2xl md:mt-12 md:aspect-[16/9]"
+            className="relative mx-auto mb-16 aspect-[21/9] w-full overflow-hidden rounded-2xl md:mb-24"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.3 }}
           >
             <motion.div
-              className="h-full w-full"
+              className="h-full w-full overflow-hidden rounded-2xl"
               variants={{
                 hidden: { clipPath: 'inset(0% 0% 100% 0%)' },
                 visible: { clipPath: 'inset(0% 0% 0% 0%)' },
               }}
               transition={{ duration: 1.2, ease: REVEAL_EASE }}
             >
-              <iframe
-                title="Mapa da cerimônia"
-                src={GOOGLE_MAPS_EMBED_URL}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                className="h-full w-full border-0 grayscale-[35%] sepia-[20%]"
-              />
+              <motion.div
+                className="h-full w-full"
+                variants={{ hidden: { scale: 1.03 }, visible: { scale: 1 } }}
+                transition={{ duration: 1.4, ease: REVEAL_EASE }}
+              >
+                <VenueCarousel photos={VENUE_PHOTOS} intervalSeconds={5} />
+              </motion.div>
             </motion.div>
           </motion.div>
+
+          <div className="mx-auto w-full min-w-0 max-w-4xl">
+            <Reveal delay={0.18}>
+              <p className={`${HEADING} mb-4`}>{VENUE_NAME}</p>
+            </Reveal>
+            <Reveal delay={0.34}>
+              <a
+                href={GOOGLE_MAPS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${EYEBROW} block transition-opacity hover:opacity-100`}
+              >
+                {VENUE_ADDRESS}
+              </a>
+            </Reveal>
+          </div>
         </div>
       </section>
 

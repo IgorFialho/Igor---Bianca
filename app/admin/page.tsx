@@ -562,31 +562,31 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="paper-texture relative min-h-screen px-4 py-6 sm:px-6 lg:px-10">
-      <section className="mx-auto w-full max-w-7xl space-y-4">
-        <div className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
+    <main className="relative min-h-screen bg-cream px-4 py-10 text-zinc-800 sm:px-6 sm:py-14 lg:px-10">
+      <section className="mx-auto w-full max-w-7xl space-y-6">
+        <div className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.34em] text-zinc-600">Painel administrativo</p>
-              <h1 className="font-display text-3xl text-champagne-800 sm:text-4xl">Igor-e-Bianca</h1>
-              <p className="text-sm text-zinc-700">Gerencie codigos de acesso e acompanhe quem ja entrou no convite.</p>
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Painel administrativo</p>
+              <h1 className="mt-2 font-display text-5xl leading-none text-zinc-800 sm:text-6xl">Igor &amp; Bianca</h1>
+              <p className="text-sm text-zinc-700">Gerencie códigos de acesso e acompanhe quem já entrou no convite.</p>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full rounded-lg border border-zinc-300 bg-white/75 px-4 py-2 text-sm text-zinc-700 hover:bg-white sm:w-auto"
+              className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full sm:w-auto"
             >
               Sair
             </button>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          <section className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
-            <h2 className="font-display text-3xl text-champagne-800">Gerar codigos</h2>
+        <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
+            <h2 className="font-display text-4xl leading-none text-zinc-800">Gerar códigos</h2>
 
             <form className="mt-4 space-y-3" onSubmit={handleGenerateCodes}>
               <div className="space-y-2">
-                <label className="text-sm text-zinc-700" htmlFor="guestListText">
+                <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="guestListText">
                   Nome da pessoa ou casal (um por linha)
                 </label>
                 <textarea
@@ -594,7 +594,7 @@ export default function AdminPage() {
                   rows={6}
                   value={guestListText}
                   onChange={(event) => setGuestListText(event.target.value)}
-                  className="focus-gold w-full rounded-lg border border-zinc-200/90 bg-white/85 px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-500"
+                  className="w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
                   placeholder={"Exemplo:\nJoao e Maria\nFamilia Souza\nCarla Lima"}
                 />
               </div>
@@ -612,7 +612,7 @@ export default function AdminPage() {
                   value={guestName}
                   onChange={(event) => setGuestName(event.target.value)}
                   rows={4}
-                  className="focus-gold w-full rounded-lg border border-zinc-200/90 bg-white/85 px-3 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-500"
+                  className="w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
                   placeholder={"Nomes vinculados ao codigo unico (opcional)\nExemplo:\nAna Lima\nBruno Lima"}
                 />
                 <label className="flex items-center gap-2 whitespace-nowrap text-xs text-zinc-700">
@@ -620,14 +620,14 @@ export default function AdminPage() {
                     type="checkbox"
                     checked={requiresChildrenDetailsDefault}
                     onChange={(event) => setRequiresChildrenDetailsDefault(event.target.checked)}
-                    className="h-4 w-4 rounded border-zinc-300"
+                    className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                   />
                   Exigir dados dos filhos
                 </label>
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-sm text-zinc-700" htmlFor="quantity">Quantidade</label>
+                <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="quantity">Quantidade</label>
                 <input
                   id="quantity"
                   type="number"
@@ -635,14 +635,14 @@ export default function AdminPage() {
                   max={50}
                   value={quantity}
                   onChange={(event) => setQuantity(Number(event.target.value || 1))}
-                  className="focus-gold w-24 rounded-lg border border-zinc-200/90 bg-white/85 px-2 py-2 text-sm text-zinc-800"
+                  className="w-24 rounded-full border border-zinc-800/15 bg-cream px-4 py-2 text-sm text-zinc-800 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isGenerating}
-                className="shimmer-button w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-zinc-900 disabled:opacity-70"
+                className="inline-flex items-center justify-center rounded-full bg-champagne-600 px-8 py-3.5 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 w-full"
               >
                 {isGenerating ? 'Gerando...' : 'Gerar novos codigos'}
               </button>
@@ -652,14 +652,14 @@ export default function AdminPage() {
             {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
           </section>
 
-          <section className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
+          <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-3xl text-champagne-800">Codigos cadastrados</h2>
+              <h2 className="font-display text-4xl leading-none text-zinc-800">Códigos cadastrados</h2>
               <button
                 type="button"
                 onClick={handleBatchDeleteRequest}
                 disabled={selectedCodeIds.length === 0 || isDeletingBatch || deletingCodeId !== null}
-                className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto"
               >
                 {isDeletingBatch ? 'Excluindo lote...' : `Excluir selecionados (${selectedCodeIds.length})`}
               </button>
@@ -668,7 +668,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={handleToggleSelectAll}
-                className="w-full rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-xs font-medium text-zinc-700"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full"
               >
                 {codes.length > 0 && selectedCodeIds.length === codes.length
                   ? 'Desmarcar todos'
@@ -676,7 +676,7 @@ export default function AdminPage() {
               </button>
 
               {codes.map((item) => (
-                <article key={item.id} className="rounded-lg border border-white/70 bg-white/75 p-3 text-sm">
+                <article key={item.id} className="rounded-2xl border border-zinc-800/10 bg-cream p-4 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs text-zinc-500">Codigo</p>
@@ -696,7 +696,7 @@ export default function AdminPage() {
                       checked={selectedCodeIds.includes(item.id)}
                       onChange={() => handleToggleCodeSelection(item.id)}
                       disabled={isDeletingBatch || deletingCodeId !== null}
-                      className="mt-1 h-4 w-4 rounded border-zinc-300"
+                      className="mt-1 h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                     />
                   </div>
 
@@ -711,7 +711,7 @@ export default function AdminPage() {
                         handleToggleRequiresChildrenDetails(item.id, event.target.checked)
                       }
                       disabled={togglingChildrenCodeId === item.id || isDeletingBatch || deletingCodeId !== null}
-                      className="h-4 w-4 rounded border-zinc-300"
+                      className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                     />
                     Exigir nome e idade dos filhos no RSVP
                   </label>
@@ -723,7 +723,7 @@ export default function AdminPage() {
                     type="button"
                     disabled={deletingCodeId === item.id || isDeletingBatch}
                     onClick={() => handleDeleteRequest(item.id, item.code)}
-                    className="mt-3 w-full rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-4 inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 w-full"
                   >
                     {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
                   </button>
@@ -731,40 +731,40 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <div className="mt-4 hidden max-h-72 overflow-auto rounded-lg border border-white/70 bg-white/65 sm:block">
+            <div className="mt-6 hidden max-h-80 overflow-auto rounded-2xl border border-zinc-800/10 bg-cream sm:block">
               <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-white/80 text-zinc-600">
+                <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                   <tr>
-                    <th className="px-3 py-2 text-center">
+                    <th className="px-4 py-3 text-center">
                       <input
                         type="checkbox"
                         aria-label="Selecionar todos os codigos"
                         checked={codes.length > 0 && selectedCodeIds.length === codes.length}
                         onChange={handleToggleSelectAll}
-                        className="h-4 w-4 rounded border-zinc-300"
+                        className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                       />
                     </th>
-                    <th className="px-3 py-2">Codigo</th>
-                    <th className="px-3 py-2">Nome do Convite</th>
-                    <th className="px-3 py-2">Filhos</th>
-                    <th className="px-3 py-2">Criado em</th>
-                    <th className="px-3 py-2 text-right">Acao</th>
+                    <th className="px-4 py-3">Codigo</th>
+                    <th className="px-4 py-3">Nome do Convite</th>
+                    <th className="px-4 py-3">Filhos</th>
+                    <th className="px-4 py-3">Criado em</th>
+                    <th className="px-4 py-3 text-right">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
                   {codes.map((item) => (
-                    <tr key={item.id} className="border-t border-white/70 text-zinc-700">
-                      <td className="px-3 py-2 text-center">
+                    <tr key={item.id} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
+                      <td className="px-4 py-3 text-center">
                         <input
                           type="checkbox"
                           aria-label={`Selecionar codigo ${item.code}`}
                           checked={selectedCodeIds.includes(item.id)}
                           onChange={() => handleToggleCodeSelection(item.id)}
                           disabled={isDeletingBatch || deletingCodeId !== null}
-                          className="h-4 w-4 rounded border-zinc-300"
+                          className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                         />
                       </td>
-                      <td className="px-3 py-2 font-medium text-zinc-800">
+                      <td className="px-4 py-3 font-medium text-zinc-800">
                         <button
                           type="button"
                           onClick={() => handleCopyCode(item.code, 'Codigo')}
@@ -775,8 +775,8 @@ export default function AdminPage() {
                           {item.code}
                         </button>
                       </td>
-                      <td className="px-3 py-2 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-3 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
+                      <td className="px-4 py-3">
                         <label className="flex items-center justify-center gap-2 text-xs text-zinc-700">
                           <input
                             type="checkbox"
@@ -790,18 +790,18 @@ export default function AdminPage() {
                               isDeletingBatch ||
                               deletingCodeId !== null
                             }
-                            className="h-4 w-4 rounded border-zinc-300"
+                            className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                           />
                           Exigir
                         </label>
                       </td>
-                      <td className="px-3 py-2">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-4 py-3">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-right">
                         <button
                           type="button"
                           disabled={deletingCodeId === item.id || isDeletingBatch}
                           onClick={() => handleDeleteRequest(item.id, item.code)}
-                          className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-medium text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
                         </button>
@@ -818,15 +818,15 @@ export default function AdminPage() {
           </section>
         </div>
 
-        <section className="frosted-light gold-frame rounded-2xl p-5 sm:p-6">
+        <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-3xl text-champagne-800">Pessoas que acessaram o convite</h2>
+            <h2 className="font-display text-4xl leading-none text-zinc-800">Pessoas que acessaram o convite</h2>
             <div className="flex w-full flex-wrap gap-2 sm:w-auto">
               <button
                 type="button"
                 onClick={handleDeleteSelectedAccesses}
                 disabled={isDeletingSelectedAccesses || isClearingAccessHistory || selectedAccessCodes.length === 0}
-                className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto"
               >
                 {isDeletingSelectedAccesses
                   ? 'Excluindo selecionadas...'
@@ -836,7 +836,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={handleClearAccessHistory}
                 disabled={isDeletingSelectedAccesses || isClearingAccessHistory || accesses.length === 0}
-                className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto"
               >
                 {isClearingAccessHistory ? 'Limpando historico...' : 'Limpar Todo o historico'}
               </button>
@@ -846,7 +846,7 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={handleToggleSelectAllAccesses}
-              className="w-full rounded-lg border border-zinc-300 bg-white/80 px-3 py-2 text-xs font-medium text-zinc-700"
+              className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full"
             >
               {uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length
                 ? 'Desmarcar todos'
@@ -854,7 +854,7 @@ export default function AdminPage() {
             </button>
 
             {accesses.map((item) => (
-              <article key={`${item.invite_code_used}-${item.last_accessed_at}`} className="rounded-lg border border-white/70 bg-white/75 p-3 text-sm">
+              <article key={`${item.invite_code_used}-${item.last_accessed_at}`} className="rounded-2xl border border-zinc-800/10 bg-cream p-4 text-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs text-zinc-500">Codigo</p>
@@ -874,7 +874,7 @@ export default function AdminPage() {
                     checked={selectedAccessCodes.includes(item.invite_code_used)}
                     onChange={() => handleToggleAccessSelection(item.invite_code_used)}
                     disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
-                    className="mt-1 h-4 w-4 rounded border-zinc-300"
+                    className="mt-1 h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                   />
                 </div>
 
@@ -903,11 +903,11 @@ export default function AdminPage() {
                 <p className="mt-2 text-xs text-zinc-500">Resposta</p>
                 <div className="mt-1">
                   {item.attendance === 'yes' ? (
-                    <span className="rounded-full border border-olive-300 bg-olive-50 px-2 py-0.5 text-xs font-semibold text-olive-800">Aceitou</span>
+                    <span className="rounded-full border border-olive-300/70 bg-olive-50 px-2.5 py-0.5 text-xs font-medium text-olive-800">Aceitou</span>
                   ) : item.attendance === 'no' ? (
-                    <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800">Rejeitou</span>
+                    <span className="rounded-full border border-rose-300/70 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-800">Rejeitou</span>
                   ) : (
-                    <span className="rounded-full border border-zinc-300 bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700">Sem resposta</span>
+                    <span className="rounded-full border border-zinc-800/15 bg-[#f6edd7] px-2.5 py-0.5 text-xs font-medium text-zinc-700">Sem resposta</span>
                   )}
                 </div>
 
@@ -942,42 +942,42 @@ export default function AdminPage() {
             ))}
           </div>
 
-          <div className="mt-4 hidden max-h-80 overflow-auto rounded-lg border border-white/70 bg-white/65 sm:block">
+          <div className="mt-6 hidden max-h-[28rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream sm:block">
             <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-white/80 text-zinc-600">
+              <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                 <tr>
-                  <th className="px-3 py-2 text-center">
+                  <th className="px-4 py-3 text-center">
                     <input
                       type="checkbox"
                       aria-label="Selecionar todos os acessos"
                       checked={uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length}
                       onChange={handleToggleSelectAllAccesses}
-                      className="h-4 w-4 rounded border-zinc-300"
+                      className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                     />
                   </th>
-                  <th className="px-3 py-2">Codigo</th>
-                  <th className="px-3 py-2">Nome do convite</th>
-                  <th className="px-3 py-2">Nome do convidado</th>
-                  <th className="px-3 py-2">Respostas</th>
-                  <th className="px-3 py-2">Mensagem / Justificativa</th>
-                  <th className="px-3 py-2">Acessos</th>
-                  <th className="px-3 py-2">Ultimo acesso</th>
+                  <th className="px-4 py-3">Codigo</th>
+                  <th className="px-4 py-3">Nome do convite</th>
+                  <th className="px-4 py-3">Nome do convidado</th>
+                  <th className="px-4 py-3">Respostas</th>
+                  <th className="px-4 py-3">Mensagem / Justificativa</th>
+                  <th className="px-4 py-3">Acessos</th>
+                  <th className="px-4 py-3">Ultimo acesso</th>
                 </tr>
               </thead>
               <tbody>
                 {accesses.map((item) => (
-                  <tr key={`${item.invite_code_used}-${item.last_accessed_at}`} className="border-t border-white/70 text-zinc-700">
-                    <td className="px-3 py-2 text-center">
+                  <tr key={`${item.invite_code_used}-${item.last_accessed_at}`} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
+                    <td className="px-4 py-3 text-center">
                       <input
                         type="checkbox"
                         aria-label={`Selecionar acesso ${item.invite_code_used}`}
                         checked={selectedAccessCodes.includes(item.invite_code_used)}
                         onChange={() => handleToggleAccessSelection(item.invite_code_used)}
                         disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
-                        className="h-4 w-4 rounded border-zinc-300"
+                        className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                       />
                     </td>
-                    <td className="px-3 py-2 font-medium text-zinc-800">
+                    <td className="px-4 py-3 font-medium text-zinc-800">
                       <button
                         type="button"
                         onClick={() => handleCopyCode(item.invite_code_used, 'Codigo')}
@@ -988,7 +988,7 @@ export default function AdminPage() {
                         {item.invite_code_used}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       {hasCoupleNames(item.guest_name) ? (
                         <span
                           className="block max-w-[220px] truncate text-left text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
@@ -1000,7 +1000,7 @@ export default function AdminPage() {
                         <span className="whitespace-pre-line">{formatGuestNames(item.guest_name)}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => openResponderDialog(item, 'Nome dos convidados')}
@@ -1010,16 +1010,16 @@ export default function AdminPage() {
                         {formatGuestNamesInline(item.responder_full_name)}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       {item.attendance === 'yes' ? (
-                        <span className="rounded-full border border-olive-300 bg-olive-50 px-2 py-0.5 text-xs font-semibold text-olive-800">Aceitou</span>
+                        <span className="rounded-full border border-olive-300/70 bg-olive-50 px-2.5 py-0.5 text-xs font-medium text-olive-800">Aceitou</span>
                       ) : item.attendance === 'no' ? (
-                        <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800">Rejeitou</span>
+                        <span className="rounded-full border border-rose-300/70 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-800">Rejeitou</span>
                       ) : (
-                        <span className="rounded-full border border-zinc-300 bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700">Sem resposta</span>
+                        <span className="rounded-full border border-zinc-800/15 bg-[#f6edd7] px-2.5 py-0.5 text-xs font-medium text-zinc-700">Sem resposta</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-zinc-700">
+                    <td className="px-4 py-3 text-zinc-700">
                       {item.dietary_notes ? (
                         <button
                           type="button"
@@ -1041,8 +1041,8 @@ export default function AdminPage() {
                         <span className="text-zinc-500">Sem mensagem</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">{item.access_count}</td>
-                    <td className="px-3 py-2">{new Date(item.last_accessed_at).toLocaleString('pt-BR')}</td>
+                    <td className="px-4 py-3">{item.access_count}</td>
+                    <td className="px-4 py-3">{new Date(item.last_accessed_at).toLocaleString('pt-BR')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1056,10 +1056,10 @@ export default function AdminPage() {
       </section>
 
       {deleteDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 px-4">
-          <div className="frosted-light gold-frame w-full max-w-md rounded-2xl p-5 sm:p-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Confirmar exclusao</p>
-            <h3 className="mt-1 font-display text-3xl text-champagne-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-md">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Confirmar exclusao</p>
+            <h3 className="mt-2 font-display text-4xl italic leading-none text-zinc-800">
               {deleteDialog.mode === 'batch' ? 'Excluir codigos em lote' : 'Excluir codigo'}
             </h3>
             <p className="mt-3 text-sm text-zinc-700">
@@ -1078,14 +1078,14 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setDeleteDialog(null)}
-                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleDeleteCode}
-                className="rounded-lg border border-rose-300 bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-200"
+                className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Excluir codigo
               </button>
@@ -1095,17 +1095,17 @@ export default function AdminPage() {
       ) : null}
 
       {nameDialog ? (
-        <div className="fixed inset-0 z-[72] flex items-center justify-center bg-zinc-950/35 px-4">
-          <div className="frosted-light gold-frame w-full max-w-lg rounded-2xl p-5 sm:p-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">{nameDialog.title}</p>
+        <div className="fixed inset-0 z-[72] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-lg">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">{nameDialog.title}</p>
 
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">Pais (nome)</p>
+            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Pais (nome)</p>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
             </div>
             
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">Filhos (nome e idade)</p>
+            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Filhos (nome e idade)</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.childrenText}</p>
             </div>
 
@@ -1113,7 +1113,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setNameDialog(null)}
-                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5"
               >
                 Fechar
               </button>
@@ -1123,13 +1123,13 @@ export default function AdminPage() {
       ) : null}
 
       {messageDialog ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/35 px-4">
-          <div className="frosted-light gold-frame w-full max-w-lg rounded-2xl p-5 sm:p-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Mensagem completa</p>
-            <h3 className="mt-1 whitespace-pre-line font-display text-3xl text-champagne-800">{formatGuestNames(messageDialog.guestName)}</h3>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-lg">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Mensagem completa</p>
+            <h3 className="mt-2 whitespace-pre-line font-display text-4xl italic leading-none text-zinc-800">{formatGuestNames(messageDialog.guestName)}</h3>
             <p className="mt-1 text-xs text-zinc-600">Codigo: {messageDialog.code}</p>
 
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-lg border border-white/70 bg-white/75 p-4">
+            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{messageDialog.text}</p>
             </div>
 
@@ -1137,7 +1137,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setMessageDialog(null)}
-                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5"
               >
                 Fechar
               </button>
@@ -1147,10 +1147,10 @@ export default function AdminPage() {
       ) : null}
 
       {accessActionDialog ? (
-        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/35 px-4">
-          <div className="frosted-light gold-frame w-full max-w-md rounded-2xl p-5 sm:p-6">
-            <p className="text-xs uppercase tracking-[0.3em] text-zinc-600">Confirmar exclusao</p>
-            <h3 className="mt-1 font-display text-3xl text-champagne-800">
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-md">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Confirmar exclusao</p>
+            <h3 className="mt-2 font-display text-4xl italic leading-none text-zinc-800">
               {accessActionDialog.mode === 'selected' ? 'Excluir acessos selecionados' : 'Limpar historico em lote'}
             </h3>
             <p className="mt-3 text-sm text-zinc-700">
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setAccessActionDialog(null)}
-                className="rounded-lg border border-zinc-300 bg-white/80 px-4 py-2 text-sm text-zinc-700 hover:bg-white"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5"
               >
                 Cancelar
               </button>
@@ -1179,7 +1179,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={handleConfirmAccessAction}
                 disabled={isDeletingSelectedAccesses || isClearingAccessHistory}
-                className="rounded-lg border border-rose-300 bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Confirmar exclusao
               </button>
@@ -1191,7 +1191,7 @@ export default function AdminPage() {
       {notice ? (
         <div className="fixed left-4 right-4 top-4 z-[60] w-auto sm:left-auto sm:w-[min(92vw,380px)]">
           <div
-            className={`gold-frame rounded-xl border p-4 shadow-lg backdrop-blur ${
+            className={`rounded-2xl border p-4 shadow-lg backdrop-blur ${
               notice.type === 'success'
                 ? 'border-olive-300 bg-olive-50/95 text-olive-900'
                 : 'border-rose-300 bg-rose-50/95 text-rose-900'
@@ -1202,7 +1202,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setNotice(null)}
-                className="rounded-md border border-current/20 px-2 py-0.5 text-xs hover:bg-white/50"
+                className="rounded-full border border-current/20 px-3 py-0.5 text-xs hover:bg-white/50"
               >
                 Fechar
               </button>

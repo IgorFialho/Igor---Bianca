@@ -261,3 +261,36 @@ export function IntroArco() {
 
   return <IntroArcoOverlay />;
 }
+
+/** Se a introdução ainda vai aparecer (ou está na tela) nesta visita. */
+export function isIntroPending() {
+  return !hasEnteredSite;
+}
+
+// Buraco transparente de fundo.webp (1517x903), medido pelo canal alfa: centro e tamanho em frações da imagem.
+const HOLE = { centerX: 0.53, centerY: 0.415, width: 0.24, height: 0.51, left: 0.406, right: 0.657, top: 0.16, bottom: 0.67 };
+const BACKGROUND_RATIO = 1517 / 903;
+
+/**
+ * Onde o buraco do arco aparece na tela (px), com a introdução aberta: o fundo ocupa 104% da tela
+ * (scale 1.04/12 de uma caixa de 1200vw × 1200svh) com object-fit cover e foco em 54% 50%.
+ */
+export function introHoleRect(viewportWidth: number, viewportHeight: number) {
+  const boxWidth = 1.04 * viewportWidth;
+  const boxHeight = 1.04 * viewportHeight;
+  const scale = Math.max(boxWidth / BACKGROUND_RATIO, boxHeight);
+  const imageWidth = scale * BACKGROUND_RATIO;
+  const imageHeight = scale;
+  const left = (viewportWidth - boxWidth) / 2 + (boxWidth - imageWidth) * 0.54;
+  const top = (viewportHeight - boxHeight) / 2 + (boxHeight - imageHeight) * 0.5;
+  return {
+    centerX: left + HOLE.centerX * imageWidth,
+    centerY: top + HOLE.centerY * imageHeight,
+    width: HOLE.width * imageWidth,
+    height: HOLE.height * imageHeight,
+    left: left + HOLE.left * imageWidth,
+    right: left + HOLE.right * imageWidth,
+    top: top + HOLE.top * imageHeight,
+    bottom: top + HOLE.bottom * imageHeight,
+  };
+}

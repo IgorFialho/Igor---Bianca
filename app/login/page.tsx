@@ -22,7 +22,11 @@ const EVENT_DATE = new Date('2027-04-18T16:30:00-03:00');
 
 // Textos e fotos da página. Os textos dos capítulos são provisórios: troque pelos de vocês.
 // Cada foto do casal (public/imagens/casal) aparece uma única vez na página.
-const HERO_PHOTO = '/imagens/casal/casal-08.jpeg';
+const HERO_PHOTO = '/imagens/casal/pedido.jpeg';
+// Foto do pedido nas montanhas; o foco mantém o casal no centro da intro.
+const HERO_PHOTO_POSITION = '52% 62%';
+// Onde o casal está na foto (frações): na introdução, a foto se ajusta para eles aparecerem de corpo inteiro no arco.
+const HERO_COUPLE = { centerX: 0.525, centerY: 0.675, width: 0.32, height: 0.46 };
 // Fotos que aparecem em volta da principal ao rolar o topo (esquerda: 1 e 2; direita: 3 e 4).
 const HERO_GALLERY: [HeroPhoto, HeroPhoto, HeroPhoto, HeroPhoto] = [
   { src: '/imagens/casal/casal-01.jpeg' },
@@ -274,6 +278,8 @@ export default function LoginPage() {
       <Hero
         id="home"
         imageSrc={HERO_PHOTO}
+        imagePosition={HERO_PHOTO_POSITION}
+        introFocus={HERO_COUPLE}
         imageAlt="Igor e Bianca"
         headline="Igor & Bianca"
         scrollLabel="Role para explorar"

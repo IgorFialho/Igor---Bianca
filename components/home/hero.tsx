@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { INTRO_ENTER_EVENT, introHoleRect, isIntroPending } from '@/components/intro-arco';
 import { FittedText } from './fitted-text';
 
 /** Foto com ponto de foco (object-position, ex.: "50% 30%") para enquadrar os rostos. */
@@ -12,6 +13,11 @@ type HeroProps = {
   /** Ponto de foco da foto principal (object-position), para os rostos não serem cortados. */
   imagePosition?: string;
   imageAlt: string;
+  /**
+   * Onde está o casal na foto principal (frações da imagem). Enquanto a introdução está aberta, a foto
+   * encolhe para o casal aparecer de corpo inteiro no centro do buraco do arco.
+   */
+  introFocus?: { centerX: number; centerY: number; width: number; height: number };
   headline: string;
   scrollLabel: string;
   /** 4 fotos que entram em volta da principal durante a rolagem. */
@@ -200,10 +206,44 @@ function GalleryCard({ photo, card }: { photo: HeroPhoto; card: Card }) {
 
 // Foto do casal em tela cheia que, ao rolar, encolhe até virar um cartão no centro enquanto
 // outras 4 fotos chegam pelos lados (no celular, por cima e por baixo).
-export function Hero({ id, imageSrc, imagePosition, imageAlt, headline, scrollLabel, galleryImages }: HeroProps) {
+// Lê "52% 62%" como frações [0.52, 0.62] (padrão: centro).
+function parsePosition(position?: string): [number, number] {
+  const parts = (position ?? '').match(/-?[\d.]+%/g);
+  if (!parts || parts.length < 2) return [0.5, 0.5];
+  return [parseFloat(parts[0]) / 100, parseFloat(parts[1]) / 100];
+}
+
+export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headline, scrollLabel, galleryImages }: HeroProps) {
   const ref = useRef<HTMLElement>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [progress, setProgress] = useState(0);
+  const [introOpen, setIntroOpen] = useState(() => Boolean(introFocus) && isIntroPending());
+  const [justEntered, setJustEntered] = useState(false);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  // Ao clicar em "Clique para entrar", a foto volta ao tamanho normal junto com o zoom do arco.
+  useEffect(() => {
+    if (!introOpen) return;
+    const handleEnter = () => {
+      setIntroOpen(false);
+      setJustEntered(true);
+    };
+    window.addEventListener(INTRO_ENTER_EVENT, handleEnter);
+    return () => window.removeEventListener(INTRO_ENTER_EVENT, handleEnter);
+  }, [introOpen]);
+
+  useEffect(() => {
+    if (!justEntered) return;
+    const timer = window.setTimeout(() => setJustEntered(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [justEntered]);
+
+  // Tamanho real da foto (também cobre o caso de ela já estar no cache antes do onLoad).
+  useEffect(() => {
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth) setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight });
+  }, [imageSrc]);
 
   useEffect(() => {
     let frame = 0;
@@ -235,6 +275,50 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, headline, scrollLa
   const gallery = hasViewport ? galleryLayout(viewport.width, viewport.height, progress, mode) : null;
   const [first, second, third, fourth] = galleryImages;
 
+  // Transformação da foto com a introdução aberta: leva o casal ao centro do buraco do arco, em escala
+  // para caber de corpo inteiro (no máximo 62% da largura e 56% da altura do buraco).
+  let introTransform = 'none';
+  let introOrigin = '50% 50%';
+  let imageBox: CSSProperties | null = null;
+  if (frame && naturalSize) {
+    // A foto é posicionada inteira (equivalente a object-fit: cover), sem corte no próprio elemento:
+    // assim, ao encolher na introdução, as bordas da foto continuam disponíveis para cobrir o buraco.
+    const coverScale = Math.max(frame.width / naturalSize.width, frame.height / naturalSize.height);
+    const shownWidth = naturalSize.width * coverScale;
+    const shownHeight = naturalSize.height * coverScale;
+    const [positionX, positionY] = parsePosition(imagePosition);
+    const offsetX = (frame.width - shownWidth) * positionX;
+    const offsetY = (frame.height - shownHeight) * positionY;
+    imageBox = { left: offsetX, top: offsetY, width: shownWidth, height: shownHeight };
+
+    if (introOpen && introFocus) {
+      // Leva o casal ao centro do buraco do arco, em escala para caber de corpo inteiro, mas nunca tão
+      // pequeno que a foto deixe parte do buraco descoberta.
+      const coupleX = introFocus.centerX * shownWidth;
+      const coupleY = introFocus.centerY * shownHeight;
+      const hole = introHoleRect(viewport.width, viewport.height);
+      const frameLeft = (viewport.width - frame.width) / 2;
+      const frameTop = (viewport.height - frame.height) / 2;
+      const targetX = hole.centerX;
+      const targetY = hole.centerY + 0.06 * hole.height;
+      const fitScale = Math.min(
+        (0.62 * hole.width) / (introFocus.width * shownWidth),
+        (0.56 * hole.height) / (introFocus.height * shownHeight),
+      );
+      const coverHoleScale = Math.max(
+        (targetX - hole.left) / coupleX,
+        (hole.right - targetX) / (shownWidth - coupleX),
+        (targetY - hole.top) / coupleY,
+        (hole.bottom - targetY) / (shownHeight - coupleY),
+      );
+      const scale = Math.min(1, Math.max(fitScale, coverHoleScale * 1.02));
+      const anchorX = frameLeft + offsetX + coupleX;
+      const anchorY = frameTop + offsetY + coupleY;
+      introOrigin = `${coupleX}px ${coupleY}px`;
+      introTransform = `translate(${targetX - anchorX}px, ${targetY - anchorY}px) scale(${scale})`;
+    }
+  }
+
   const frameStyle: CSSProperties = frame
     ? { width: frame.width, height: frame.height, transform: `translateY(${frame.translateY}px)`, borderRadius: frame.borderRadius }
     : { width: 'calc(100% - 24px)', height: 'calc(100% - 24px)', borderRadius: 24 };
@@ -244,12 +328,28 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, headline, scrollLa
       <div className="sticky top-0 h-[100svh] overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative overflow-hidden will-change-transform" style={frameStyle}>
-            <img src={imageSrc} alt={imageAlt} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: imagePosition }} />
+            <img
+              ref={imageRef}
+              src={imageSrc}
+              alt={imageAlt}
+              onLoad={(event) => setNaturalSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+              className={imageBox ? "absolute max-w-none" : "absolute inset-0 h-full w-full object-cover"}
+              style={{
+                ...imageBox,
+                objectPosition: imagePosition,
+                transform: introTransform,
+                transformOrigin: introOrigin,
+                transition: 'transform 1700ms cubic-bezier(0.74, 0, 0.16, 1)',
+              }}
+            />
             <div className="absolute inset-0 bg-black/20" style={{ opacity: frame?.overlayOpacity ?? 0.22 }} />
 
             <div
               className="absolute inset-0 flex flex-col items-center justify-end pb-8 text-white"
-              style={{ opacity: frame?.textOpacity ?? 1 }}
+              style={{
+                opacity: introOpen ? 0 : frame?.textOpacity ?? 1,
+                transition: justEntered ? 'opacity 900ms ease 900ms' : undefined,
+              }}
             >
               <h1
                 className="pointer-events-none absolute inset-x-0 bottom-32 flex justify-center px-6 md:px-12"

@@ -26,7 +26,7 @@ type StoryScrollProps = {
 // Tudo abaixo replica a seção "our story" (data-design-scroll-freeze) do template Origins da Cordially.
 const ROTATIONS = [-2.5, 1.8, -1.2];
 const DEFAULT_WIDTHS = [45, 55, 65] as const;
-// Cada polaroid nova entra após rolar meia tela (50vh).
+// Cada polaroid nova entra após rolar meia tela (50svh).
 const CARD_GAP_VH = 50;
 // Distância (px) em que uma polaroid "pousa" sobre a pilha.
 const STACK_BLEND_PX = 140;
@@ -65,10 +65,12 @@ function ChapterCaption({ chapter, mobile = false }: { chapter: StoryChapter; mo
   );
 }
 
-function useViewport() {
+// Largura da janela e altura da área presa na tela (100svh).
+function useViewport(stickyRef: React.RefObject<HTMLDivElement>) {
   const [viewport, setViewport] = useState({ width: 1000, height: 1000 });
   useEffect(() => {
-    const update = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    const update = () =>
+      setViewport({ width: window.innerWidth, height: stickyRef.current?.clientHeight || window.innerHeight });
     update();
     window.addEventListener('resize', update);
     window.addEventListener('orientationchange', update);
@@ -76,7 +78,7 @@ function useViewport() {
       window.removeEventListener('resize', update);
       window.removeEventListener('orientationchange', update);
     };
-  }, []);
+  }, [stickyRef]);
   return viewport;
 }
 
@@ -89,7 +91,8 @@ export function StoryScroll({ id, title, chapters }: StoryScrollProps) {
   const captionRefs = useRef<HTMLDivElement[][]>([]);
   const [titleHeight, setTitleHeight] = useState(220);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const { width: viewportWidth, height: viewportHeight } = useViewport();
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const { width: viewportWidth, height: viewportHeight } = useViewport(stickyRef);
 
   const cards = useMemo<Card[]>(
     () =>
@@ -174,7 +177,7 @@ export function StoryScroll({ id, title, chapters }: StoryScrollProps) {
   const mobileCaptionTop = titleTop + titleHeight + captionGap;
   const cardsTop = isMobile ? mobileCaptionTop + mobileCaptionHeight + (isWideMobile ? 16 : 60) : desktopTop;
   const titleLift = isWideMobile ? Math.min(8, 0.08 * titleHeight) : 0;
-  const sectionHeight = `calc(${100 + Math.max(cards.length - 1, 0) * CARD_GAP_VH}vh)`;
+  const sectionHeight = `calc(${100 + Math.max(cards.length - 1, 0) * CARD_GAP_VH}svh)`;
 
   // ---- Animação ligada à rolagem (atualiza o DOM direto, sem re-render) ----
   useEffect(() => {
@@ -246,7 +249,7 @@ export function StoryScroll({ id, title, chapters }: StoryScrollProps) {
 
   return (
     <section id={id} ref={sectionRef} className="relative z-30 w-full" style={{ height: sectionHeight }}>
-      <div className="sticky top-0 h-[100svh] w-full">
+      <div ref={stickyRef} className="sticky top-0 h-[100svh] w-full">
         {/* Título */}
         <div
           className="pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center justify-center"

@@ -215,7 +215,10 @@ function parsePosition(position?: string): [number, number] {
 
 export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headline, scrollLabel, galleryImages }: HeroProps) {
   const ref = useRef<HTMLElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  // Tamanho da área presa na tela (100svh) e da janela (usada só para o buraco do arco da introdução).
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
   const [progress, setProgress] = useState(0);
   const [introOpen, setIntroOpen] = useState(() => Boolean(introFocus) && isIntroPending());
   const [justEntered, setJustEntered] = useState(false);
@@ -252,7 +255,9 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headli
       frame = 0;
       const section = ref.current;
       if (!section) return;
-      setViewport({ width: window.innerWidth, height: window.innerHeight });
+      const sticky = stickyRef.current;
+      setViewport({ width: window.innerWidth, height: sticky?.clientHeight || window.innerHeight });
+      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
       setProgress(clamp(-section.getBoundingClientRect().top / HERO_SCROLL_DISTANCE));
     };
     const schedule = () => {
@@ -296,7 +301,7 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headli
       // pequeno que a foto deixe parte do buraco descoberta.
       const coupleX = introFocus.centerX * shownWidth;
       const coupleY = introFocus.centerY * shownHeight;
-      const hole = introHoleRect(viewport.width, viewport.height);
+      const hole = introHoleRect(windowSize.width, windowSize.height);
       const frameLeft = (viewport.width - frame.width) / 2;
       const frameTop = (viewport.height - frame.height) / 2;
       const targetX = hole.centerX;
@@ -325,7 +330,7 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headli
 
   return (
     <section id={id} ref={ref} className="relative" style={{ height: `calc(100svh + ${HERO_SCROLL_DISTANCE}px)` }}>
-      <div className="sticky top-0 h-[100svh] overflow-hidden">
+      <div ref={stickyRef} className="sticky top-0 h-[100svh] overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative overflow-hidden will-change-transform" style={frameStyle}>
             <img

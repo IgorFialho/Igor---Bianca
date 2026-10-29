@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { limitMessage } from '@/lib/invite';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
     const attendance = body?.attendance === 'yes' || body?.attendance === 'no' ? body.attendance : '';
     const adultsCount = Number.isFinite(Number(body?.adultsCount)) ? Number(body.adultsCount) : 1;
     const childrenCount = Number.isFinite(Number(body?.childrenCount)) ? Number(body.childrenCount) : 0;
-    const dietaryNotes = typeof body?.dietaryNotes === 'string' ? body.dietaryNotes.trim() : null;
+    const dietaryNotes = typeof body?.dietaryNotes === 'string' ? limitMessage(body.dietaryNotes.trim()) : null;
     const childrenDetailsRaw = Array.isArray(body?.childrenDetails) ? body.childrenDetails : [];
 
     if (!inviteCode) {

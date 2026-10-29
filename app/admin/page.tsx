@@ -652,7 +652,7 @@ export default function AdminPage() {
             {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
           </section>
 
-          <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
+          <section className="flex flex-col rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-display text-4xl leading-none text-zinc-800">Códigos cadastrados</h2>
               <button
@@ -731,7 +731,11 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <div className="mt-6 hidden max-h-80 overflow-auto rounded-2xl border border-zinc-800/10 bg-cream sm:block">
+            {/* No computador o cartão tem a mesma altura do "Gerar códigos" ao lado e a tabela ocupa o espaço
+                que sobra: fica posicionada por cima dele (absolute), então nunca estica o cartão e rola por dentro
+                quando há mais códigos. Em telas menores, altura limitada a ~6 códigos. */}
+            <div className="relative mt-6 hidden sm:block lg:min-h-[16rem] lg:flex-1">
+            <div className="max-h-[26rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream lg:absolute lg:inset-0 lg:max-h-none">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                   <tr>
@@ -814,6 +818,7 @@ export default function AdminPage() {
               {!isLoading && codes.length === 0 ? (
                 <p className="p-3 text-sm text-zinc-600">Nenhum codigo cadastrado.</p>
               ) : null}
+            </div>
             </div>
           </section>
         </div>

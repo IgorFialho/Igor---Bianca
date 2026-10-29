@@ -53,6 +53,20 @@ function noteColor(id: string) {
 // Inclinações variadas, como notas coladas à mão numa parede.
 const NOTE_ROTATIONS = [-2.4, 1.6, -1.1, 2.2, -1.8, 1];
 
+// Tamanho da letra conforme o tamanho do recado, para caber no post-it em qualquer tela
+// (os recados têm no máximo 180 caracteres; os antigos, mais longos, são cortados na lista).
+function noteTextClass(text: string, large: boolean) {
+  const length = Array.from(text.trim()).length;
+  if (large) {
+    if (length <= 70) return 'text-3xl leading-snug sm:text-4xl';
+    if (length <= 130) return 'text-2xl leading-snug sm:text-3xl';
+    return 'text-xl leading-snug sm:text-2xl';
+  }
+  if (length <= 50) return 'line-clamp-5 text-2xl leading-tight lg:text-[1.75rem]';
+  if (length <= 110) return 'line-clamp-6 text-xl leading-tight lg:text-[1.5rem]';
+  return 'line-clamp-[7] text-base leading-snug lg:line-clamp-[8] lg:text-[1.2rem] lg:leading-tight';
+}
+
 // Post-it com a mensagem escrita "à mão", fita adesiva no topo e o canto de baixo levantando.
 function StickyNote({ entry, index, large = false }: { entry: GuestMessage; index: number; large?: boolean }) {
   return (
@@ -64,7 +78,7 @@ function StickyNote({ entry, index, large = false }: { entry: GuestMessage; inde
       <div className="absolute bottom-1 right-2 h-1/4 w-2/3 rotate-3 rounded-full bg-[rgba(47,36,27,0.28)] blur-md" />
       <div
         className={`relative flex h-full w-full flex-col rounded-2xl transition-transform duration-300 group-hover:-translate-y-1 group-hover:rotate-1 ${
-          large ? 'aspect-square p-8 sm:p-12' : 'p-5 sm:p-6'
+          large ? 'min-h-[18rem] p-7 sm:min-h-[26rem] sm:p-12' : 'p-5 sm:p-6'
         }`}
         style={{
           backgroundColor: noteColor(entry.id),
@@ -79,15 +93,13 @@ function StickyNote({ entry, index, large = false }: { entry: GuestMessage; inde
           className="absolute -top-3 left-1/2 h-7 w-24 -translate-x-1/2 rotate-[-3deg] border-x border-dashed border-white/40 bg-white/45 shadow-sm backdrop-blur-[1px]"
         />
         <p
-          className={`${handwriting.className} text-zinc-800 [overflow-wrap:anywhere] ${
-            large ? 'text-3xl leading-snug sm:text-4xl' : 'line-clamp-6 text-2xl leading-tight'
-          }`}
+          className={`${handwriting.className} min-h-0 text-zinc-800 [overflow-wrap:anywhere] ${noteTextClass(entry.message, large)}`}
         >
           {entry.message}
         </p>
         <p
-          className={`${handwriting.className} mt-auto pt-3 text-right text-champagne-700 [overflow-wrap:anywhere] ${
-            large ? 'text-3xl' : 'truncate text-xl'
+          className={`${handwriting.className} mt-auto shrink-0 pt-3 text-right text-champagne-700 [overflow-wrap:anywhere] ${
+            large ? 'text-2xl sm:text-3xl' : 'truncate text-xl'
           }`}
         >
           — {entry.guestName}

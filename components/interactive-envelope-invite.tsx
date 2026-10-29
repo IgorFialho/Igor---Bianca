@@ -4,7 +4,7 @@ import { Poppins } from 'next/font/google';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { AttendanceChoice } from '@/lib/invite';
-import { INVITE_ACCESS_KEY, weddingDetails } from '@/lib/invite';
+import { INVITE_ACCESS_KEY, MESSAGE_MAX_LENGTH, limitMessage, messageLength, weddingDetails } from '@/lib/invite';
 import { FittedText } from '@/components/home/fitted-text';
 import { EmojiPicker } from '@/components/emoji-picker';
 
@@ -47,7 +47,10 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     const field = messageRef.current;
     const start = field?.selectionStart ?? dietaryNeeds.length;
     const end = field?.selectionEnd ?? dietaryNeeds.length;
-    setDietaryNeeds((current) => current.slice(0, start) + emoji + current.slice(end));
+    const next = dietaryNeeds.slice(0, start) + emoji + dietaryNeeds.slice(end);
+    // Não insere se o emoji passaria do limite de caracteres.
+    if (messageLength(next) > MESSAGE_MAX_LENGTH) return;
+    setDietaryNeeds(next);
     window.requestAnimationFrame(() => {
       if (!field) return;
       const caret = start + emoji.length;
@@ -525,7 +528,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                   rows={3}
                   disabled={isCheckingStatus || isSubmitting}
                   value={dietaryNeeds}
-                  onChange={(event) => setDietaryNeeds(event.target.value)}
+                  onChange={(event) => setDietaryNeeds(limitMessage(event.target.value))}
                   className={`${fieldClass} rounded-3xl py-4 pr-16`}
                   placeholder={attendance === 'no' ? 'Digite sua justificativa aqui (opcional)' : 'Escreva uma mensagem carinhosa (opcional)'}
                 />
@@ -533,6 +536,15 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                   <EmojiPicker onSelect={insertEmoji} disabled={isCheckingStatus || isSubmitting} />
                 </div>
               </div>
+              {/* Contador: a mensagem vira um post-it na home e precisa caber em telas pequenas. */}
+              <p
+                aria-live="polite"
+                className={`px-2 text-right text-xs tabular-nums ${
+                  messageLength(dietaryNeeds) >= MESSAGE_MAX_LENGTH ? 'text-rose-700' : 'text-zinc-500'
+                }`}
+              >
+                {messageLength(dietaryNeeds)}/{MESSAGE_MAX_LENGTH} caracteres
+              </p>
             </div>
           ) : null}
 

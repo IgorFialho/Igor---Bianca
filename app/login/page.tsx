@@ -110,6 +110,7 @@ const NAV_LINKS = [
   { label: 'Cerimônia', href: '#cerimonia' },
   { label: 'Confirmar presença', href: '#rsvp' },
   { label: 'Mensagens', href: '#mensagens' },
+  { label: 'Lista de presentes', href: '/presentes' },
   { label: 'Perguntas', href: '#perguntas' },
 ];
 
@@ -288,17 +289,17 @@ export default function LoginPage() {
 
       <section className={`${SECTION} flex min-h-[60svh] items-center justify-center text-center`}>
         <ScrollWords
-          text="vocês estão convidados para celebrar a história de Igor e Bianca"
+          text="Vocês estão convidados para celebrar a história de Igor e Bianca"
           className="mx-auto w-full max-w-[90vw] font-display text-[3rem] leading-[1.05] tracking-tight text-zinc-800 md:text-[3.75rem]"
         />
       </section>
 
-      <StoryScroll id="nossa-historia" title="nossa história" chapters={STORY_CHAPTERS} />
+      <StoryScroll id="nossa-historia" title="Nossa história" chapters={STORY_CHAPTERS} />
 
       <section id="cerimonia" className="relative w-full scroll-mt-24">
         <div className="flex min-h-screen flex-col items-center justify-center px-4 py-24 text-center">
           <Reveal className="mb-16 flex w-full justify-center">
-            <p className={`${HEADING} w-full max-w-5xl`}>então, venham celebrar conosco...</p>
+            <p className={`${HEADING} w-full max-w-5xl`}>Então, venham celebrar conosco...</p>
           </Reveal>
           <Reveal delay={0.14} className="mb-16 flex w-full justify-center px-2">
             <h3 className="w-full max-w-[1120px] text-zinc-800">
@@ -413,7 +414,7 @@ export default function LoginPage() {
 
       <DetailsSection
         id="mensagens"
-        title="mensagens de quem vai celebrar com a gente..."
+        title="Mensagens de quem vai celebrar com a gente..."
         subtitle="Os recados carinhosos que os convidados deixaram ao confirmar presença."
         messages={rsvpMessages}
         isLoading={isLoadingMessages}
@@ -425,6 +426,29 @@ export default function LoginPage() {
           text="Criamos este convite para compartilhar com você os detalhes do nosso casamento. Estamos muito felizes e contamos com sua presença no nosso grande dia."
           className="w-full max-w-[90vw] font-display text-[2.6rem] leading-[1.05] tracking-tight text-zinc-800 md:text-[5rem]"
         />
+      </section>
+
+      <section id="presentes" className={`${SECTION} scroll-mt-24 text-center`}>
+        <div className="mx-auto flex max-w-3xl flex-col items-center">
+          <Reveal>
+            <p className={EYEBROW}>Lista de presentes</p>
+            <h2 className={`${HEADING} mt-4`}>Quer nos presentear?</h2>
+          </Reveal>
+          <Reveal delay={0.14}>
+            <p className="mx-auto mt-6 max-w-xl text-base text-zinc-600 md:text-lg">
+              Sua presença já é o nosso maior presente. Se quiser, escolha um item da nossa lista e envie o valor
+              por Pix ou compre na loja.
+            </p>
+          </Reveal>
+          <Reveal delay={0.28} className="mt-8">
+            <a
+              href="/presentes"
+              className="inline-flex items-center justify-center rounded-full bg-champagne-600 px-10 py-4 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] hover:scale-[1.02] md:text-sm"
+            >
+              Ver lista de presentes
+            </a>
+          </Reveal>
+        </div>
       </section>
 
       <FaqSection id="perguntas" title="Perguntas e respostas" intro="Tudo o que você precisa saber antes do grande dia." items={FAQ_ITEMS} />

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AdminGifts } from '@/components/admin/admin-gifts';
 
 type InviteCode = {
   id: string;
@@ -1058,6 +1059,8 @@ export default function AdminPage() {
             ) : null}
           </div>
         </section>
+
+        <AdminGifts />
       </section>
 
       {deleteDialog ? (

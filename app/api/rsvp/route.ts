@@ -83,12 +83,16 @@ export async function GET(request: NextRequest) {
         `
       );
 
-      const messages = result.rows.map((row: PublicMessageRow) => ({
+      const rsvpMessages = result.rows.map((row: PublicMessageRow) => ({
         id: row.id,
         guestName: row.guest_name || row.invite_code_used,
         message: row.dietary_notes,
         submittedAt: row.submitted_at,
       }));
+
+      const messages = [...rsvpMessages]
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+        .slice(0, 24);
 
       return NextResponse.json(
         { messages },

@@ -66,3 +66,33 @@ WHERE NOT EXISTS (SELECT 1 FROM wedding_events);
 INSERT INTO invitation_codes (code, guest_name, is_active)
 VALUES ('FLORESCER2026', 'Convidado Especial', TRUE)
 ON CONFLICT (code) DO NOTHING;
+
+-- Lista de presentes: cada presente é dado por um único convidado (sem cotas).
+CREATE TABLE IF NOT EXISTS gifts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title VARCHAR(120) NOT NULL,
+  description TEXT,
+  image_url TEXT,
+  price_cents INTEGER NOT NULL CHECK (price_cents > 0),
+  store_url TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS gift_contributions (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  gift_id BIGINT NOT NULL REFERENCES gifts(id) ON DELETE CASCADE,
+  invitation_code_id BIGINT REFERENCES invitation_codes(id) ON DELETE SET NULL,
+  invite_code_used VARCHAR(80) NOT NULL,
+  guest_name VARCHAR(150),
+  method VARCHAR(10) NOT NULL CHECK (method IN ('pix', 'store')),
+  message TEXT,
+  status VARCHAR(12) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed_at TIMESTAMPTZ
+);
+
+-- Garante no banco que cada presente tenha no máximo um presenteador ativo.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gift_active_contribution
+  ON gift_contributions(gift_id) WHERE status IN ('pending', 'confirmed');
+CREATE INDEX IF NOT EXISTS idx_gift_contributions_created ON gift_contributions(created_at DESC);

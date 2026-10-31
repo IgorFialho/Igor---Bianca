@@ -39,9 +39,17 @@ Feito com Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion e Pos
 - Confirmação de presença (RSVP): sim/não, nomes do convidado ou do casal, filhos com idade (quando o convite permite) e mensagem para os noivos com seletor de emojis.
 - Uma resposta por código; depois de enviada, o convite fica bloqueado.
 
+**Lista de presentes (`/presentes`)**
+
+- Presentes com foto, descrição e valor; cada presente é dado por um único convidado.
+- O convidado entra com o código do convite e escolhe entre enviar o valor por **Pix** (QR Code e "copia e cola" com o valor já preenchido, direto na conta dos noivos e sem taxa) ou **comprar na loja** indicada.
+- Tela de agradecimento ao final. (Recados para o casal ficam só no RSVP, para quem confirma presença.)
+- Presentes escolhidos aparecem como "Reservado" até os noivos confirmarem e, depois, como "Presenteado".
+
 **Painel admin (`/admin`)**
 
 - Login com senha, geração de códigos de convite e lista de acessos e respostas.
+- Aba **Presentes**: cadastrar, ocultar e excluir presentes; ver quem presenteou; confirmar o Pix (conferindo no extrato pela referência `PRESENTE` + número do presente) ou cancelar, liberando o presente.
 
 ## Tecnologias
 
@@ -95,6 +103,9 @@ npm install
 # 4. Crie as tabelas no banco
 node scripts/create-db.mjs
 
+# (Projeto já existente) só as tabelas da lista de presentes, sem dados de exemplo
+node scripts/create-gifts-tables.mjs
+
 # 5. Rode em modo de desenvolvimento
 npm run dev
 ```
@@ -108,12 +119,20 @@ Crie um arquivo `.env.local` na raiz do projeto. Ele já é ignorado pelo Git �
 ```env
 DATABASE_URL="postgresql://USUARIO:SENHA@HOST/BANCO?sslmode=require"
 ADMIN_PASSWORD="uma-senha-forte"
+
+# Lista de presentes (Pix direto na conta dos noivos)
+PIX_KEY="sua-chave-aleatoria"
+PIX_RECEIVER_NAME="Igor Fialho"
+PIX_RECEIVER_CITY="Belo Horizonte"
 ```
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
 | `DATABASE_URL` | Sim | String de conexão do PostgreSQL. |
 | `ADMIN_PASSWORD` | Sim | Senha do painel `/admin`. Sem ela, o sistema usa uma senha padrão insegura. |
+| `PIX_KEY` | Para o Pix | Chave Pix que recebe os presentes. Prefira uma **chave aleatória**: ela aparece para os convidados. |
+| `PIX_RECEIVER_NAME` | Para o Pix | Nome do titular da conta (até 25 letras, sem acentos é o ideal). |
+| `PIX_RECEIVER_CITY` | Para o Pix | Cidade do titular (até 15 letras). |
 
 ## Banco de dados
 
@@ -125,6 +144,8 @@ O esquema está em [`db/schema.sql`](db/schema.sql) e é aplicado por `node scri
 | `rsvp_responses` | Respostas de presença e mensagens para o casal. |
 | `rsvp_children` | Nome e idade dos filhos informados no RSVP. |
 | `wedding_events` | Dados do evento. |
+| `gifts` | Presentes da lista (nome, descrição, foto, valor e link da loja). |
+| `gift_contributions` | Quem escolheu cada presente, a forma (Pix ou loja), o recado e a situação. |
 
 ## Scripts
 
@@ -141,7 +162,11 @@ O esquema está em [`db/schema.sql`](db/schema.sql) e é aplicado por `node scri
 | --- | --- |
 | `/login` | Home do site (a raiz `/` redireciona para cá). |
 | `/convite` | Envelope e RSVP; exige um código válido informado na home. |
+| `/presentes` | Lista de presentes; exige o código do convite para presentear. |
 | `/admin/login` · `/admin` | Login e painel administrativo. |
+| `GET` · `POST /api/gifts` | Lista de presentes e registro de quem presenteou. |
+| `GET /api/gifts/pix` | Gera o Pix (copia e cola + QR Code) com o valor do presente. |
+| `/api/admin/gifts` | Cadastro, ocultar/excluir presentes e confirmação dos presentes recebidos. |
 | `GET /api/rsvp?messages=yes` | Mensagens públicas deixadas pelos convidados. |
 | `GET` · `POST /api/rsvp` | Consulta e envio da confirmação de presença. |
 | `POST /api/invite/login` | Valida o código do convite. |

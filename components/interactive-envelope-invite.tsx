@@ -367,9 +367,10 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
       </header>
 
       {isLocked ? (
-        <p className="rounded-2xl border border-zinc-800/10 bg-cream px-5 py-4 text-center text-sm text-zinc-600">
-          Sua resposta já foi registrada. Obrigado!
-        </p>
+        <div className="rounded-2xl border border-zinc-800/10 bg-cream px-5 py-4 text-center text-sm text-zinc-600">
+          <p>Sua resposta já foi registrada. Obrigado!</p>
+          <a href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</a>
+        </div>
       ) : (
         <form className="space-y-6" onSubmit={handleSubmit}>
           <fieldset className="space-y-3">
@@ -574,6 +575,11 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
               >
                 {attendance === 'no' ? 'Recusa confirmada com sucesso!' : 'Presença confirmada com sucesso!'}
               </motion.p>
+            ) : null}
+            {isSubmitted && attendance === 'yes' ? (
+              <motion.div key="gifts-link" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                <a href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</a>
+              </motion.div>
             ) : null}
           </AnimatePresence>
         </form>

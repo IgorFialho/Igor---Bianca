@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 type AdminGift = {
   id: string;
@@ -51,6 +51,13 @@ function formatPrice(cents: number) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const EMPTY_FORM = { title: '', price: '', description: '', imageUrl: '', storeUrl: '' };
+
+// Centavos → texto do campo de valor ("299,90").
+function priceToInput(cents: number) {
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
 function formatNames(raw: string | null, fallback: string) {
   const names = (raw ?? '').split('|').map((item) => item.trim()).filter(Boolean);
   return names.length ? names.join(' e ') : fallback;
@@ -64,7 +71,10 @@ export function AdminGifts() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: '', price: '', description: '', imageUrl: '', storeUrl: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
+  // Presente em edição: o mesmo formulário serve para cadastrar e para editar.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState('');
 
@@ -106,23 +116,43 @@ export function AdminGifts() {
     }
   };
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
+  const startEditing = (gift: AdminGift) => {
+    setEditingId(gift.id);
+    setForm({
+      title: gift.title,
+      price: priceToInput(gift.price_cents),
+      description: gift.description ?? '',
+      imageUrl: gift.image_url ?? '',
+      storeUrl: gift.store_url ?? '',
+    });
+    setFormMessage('');
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormMessage('');
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSaving(true);
     setFormMessage('');
     try {
       const response = await fetch('/api/admin/gifts', {
-        method: 'POST',
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(editingId ? { action: 'update', giftId: editingId, ...form } : form),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || 'Erro ao cadastrar.');
-      setForm({ title: '', price: '', description: '', imageUrl: '', storeUrl: '' });
-      setFormMessage('Presente cadastrado!');
+      if (!response.ok) throw new Error(data?.error || 'Erro ao salvar.');
+      setForm(EMPTY_FORM);
+      setFormMessage(editingId ? 'Presente atualizado!' : 'Presente cadastrado!');
+      setEditingId(null);
       await load();
-    } catch (createError) {
-      setFormMessage(createError instanceof Error ? createError.message : 'Erro ao cadastrar.');
+    } catch (saveError) {
+      setFormMessage(saveError instanceof Error ? saveError.message : 'Erro ao salvar.');
     } finally {
       setIsSaving(false);
     }
@@ -152,16 +182,25 @@ export function AdminGifts() {
       {error ? <p className="mt-4 text-sm text-rose-700">{error}</p> : null}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <p className={EYEBROW}>Cadastrar presente</p>
+        <form ref={formRef} onSubmit={handleSubmit} className="scroll-mt-24 space-y-4">
+          <p className={EYEBROW}>{editingId ? 'Editar presente' : 'Cadastrar presente'}</p>
           <input className={FIELD} placeholder="Nome do presente *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <input className={FIELD} placeholder="Valor (ex.: 299,90) *" inputMode="decimal" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
           <textarea className={FIELD} rows={2} placeholder="Descrição (opcional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <input className={FIELD} placeholder="Link da imagem (opcional)" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
           <input className={FIELD} placeholder="Link da loja (opcional, para comprar o produto)" value={form.storeUrl} onChange={(e) => setForm({ ...form, storeUrl: e.target.value })} />
           <button type="submit" disabled={isSaving} className={`${PRIMARY} w-full`}>
-            {isSaving ? 'Salvando…' : 'Adicionar presente'}
+            {isSaving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Adicionar presente'}
           </button>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={cancelEditing}
+              className="w-full text-xs font-medium uppercase tracking-[0.16em] text-zinc-800/70 transition-opacity hover:opacity-70"
+            >
+              Cancelar edição
+            </button>
+          ) : null}
           {formMessage ? <p className="text-sm text-zinc-700">{formMessage}</p> : null}
         </form>
 
@@ -173,7 +212,12 @@ export function AdminGifts() {
             {gifts.map((gift) => {
               const taken = activeByGift.get(gift.id);
               return (
-                <article key={gift.id} className="flex items-center gap-4 rounded-2xl border border-zinc-800/10 bg-cream p-3">
+                <article
+                  key={gift.id}
+                  className={`flex items-center gap-4 rounded-2xl border bg-cream p-3 ${
+                    editingId === gift.id ? 'border-champagne-600 ring-2 ring-champagne-600/20' : 'border-zinc-800/10'
+                  }`}
+                >
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f6edd7]">
                     {gift.image_url ? <img src={gift.image_url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-2xl">🎁</span>}
                   </div>
@@ -186,6 +230,14 @@ export function AdminGifts() {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={busyId === gift.id || editingId === gift.id}
+                      onClick={() => startEditing(gift)}
+                      className={`${SMALL} border-champagne-600/40 text-champagne-700 hover:bg-champagne-600/10`}
+                    >
+                      {editingId === gift.id ? 'Editando' : 'Editar'}
+                    </button>
                     <button
                       type="button"
                       disabled={busyId === gift.id}

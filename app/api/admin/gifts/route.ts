@@ -100,6 +100,21 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
 
+    if (body?.action === 'update') {
+      const input = readGiftInput(body);
+      if (!input.title || !Number.isFinite(input.priceCents) || input.priceCents <= 0) {
+        return NextResponse.json({ error: 'Informe o nome e um valor válido.' }, { status: 400 });
+      }
+      const result = await db.query(
+        `UPDATE gifts SET title = $2, description = $3, image_url = $4, price_cents = $5, store_url = $6 WHERE id = $1`,
+        [String(body.giftId), input.title, input.description, input.imageUrl, input.priceCents, input.storeUrl]
+      );
+      if (result.rowCount === 0) {
+        return NextResponse.json({ error: 'Presente não encontrado.' }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (body?.action === 'toggle') {
       await db.query(`UPDATE gifts SET is_active = $2 WHERE id = $1`, [String(body.giftId), Boolean(body.isActive)]);
       return NextResponse.json({ ok: true });

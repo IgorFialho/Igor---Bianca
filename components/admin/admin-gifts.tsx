@@ -58,6 +58,21 @@ function priceToInput(cents: number) {
   return (cents / 100).toFixed(2).replace('.', ',');
 }
 
+type GiftFilter = 'all' | 'available' | 'pending' | 'confirmed' | 'hidden';
+
+const GIFT_FILTERS: { id: GiftFilter; label: string }[] = [
+  { id: 'all', label: 'Todas as situações' },
+  { id: 'available', label: 'Disponíveis' },
+  { id: 'pending', label: 'Aguardando confirmação' },
+  { id: 'confirmed', label: 'Confirmados' },
+  { id: 'hidden', label: 'Ocultos' },
+];
+
+/** Busca sem diferenciar maiúsculas nem acentos ("cafe" encontra "Café"). */
+function normalize(text: string) {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 function formatNames(raw: string | null, fallback: string) {
   const names = (raw ?? '').split('|').map((item) => item.trim()).filter(Boolean);
   return names.length ? names.join(' e ') : fallback;
@@ -77,6 +92,8 @@ export function AdminGifts() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState('');
+  const [search, setSearch] = useState('');
+  const [giftFilter, setGiftFilter] = useState<GiftFilter>('all');
 
   const load = useCallback(async () => {
     try {
@@ -161,6 +178,18 @@ export function AdminGifts() {
   const activeByGift = new Map(
     contributions.filter((item) => item.status !== 'cancelled').map((item) => [item.gift_id, item] as const)
   );
+  // Lista filtrada pela busca (nome, descrição ou nome de quem presenteou) e pela situação.
+  const query = normalize(search.trim());
+  const filteredGifts = gifts.filter((gift) => {
+    const taken = activeByGift.get(gift.id);
+    if (query && !normalize(`${gift.title} ${gift.description ?? ''} ${taken?.guest_name ?? ''}`).includes(query)) return false;
+    if (giftFilter === 'available') return gift.is_active && !taken;
+    if (giftFilter === 'pending') return taken?.status === 'pending';
+    if (giftFilter === 'confirmed') return taken?.status === 'confirmed';
+    if (giftFilter === 'hidden') return !gift.is_active;
+    return true;
+  });
+  const isFiltering = query !== '' || giftFilter !== 'all';
   const pendingCount = contributions.filter((item) => item.status === 'pending').length;
   const confirmedTotal = contributions
     .filter((item) => item.status === 'confirmed')
@@ -170,8 +199,7 @@ export function AdminGifts() {
     <section className={CARD}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className={EYEBROW}>Lista de presentes</p>
-          <h2 className="mt-2 font-display text-4xl leading-none text-zinc-800">Presentes</h2>
+          <h2 className="font-display text-4xl leading-none text-zinc-800">Lista de presentes</h2>
         </div>
         <div className="flex flex-wrap gap-3 text-sm text-zinc-700">
           <span className="rounded-full bg-[#f6edd7] px-4 py-2">{pendingCount} aguardando confirmação</span>
@@ -181,7 +209,7 @@ export function AdminGifts() {
 
       {error ? <p className="mt-4 text-sm text-rose-700">{error}</p> : null}
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[0.8fr_1.2fr]">
         <form ref={formRef} onSubmit={handleSubmit} className="scroll-mt-24 space-y-4">
           <p className={EYEBROW}>{editingId ? 'Editar presente' : 'Cadastrar presente'}</p>
           <input className={FIELD} placeholder="Nome do presente *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
@@ -205,11 +233,52 @@ export function AdminGifts() {
         </form>
 
         <div className="space-y-3">
-          <p className={EYEBROW}>Presentes cadastrados ({gifts.length})</p>
+          <p className={EYEBROW}>
+            Presentes cadastrados ({isFiltering ? `${filteredGifts.length} de ${gifts.length}` : gifts.length})
+          </p>
+          {gifts.length > 0 ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por nome, descrição ou convidado"
+                aria-label="Buscar presente"
+                className={`${FIELD} py-2.5`}
+              />
+              <select
+                value={giftFilter}
+                onChange={(event) => setGiftFilter(event.target.value as GiftFilter)}
+                aria-label="Filtrar por situação"
+                className={`${FIELD} py-2.5 sm:w-60`}
+              >
+                {GIFT_FILTERS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {!isLoading && gifts.length > 0 && filteredGifts.length === 0 ? (
+            <p className="text-sm text-zinc-600">
+              Nenhum presente encontrado.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setGiftFilter('all');
+                }}
+                className="underline underline-offset-4 hover:text-zinc-800"
+              >
+                Limpar busca
+              </button>
+            </p>
+          ) : null}
           {isLoading ? <p className="text-sm text-zinc-600">Carregando…</p> : null}
           {!isLoading && gifts.length === 0 ? <p className="text-sm text-zinc-600">Nenhum presente cadastrado ainda.</p> : null}
           <div className="max-h-[26rem] space-y-3 overflow-auto pr-1">
-            {gifts.map((gift) => {
+            {filteredGifts.map((gift) => {
               const taken = activeByGift.get(gift.id);
               return (
                 <article

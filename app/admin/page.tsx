@@ -52,9 +52,39 @@ type AccessActionDialogState = {
   inviteCodes: string[];
 } | null;
 
+type AdminTab = 'codes' | 'accesses' | 'gifts';
+
+const ADMIN_TABS: { id: AdminTab; label: string }[] = [
+  { id: 'codes', label: 'Lista de convidados' },
+  { id: 'accesses', label: 'Acessos ao convite' },
+  { id: 'gifts', label: 'Lista de presentes' },
+];
+
+// Lembra a última aba aberta: recarregar o painel volta para ela.
+const ADMIN_TAB_KEY = 'igor-bianca-admin-tab';
+
 export default function AdminPage() {
   const router = useRouter();
   const [codes, setCodes] = useState<InviteCode[]>([]);
+  const [activeTab, setActiveTab] = useState<AdminTab>('codes');
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(ADMIN_TAB_KEY);
+      if (ADMIN_TABS.some((tab) => tab.id === saved)) setActiveTab(saved as AdminTab);
+    } catch {
+      // Sem acesso ao armazenamento: abre na primeira aba.
+    }
+  }, []);
+
+  const selectTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    try {
+      window.localStorage.setItem(ADMIN_TAB_KEY, tab);
+    } catch {
+      // Ignora: lembrar a aba é só uma conveniência.
+    }
+  };
   const [accesses, setAccesses] = useState<AccessItem[]>([]);
   const [guestName, setGuestName] = useState('');
   const [guestListText, setGuestListText] = useState('');
@@ -566,21 +596,44 @@ export default function AdminPage() {
     <main className="relative min-h-screen bg-cream px-4 py-10 text-zinc-800 sm:px-6 sm:py-14 lg:px-10">
       <section className="mx-auto w-full max-w-7xl space-y-6">
         <div className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Em telas médias, as abas descem para a linha de baixo quando não cabem ao lado do título. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-6 sm:gap-y-5">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Painel administrativo</p>
-              <h1 className="mt-2 font-display text-5xl leading-none text-zinc-800 sm:text-6xl">Igor &amp; Bianca</h1>
-              <p className="text-sm text-zinc-700">Gerencie códigos de acesso e acompanhe quem já entrou no convite.</p>
+              <p className="mt-2 text-sm text-zinc-700">Gerencie convidados, acessos ao convite e a lista de presentes.</p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full sm:w-auto"
-            >
-              Sair
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <nav
+                role="tablist"
+                aria-label="Seções do painel"
+                className="grid grid-cols-3 gap-1 rounded-[1.25rem] border border-zinc-800/10 bg-cream p-1 sm:flex sm:rounded-full"
+              >
+                {ADMIN_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
+                    onClick={() => selectTab(tab.id)}
+                    className={`rounded-2xl px-2 py-2 text-[0.68rem] font-medium uppercase leading-tight tracking-[0.1em] transition-colors sm:shrink-0 sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-xs sm:tracking-[0.14em] ${
+                      activeTab === tab.id ? 'bg-champagne-600 text-[#fff9f1] shadow-sm' : 'text-zinc-700 hover:bg-zinc-800/5'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full sm:w-auto"
+              >
+                Sair
+              </button>
+            </div>
           </div>
         </div>
 
+        {activeTab === 'codes' ? (
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
             <h2 className="font-display text-4xl leading-none text-zinc-800">Gerar códigos</h2>
@@ -823,7 +876,9 @@ export default function AdminPage() {
             </div>
           </section>
         </div>
+        ) : null}
 
+        {activeTab === 'accesses' ? (
         <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-4xl leading-none text-zinc-800">Pessoas que acessaram o convite</h2>
@@ -1059,8 +1114,9 @@ export default function AdminPage() {
             ) : null}
           </div>
         </section>
+        ) : null}
 
-        <AdminGifts />
+        {activeTab === 'gifts' ? <AdminGifts /> : null}
       </section>
 
       {deleteDialog ? (

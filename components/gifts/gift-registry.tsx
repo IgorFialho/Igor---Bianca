@@ -402,11 +402,14 @@ export function GiftRegistry() {
                   // Card inteiro clicável nos disponíveis (abre o presente com foto e descrição).
                   onClick={isTaken ? undefined : () => openGift(gift)}
                   // Hover só nos disponíveis: o card sobe um pouco, a sombra cresce e a foto aproxima devagar.
-                  className={`flex h-full flex-col overflow-hidden rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] shadow-[0_24px_60px_rgba(47,36,27,0.08)] transition-[opacity,transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] ${
+                  // will-change deixa a camada pronta desde o início: o Safari não pisca cantos quadrados ao começar o hover.
+                  className={`flex h-full flex-col overflow-hidden rounded-[2rem] will-change-transform [backface-visibility:hidden] border border-zinc-800/10 bg-[#fffaf1] shadow-[0_24px_60px_rgba(47,36,27,0.08)] transition-[opacity,transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] ${
                     isTaken ? 'opacity-60' : 'group cursor-pointer hover:-translate-y-2 hover:shadow-[0_32px_70px_rgba(47,36,27,0.16)]'
                   }`}
                 >
-                  <div className="relative aspect-[4/3] w-full">
+                  {/* A foto se recorta sozinha (cantos de cima arredondados + máscara): no Safari, a foto aumentando no hover
+                      escapava do recorte do card por alguns milissegundos e mostrava quinas quadradas escuras. */}
+                  <div className="relative isolate aspect-[4/3] w-full overflow-hidden rounded-t-[calc(2rem-1px)] [-webkit-mask-image:-webkit-radial-gradient(white,black)]">
                     <GiftImage gift={gift} />
                     {isTaken ? (
                       <span className="absolute left-4 top-4 rounded-full bg-[#fffaf1]/95 px-3 py-1 text-xs font-medium text-zinc-800 shadow-sm">

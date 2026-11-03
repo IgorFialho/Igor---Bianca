@@ -204,9 +204,16 @@ export function GiftRegistry() {
     try {
       await navigator.clipboard.writeText(pix.payload);
     } catch {
-      // Sem permissão de área de transferência: seleciona o texto para a pessoa copiar manualmente.
-      const field = document.getElementById('pix-payload') as HTMLTextAreaElement | null;
-      field?.select();
+      // Sem permissão de área de transferência (navegadores antigos/embutidos): copia por um campo invisível temporário.
+      const field = document.createElement('textarea');
+      field.value = pix.payload;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand('copy');
+      field.remove();
     }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2500);
@@ -547,15 +554,13 @@ export function GiftRegistry() {
                               // SVG gerado no nosso servidor pela biblioteca qrcode.
                               dangerouslySetInnerHTML={{ __html: pix.qrSvg }}
                             />
-                            <div className="space-y-2 text-left">
-                              <label htmlFor="pix-payload" className={EYEBROW}>
-                                Pix copia e cola
-                              </label>
-                              <textarea id="pix-payload" readOnly rows={3} value={pix.payload} className={`${FIELD} font-mono text-xs`} />
+                            <div className="space-y-2">
                               <button type="button" onClick={copyPix} className={`${SECONDARY} w-full`}>
-                                {copied ? 'Código copiado ✓' : 'Copiar código'}
+                                {copied ? 'Código copiado ✓' : 'Copiar código Pix'}
                               </button>
-                              <p className="text-xs text-zinc-500">Recebedor: {pix.receiverName}. O valor já vem preenchido.</p>
+                              <p className="text-xs text-zinc-500">
+                                Cole no app do seu banco em &quot;Pix copia e cola&quot;. Recebedor: {pix.receiverName}. O valor já vem preenchido.
+                              </p>
                             </div>
                             <div className="space-y-2 text-left">
                               <label htmlFor="gift-guest-name" className={EYEBROW}>

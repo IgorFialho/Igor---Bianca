@@ -134,6 +134,7 @@ export default function AdminPage() {
   const [codeSearch, setCodeSearch] = useState('');
   const [codeFilter, setCodeFilter] = useState<CodeFilter>('all');
   const [accessSearch, setAccessSearch] = useState('');
+  const [isGeneratingGuestList, setIsGeneratingGuestList] = useState(false);
   const [accessFilter, setAccessFilter] = useState<AccessFilter>('all');
   const [husbandName, setHusbandName] = useState('');
   const [wifeName, setWifeName] = useState('');
@@ -589,6 +590,41 @@ export default function AdminPage() {
     }
 
     setSelectedAccessCodes((current) => Array.from(new Set([...current, ...visibleAccessCodes])));
+  };
+
+  // Baixa o PDF com quem confirmou presença (nomes completos e, quando houver, nome e idade dos filhos).
+  const handleDownloadGuestList = async () => {
+    setIsGeneratingGuestList(true);
+    try {
+      const response = await fetch('/api/admin/guest-list');
+
+      if (response.status === 401) {
+        router.replace('/admin/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'Nao foi possivel gerar a lista de confirmados.');
+      }
+
+      const fileName =
+        response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || 'convidados-confirmados.pdf';
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice({ type: 'success', message: 'Lista de confirmados gerada.' });
+    } catch (downloadError) {
+      const message = downloadError instanceof Error ? downloadError.message : 'Erro inesperado.';
+      setNotice({ type: 'error', message });
+    } finally {
+      setIsGeneratingGuestList(false);
+    }
   };
 
   const handleDeleteSelectedAccesses = () => {
@@ -1087,6 +1123,17 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-4xl leading-none text-zinc-800">Pessoas que acessaram o convite</h2>
             <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDownloadGuestList}
+                disabled={isGeneratingGuestList}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-champagne-600 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-[#fff9f1] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 w-full sm:w-auto"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" />
+                </svg>
+                {isGeneratingGuestList ? 'Gerando PDF...' : 'Lista de confirmados (PDF)'}
+              </button>
               <button
                 type="button"
                 onClick={handleDeleteSelectedAccesses}

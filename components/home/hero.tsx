@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { INTRO_ENTER_EVENT, introHoleRect, isIntroPending } from '@/components/intro-arco';
+import { INTRO_ENTER_EVENT, introHoleRect, isIntroPending, shouldSkipIntro } from '@/components/intro-arco';
 import { FittedText } from './fitted-text';
 
 /** Foto com ponto de foco (object-position, ex.: "50% 30%") para enquadrar os rostos. */
@@ -224,6 +224,11 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headli
   const [justEntered, setJustEntered] = useState(false);
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+
+  // Introdução pulada (#seção ou já entrou antes): a foto não fica encaixada no arco.
+  useEffect(() => {
+    if (shouldSkipIntro()) setIntroOpen(false);
+  }, []);
 
   // Ao clicar em "Clique para entrar", a foto volta ao tamanho normal junto com o zoom do arco.
   useEffect(() => {

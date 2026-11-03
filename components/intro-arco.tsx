@@ -2,7 +2,7 @@
 
 import { useReducedMotion } from 'framer-motion';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type PointerEvent, useLayoutEffect } from 'react';
 
 const INTRO_TEXT = 'bem-vindos à nossa história de amor...';
 const ENTER_LABEL = 'Clique para entrar';
@@ -141,7 +141,7 @@ function IntroArcoOverlay() {
   useEffect(() => {
     if (phase !== 'entering') return;
     const timer = window.setTimeout(() => {
-      hasEnteredSite = true;
+      markEnteredSite();
       setPhase('done');
     }, exitDuration);
     return () => window.clearTimeout(timer);
@@ -249,13 +249,58 @@ function IntroArcoOverlay() {
 
 // A introdução só existe na home (/login; a raiz "/" redireciona para lá).
 const INTRO_PATH = '/login';
-// Depois que a pessoa entra, voltar para a home pela navegação do site não repete a introdução.
+// Depois que a pessoa entra, voltar para a home (pela navegação ou recarregando) não repete a introdução.
 let hasEnteredSite = false;
+const ENTERED_KEY = 'igor-bianca-entered';
+
+/** Link "Início" do menu: abre a home mostrando a introdução de novo. */
+export const INTRO_HOME_HREF = '/login?intro';
+
+function wantsIntro() {
+  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro');
+}
+
+function markEnteredSite() {
+  hasEnteredSite = true;
+  try {
+    window.sessionStorage.setItem(ENTERED_KEY, '1');
+  } catch {
+    // Sem acesso ao armazenamento: vale só até recarregar a página.
+  }
+  // Tira o "?intro" do endereço: recarregar depois de entrar não repete a introdução.
+  if (wantsIntro()) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash);
+}
+
+/**
+ * A introdução não aparece quando a pessoa já entrou no site nesta visita, nem quando chega na home
+ * indo direto para uma seção (ex.: /login#rsvp a partir da lista de presentes). Só no navegador.
+ */
+export function shouldSkipIntro() {
+  // "Início" pede a introdução explicitamente: mostra mesmo para quem já entrou.
+  if (wantsIntro()) return false;
+  if (hasEnteredSite) return true;
+  if (typeof window === 'undefined') return false;
+  if (window.location.hash.length > 1) return true;
+  try {
+    return window.sessionStorage.getItem(ENTERED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export function IntroArco() {
   const pathname = usePathname();
+  const [skip, setSkip] = useState(false);
 
-  if (pathname !== INTRO_PATH || hasEnteredSite) {
+  // Decide no navegador (o servidor não conhece o #seção nem a sessão) antes de pintar a tela.
+  useLayoutEffect(() => {
+    if (shouldSkipIntro()) {
+      hasEnteredSite = true;
+      setSkip(true);
+    }
+  }, [pathname]);
+
+  if (pathname !== INTRO_PATH || hasEnteredSite || skip) {
     return null;
   }
 
@@ -264,7 +309,7 @@ export function IntroArco() {
 
 /** Se a introdução ainda vai aparecer (ou está na tela) nesta visita. */
 export function isIntroPending() {
-  return !hasEnteredSite;
+  return !shouldSkipIntro();
 }
 
 // Buraco transparente de fundo.webp (1517x903), medido pelo canal alfa: centro e tamanho em frações da imagem.

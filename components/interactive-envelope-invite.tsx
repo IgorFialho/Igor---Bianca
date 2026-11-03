@@ -1,12 +1,25 @@
 "use client";
 
 import { Poppins } from 'next/font/google';
+import Link from 'next/link';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { AttendanceChoice } from '@/lib/invite';
 import { INVITE_ACCESS_KEY, MESSAGE_MAX_LENGTH, limitMessage, messageLength, weddingDetails } from '@/lib/invite';
 import { FittedText } from '@/components/home/fitted-text';
 import { EmojiPicker } from '@/components/emoji-picker';
+import { SiteHeader } from '@/components/home/site-header';
+import { INTRO_HOME_HREF } from '@/components/intro-arco';
+
+// Menu da home, sem "Confirmar presença" (é esta página); as seções ficam na home (/login#secao).
+const NAV_LINKS = [
+  { label: 'Início', href: INTRO_HOME_HREF },
+  { label: 'Nossa história', href: '/login#nossa-historia' },
+  { label: 'Cerimônia', href: '/login#cerimonia' },
+  { label: 'Mensagens', href: '/login#mensagens' },
+  { label: 'Lista de presentes', href: '/presentes' },
+  { label: 'Perguntas', href: '/login#perguntas' },
+];
 
 // Fonte do design "Save the Date" (textos em branco sobre as flores).
 const poppins = Poppins({ subsets: ['latin'], weight: ['400', '500'] });
@@ -369,7 +382,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
       {isLocked ? (
         <div className="rounded-2xl border border-zinc-800/10 bg-cream px-5 py-4 text-center text-sm text-zinc-600">
           <p>Sua resposta já foi registrada. Obrigado!</p>
-          <a href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</a>
+          <Link href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</Link>
         </div>
       ) : (
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -578,7 +591,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
             ) : null}
             {isSubmitted && attendance === 'yes' ? (
               <motion.div key="gifts-link" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
-                <a href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</a>
+                <Link href="/presentes" className="mt-4 inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5">Ver lista de presentes</Link>
               </motion.div>
             ) : null}
           </AnimatePresence>
@@ -589,6 +602,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
   return (
     <main className={`relative flex min-h-screen flex-col items-center px-4 py-14 text-zinc-800 sm:px-6 sm:py-16 ${className || ''}`}>
+      <SiteHeader links={NAV_LINKS} alwaysLight />
       {/* Fundo: jardim de rosas brancas (foto de Roman Odintsov no Pexels); versão menor no celular.
           O foco fica no canteiro de rosas, que é o que aparece no corte vertical do celular. */}
       <picture className="pointer-events-none fixed inset-0 z-0">

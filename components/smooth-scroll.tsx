@@ -12,6 +12,21 @@ export function SmoothScroll() {
   const isAdminRoute = pathname.startsWith('/admin');
 
   useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    const scrollToSection = () => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      // Desconta o menu fixo (~96px), como os links "#seção" do menu.
+      const top = element.getBoundingClientRect().top + window.scrollY - 96;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' as ScrollBehavior });
+    };
+    // Repete algumas vezes: fotos e seções presas na tela mudam a altura da página ao carregar.
+    const timers = [50, 400, 1200].map((delay) => window.setTimeout(scrollToSection, delay));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [pathname]);
+
+  useEffect(() => {
     if (isAdminRoute) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 

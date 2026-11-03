@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { INVITE_ACCESS_KEY } from '@/lib/invite';
 import { FittedText } from '@/components/home/fitted-text';
@@ -9,6 +10,7 @@ import { Hero, type HeroPhoto } from '@/components/home/hero';
 import { Reveal, REVEAL_EASE } from '@/components/home/reveal';
 import { ScrollWords } from '@/components/home/scroll-words';
 import { SiteHeader } from '@/components/home/site-header';
+import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import { StoryScroll, type StoryChapter } from '@/components/home/story-scroll';
 import { ClickPetals } from '@/components/home/click-petals';
 import { DetailsSection, type GuestMessage } from '@/components/home/details-section';
@@ -106,6 +108,7 @@ const SECTION_BACKGROUNDS: SectionBackground[] = [
 ];
 
 const NAV_LINKS = [
+  { label: 'Início', href: INTRO_HOME_HREF },
   { label: 'Nossa história', href: '#nossa-historia' },
   { label: 'Cerimônia', href: '#cerimonia' },
   { label: 'Confirmar presença', href: '#rsvp' },
@@ -441,12 +444,12 @@ export default function LoginPage() {
             </p>
           </Reveal>
           <Reveal delay={0.28} className="mt-8">
-            <a
+            <Link
               href="/presentes"
               className="inline-flex items-center justify-center rounded-full bg-champagne-600 px-10 py-4 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] hover:scale-[1.02] md:text-sm"
             >
               Ver lista de presentes
-            </a>
+            </Link>
           </Reveal>
         </div>
       </section>

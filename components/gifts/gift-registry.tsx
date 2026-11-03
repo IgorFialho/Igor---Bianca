@@ -1,15 +1,26 @@
 "use client";
 
 import { AnimatePresence, motion } from 'framer-motion';
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Portal } from '@/components/home/portal';
 import { Reveal } from '@/components/home/reveal';
+import { SiteHeader } from '@/components/home/site-header';
+import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import { INVITE_ACCESS_KEY } from '@/lib/invite';
 import type { PublicGift } from '@/lib/gifts';
 
 const THANK_YOU_PHOTO = '/imagens/casal/casal-08.jpeg';
 const GUEST_NAME_KEY = 'igor-bianca-gift-guest-name';
+
+// Mesmo menu da home, sem "Lista de presentes" (já estamos nela); as seções ficam lá, então os links apontam para /login#secao.
+const NAV_LINKS = [
+  { label: 'Início', href: INTRO_HOME_HREF },
+  { label: 'Nossa história', href: '/login#nossa-historia' },
+  { label: 'Cerimônia', href: '/login#cerimonia' },
+  { label: 'Confirmar presença', href: '/login#rsvp' },
+  { label: 'Mensagens', href: '/login#mensagens' },
+  { label: 'Perguntas', href: '/login#perguntas' },
+];
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;
 
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
@@ -166,21 +177,16 @@ export function GiftRegistry() {
 
   return (
     <main className="relative min-h-screen bg-cream px-6 pb-24 pt-8 text-zinc-800 md:px-10">
-      {/* Link à direita: o canto superior esquerdo é ocupado pelo player de música. */}
-      <nav className="mx-auto flex w-full max-w-6xl items-center justify-end">
-        <Link href="/login" className={`${EYEBROW} transition-opacity hover:opacity-70`}>
-          ← Voltar ao site
-        </Link>
-      </nav>
+      <SiteHeader ctaLabel="Confirmar presença" ctaHref="/login#rsvp" links={NAV_LINKS} alwaysDark />
 
       <header className="mx-auto mt-16 max-w-3xl text-center md:mt-20">
         <Reveal>
           <p className={EYEBROW}>Lista de presentes</p>
-          <h1 className="mt-4 font-display text-[3rem] leading-[0.92] md:text-[4.5rem]">Um presente para o nosso novo lar</h1>
+          <h1 className="mt-4 font-display text-[3rem] leading-[0.92] md:text-[4.5rem]">U m presente para o nosso novo lar</h1>
         </Reveal>
         <Reveal delay={0.14}>
           <p className="mx-auto mt-6 max-w-2xl text-base text-zinc-600 md:text-lg">
-            Sua presença é o nosso maior presente. Se quiser nos presentear, escolha um item abaixo: você pode
+            Para nos presentear, escolha um item abaixo: você pode
             enviar o valor por Pix ou comprar na loja indicada.
           </p>
         </Reveal>
@@ -199,9 +205,11 @@ export function GiftRegistry() {
             return (
               <Reveal key={gift.id} delay={(index % 3) * 0.1}>
                 <article
+                  // Card inteiro clicável nos disponíveis (abre o presente com foto e descrição).
+                  onClick={isTaken ? undefined : () => openGift(gift)}
                   // Hover só nos disponíveis: o card sobe um pouco, a sombra cresce e a foto aproxima devagar.
                   className={`flex h-full flex-col overflow-hidden rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] shadow-[0_24px_60px_rgba(47,36,27,0.08)] transition-[opacity,transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] ${
-                    isTaken ? 'opacity-60' : 'group hover:-translate-y-2 hover:shadow-[0_32px_70px_rgba(47,36,27,0.16)]'
+                    isTaken ? 'opacity-60' : 'group cursor-pointer hover:-translate-y-2 hover:shadow-[0_32px_70px_rgba(47,36,27,0.16)]'
                   }`}
                 >
                   <div className="relative aspect-[4/3] w-full">
@@ -219,7 +227,10 @@ export function GiftRegistry() {
                     <div className="mt-auto pt-6">
                       <button
                         type="button"
-                        onClick={() => openGift(gift)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openGift(gift);
+                        }}
                         disabled={isTaken}
                         className={`${PRIMARY} w-full`}
                       >
@@ -249,19 +260,24 @@ export function GiftRegistry() {
               onClick={() => setSelected(null)}
             >
               <motion.div
-                className="max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] p-6 text-center shadow-2xl sm:rounded-[2rem] sm:p-8"
+                className={`relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] text-center shadow-2xl transition-[max-width] duration-300 sm:rounded-[2rem] ${
+                  // Na escolha, sem espaçamento interno: a foto vai até as bordas (o texto tem o próprio espaçamento).
+                  // No celular a folha começa mais alta (pelo menos 82% da tela) e cresce com descrições longas (até 92%, depois rola).
+                  step === 'choose' ? 'flex min-h-[82svh] flex-col md:block md:min-h-0 md:max-w-4xl md:overflow-hidden' : 'p-6 sm:p-8'
+                }`}
                 initial={{ y: 40 }}
                 animate={{ y: 0 }}
                 exit={{ y: 40 }}
                 transition={{ duration: 0.45, ease: PANEL_EASE }}
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex justify-end">
+                {/* Na etapa de escolha, o botão fica por cima da foto, no canto, para ela ir de ponta a ponta. */}
+                <div className={`flex justify-end ${step === 'choose' ? 'absolute right-4 top-4 z-10 md:right-6 md:top-6' : ''}`}>
                   <button
                     type="button"
                     onClick={() => setSelected(null)}
                     aria-label="Fechar"
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800/10 text-zinc-800 hover:bg-zinc-800/5"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800/10 bg-[#fffaf1]/90 text-zinc-800 backdrop-blur-sm hover:bg-[#fffaf1]"
                   >
                     ✕
                   </button>
@@ -282,11 +298,22 @@ export function GiftRegistry() {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className={step === 'choose' ? 'flex flex-1 flex-col md:grid md:min-h-[30rem] md:grid-cols-2 md:items-stretch' : ''}>
+                    {step === 'choose' ? (
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6edd7] md:aspect-auto md:h-full">
+                        <GiftImage gift={selected} />
+                      </div>
+                    ) : null}
+                  <div className={`space-y-6 ${step === 'choose' ? 'flex flex-1 flex-col justify-center p-6 sm:p-8 md:p-10 md:text-left' : ''}`}>
                     <div>
                       <p className={EYEBROW}>Presentear</p>
                       <h2 className="mt-2 font-display text-4xl leading-tight">{selected.title}</h2>
                       <p className="mt-2 text-2xl text-champagne-700">{formatPrice(selected.priceCents)}</p>
+                      {step === 'choose' && selected.description ? (
+                        <p className="mx-auto mt-4 max-w-md whitespace-pre-line text-base leading-relaxed text-zinc-600 md:mx-0">
+                          {selected.description}
+                        </p>
+                      ) : null}
                     </div>
 
                     {step === 'choose' ? (
@@ -389,6 +416,7 @@ export function GiftRegistry() {
                         ← Escolher outra forma
                       </button>
                     ) : null}
+                  </div>
                   </div>
                 )}
               </motion.div>

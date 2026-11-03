@@ -457,7 +457,9 @@ export default function LoginPage() {
       <FaqSection id="perguntas" title="Perguntas e respostas" intro="Tudo o que você precisa saber antes do grande dia." items={FAQ_ITEMS} />
 
       <footer className="relative h-[100svh] w-full px-3 pb-4 pt-3 md:px-4 md:pb-6 md:pt-4 lg:px-5 lg:pt-5">
-        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] px-6 text-center">
+        {/* isolate + máscara: no Safari, as fotos do carrossel (que animam opacidade e zoom) escapavam do recorte
+            arredondado durante a troca e piscavam com cantos quadrados; a máscara obriga o recorte nas camadas. */}
+        <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] px-6 text-center [-webkit-mask-image:-webkit-radial-gradient(white,black)]">
           <FooterCarousel photos={FOOTER_PHOTOS} intervalSeconds={8} />
           <p className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-white md:bottom-5 md:text-xs">
             © Desenvolvido por{' '}

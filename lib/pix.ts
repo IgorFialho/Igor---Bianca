@@ -40,10 +40,14 @@ export function getPixConfig(): PixConfig | null {
   return { key, receiverName, receiverCity };
 }
 
-/** Monta o código para um valor em centavos; `reference` identifica o pagamento no extrato (até 25 letras/números). */
-export function buildPixPayload(config: PixConfig, amountCents: number, reference: string) {
+/**
+ * Monta o código para um valor em centavos.
+ * O identificador da transação (txid) fica "***", o padrão para QR Code estático: um txid próprio (ex.: "PRESENTE33")
+ * não é registrado no banco de quem recebe, e alguns bancos recusam o Pix ("instituição de destino não está funcionando").
+ */
+export function buildPixPayload(config: PixConfig, amountCents: number) {
   const merchantAccount = field('00', 'br.gov.bcb.pix') + field('01', config.key);
-  const txid = reference.replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***';
+  const txid = '***';
 
   const payload =
     field('00', '01') +

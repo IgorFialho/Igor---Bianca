@@ -128,6 +128,10 @@ export function GiftRegistry() {
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  // Confirmação aberta por cima do presente ("Já fiz o Pix" / "Já comprei"), para evitar clique sem querer.
+  const [confirming, setConfirming] = useState<'pix' | 'store' | null>(null);
+  const confirmingRef = useRef(confirming);
+  confirmingRef.current = confirming;
 
   useEffect(() => {
     setInviteCode(window.sessionStorage.getItem(INVITE_ACCESS_KEY));
@@ -167,7 +171,9 @@ export function GiftRegistry() {
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelected(null);
+      if (event.key !== 'Escape') return;
+      if (confirmingRef.current) setConfirming(null);
+      else setSelected(null);
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -183,6 +189,7 @@ export function GiftRegistry() {
     setPixError('');
     setCopied(false);
     setSubmitError('');
+    setConfirming(null);
   };
 
   const goToPix = async () => {
@@ -219,6 +226,15 @@ export function GiftRegistry() {
     window.setTimeout(() => setCopied(false), 2500);
   };
 
+  const askConfirmation = (method: 'pix' | 'store') => {
+    if (guestName.trim().length < 2) {
+      setSubmitError('Informe seu nome para os noivos saberem quem presenteou.');
+      return;
+    }
+    setSubmitError('');
+    setConfirming(method);
+  };
+
   const confirmGift = async (method: 'pix' | 'store') => {
     if (!selected) return;
     const name = guestName.trim();
@@ -248,6 +264,7 @@ export function GiftRegistry() {
       void loadGifts();
     } finally {
       setIsSubmitting(false);
+      setConfirming(null);
     }
   };
 
@@ -579,7 +596,7 @@ export function GiftRegistry() {
                                 className={FIELD}
                               />
                             </div>
-                            <button type="button" onClick={() => confirmGift('pix')} disabled={isSubmitting} className={`${PRIMARY} w-full`}>
+                            <button type="button" onClick={() => askConfirmation('pix')} disabled={isSubmitting} className={`${PRIMARY} w-full`}>
                               {isSubmitting ? 'Enviando…' : 'Já fiz o Pix'}
                             </button>
                           </>
@@ -613,7 +630,7 @@ export function GiftRegistry() {
                             className={FIELD}
                           />
                         </div>
-                        <button type="button" onClick={() => confirmGift('store')} disabled={isSubmitting} className={`${PRIMARY} w-full`}>
+                        <button type="button" onClick={() => askConfirmation('store')} disabled={isSubmitting} className={`${PRIMARY} w-full`}>
                           {isSubmitting ? 'Enviando…' : 'Já comprei'}
                         </button>
                       </div>
@@ -629,6 +646,57 @@ export function GiftRegistry() {
                   </div>
                   </div>
                 )}
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {selected && confirming ? (
+            <motion.div
+              key="gift-confirm"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="gift-confirm-title"
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-zinc-950/40 p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => (isSubmitting ? undefined : setConfirming(null))}
+            >
+              <motion.div
+                className="w-full max-w-sm space-y-5 rounded-[2rem] bg-[#fffaf1] p-6 text-center shadow-2xl sm:p-8"
+                initial={{ scale: 0.94, y: 12 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.94, y: 12 }}
+                transition={{ duration: 0.3, ease: PANEL_EASE }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h3 id="gift-confirm-title" className="font-display text-3xl leading-tight">
+                  {confirming === 'pix' ? 'Você já enviou o Pix?' : 'Você já comprou o presente?'}
+                </h3>
+                <p className="text-sm text-zinc-600">
+                  {confirming === 'pix' ? (
+                    <>
+                      Confirme só depois de pagar os <strong className="text-zinc-800">{formatPrice(selected.priceCents)}</strong> de{' '}
+                      <strong className="text-zinc-800">{selected.title}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Confirme só depois de comprar <strong className="text-zinc-800">{selected.title}</strong> na loja.
+                    </>
+                  )}{' '}
+                  O presente ficará reservado no nome de <strong className="text-zinc-800">{guestName.trim()}</strong> até os noivos
+                  conferirem.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button type="button" onClick={() => confirmGift(confirming)} disabled={isSubmitting} className={`${PRIMARY} w-full`}>
+                    {isSubmitting ? 'Enviando…' : confirming === 'pix' ? 'Sim, já enviei' : 'Sim, já comprei'}
+                  </button>
+                  <button type="button" onClick={() => setConfirming(null)} disabled={isSubmitting} className={`${SECONDARY} w-full`}>
+                    Ainda não
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           ) : null}

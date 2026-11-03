@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // A referência aparece no extrato e ajuda os noivos a saber de qual presente é o Pix.
-    const payload = buildPixPayload(config, gift.price_cents, `PRESENTE${giftId}`);
+    const payload = buildPixPayload(config, gift.price_cents);
     const qrSvg = await QRCode.toString(payload, {
       type: 'svg',
       margin: 1,

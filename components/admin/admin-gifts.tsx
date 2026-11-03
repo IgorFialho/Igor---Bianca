@@ -338,7 +338,7 @@ export function AdminGifts() {
       <div className="mt-10">
         <p className={EYEBROW}>Quem presenteou</p>
         <p className="mt-2 text-sm text-zinc-600">
-          Pix: confira no extrato (a referência aparece como PRESENTE + número do presente) e confirme. Cancelar
+          Pix: confira no extrato (pelo valor e pelo nome de quem enviou) e confirme. Cancelar
           libera o presente na lista.
         </p>
         <div className="mt-4 max-h-[28rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream">

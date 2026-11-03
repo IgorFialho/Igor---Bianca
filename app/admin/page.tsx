@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
+import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 
 type InviteCode = {
   id: string;
@@ -67,6 +68,9 @@ export default function AdminPage() {
   const router = useRouter();
   const [codes, setCodes] = useState<InviteCode[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>('codes');
+  // Ação aguardando confirmação na janela (sair, gerar códigos, exigir dados dos filhos).
+  const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
+  const closeConfirm = useCallback(() => setConfirmAction(null), []);
 
   useEffect(() => {
     try {
@@ -163,8 +167,26 @@ export default function AdminPage() {
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
 
-  const handleGenerateCodes = async (event: FormEvent<HTMLFormElement>) => {
+  const handleGenerateCodes = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Mesma regra do servidor: um código por linha da lista de cima; vários nomes no campo de baixo viram um código só.
+    const perLine = guestListText.split('\n').filter((item) => item.trim()).length;
+    const linkedNames = guestName.split(/\r?\n/).filter((item) => item.trim()).length;
+    const total = perLine > 0 ? perLine : linkedNames > 1 ? 1 : quantity;
+    setConfirmAction({
+      title: 'Gerar códigos',
+      message: (
+        <>
+          Gerar <strong className="text-zinc-900">{total === 1 ? '1 código' : `${total} códigos`}</strong> de convite
+          {perLine > 0 ? ', um para cada nome da lista' : linkedNames > 1 ? ' vinculado aos nomes informados' : ''}?
+        </>
+      ),
+      confirmLabel: 'Gerar',
+      onConfirm: generateCodes,
+    });
+  };
+
+  const generateCodes = async () => {
     setIsGenerating(true);
     setError('');
     setGeneratedInfo('');
@@ -223,9 +245,16 @@ export default function AdminPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await fetch('/api/admin/logout', { method: 'POST' });
-    router.replace('/admin/login');
+  const handleLogout = () => {
+    setConfirmAction({
+      title: 'Sair do painel',
+      message: 'Deseja sair do painel administrativo? Para voltar, será preciso digitar a senha de novo.',
+      confirmLabel: 'Sair',
+      onConfirm: async () => {
+        await fetch('/api/admin/logout', { method: 'POST' });
+        router.replace('/admin/login');
+      },
+    });
   };
 
   const handleCopyCode = async (code: string, label: string) => {
@@ -342,6 +371,23 @@ export default function AdminPage() {
       setDeletingCodeId(null);
       setIsDeletingBatch(false);
     }
+  };
+
+  const askToggleRequiresChildrenDetails = (codeId: string, code: string, nextValue: boolean) => {
+    setConfirmAction({
+      title: nextValue ? 'Exigir dados dos filhos' : 'Não exigir dados dos filhos',
+      message: nextValue ? (
+        <>
+          Exigir nome e idade dos filhos no RSVP do código <strong className="text-zinc-900">{code}</strong>?
+        </>
+      ) : (
+        <>
+          Deixar de exigir nome e idade dos filhos no RSVP do código <strong className="text-zinc-900">{code}</strong>?
+        </>
+      ),
+      confirmLabel: nextValue ? 'Exigir' : 'Não exigir',
+      onConfirm: () => handleToggleRequiresChildrenDetails(codeId, nextValue),
+    });
   };
 
   const handleToggleRequiresChildrenDetails = async (codeId: string, nextValue: boolean) => {
@@ -762,7 +808,7 @@ export default function AdminPage() {
                       type="checkbox"
                       checked={item.requires_children_details}
                       onChange={(event) =>
-                        handleToggleRequiresChildrenDetails(item.id, event.target.checked)
+                        askToggleRequiresChildrenDetails(item.id, item.code, event.target.checked)
                       }
                       disabled={togglingChildrenCodeId === item.id || isDeletingBatch || deletingCodeId !== null}
                       className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
@@ -841,7 +887,7 @@ export default function AdminPage() {
                             aria-label={`Exigir dados dos filhos para ${item.code}`}
                             checked={item.requires_children_details}
                             onChange={(event) =>
-                              handleToggleRequiresChildrenDetails(item.id, event.target.checked)
+                              askToggleRequiresChildrenDetails(item.id, item.code, event.target.checked)
                             }
                             disabled={
                               togglingChildrenCodeId === item.id ||
@@ -1118,6 +1164,8 @@ export default function AdminPage() {
 
         {activeTab === 'gifts' ? <AdminGifts /> : null}
       </section>
+
+      <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
 
       {deleteDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">

@@ -150,10 +150,16 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const body = await request.json();
+    // Registro do histórico "Quem presenteou": apagar um ativo libera o presente na lista.
+    if (body?.contributionId) {
+      const result = await db.query(`DELETE FROM gift_contributions WHERE id = $1`, [String(body.contributionId)]);
+      if (!result.rowCount) return NextResponse.json({ error: 'Registro não encontrado.' }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
     await db.query(`DELETE FROM gifts WHERE id = $1`, [String(body?.giftId ?? '')]);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('Falha ao excluir presente', error);
-    return NextResponse.json({ error: 'Erro ao excluir presente.' }, { status: 500 });
+    console.error('Falha ao excluir', error);
+    return NextResponse.json({ error: 'Erro ao excluir.' }, { status: 500 });
   }
 }

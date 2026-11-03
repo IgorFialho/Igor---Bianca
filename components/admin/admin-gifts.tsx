@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 
 type AdminGift = {
   id: string;
@@ -21,7 +22,6 @@ type AdminContribution = {
   invite_code_used: string;
   guest_name: string | null;
   method: 'pix' | 'store';
-  message: string | null;
   status: 'pending' | 'confirmed' | 'cancelled';
   created_at: string;
   confirmed_at: string | null;
@@ -92,6 +92,9 @@ export function AdminGifts() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState('');
+  // Ação aguardando confirmação na janela (excluir, ocultar, confirmar Pix…).
+  const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
+  const closeConfirm = useCallback(() => setConfirmAction(null), []);
   const [search, setSearch] = useState('');
   const [giftFilter, setGiftFilter] = useState<GiftFilter>('all');
 
@@ -152,8 +155,27 @@ export function AdminGifts() {
     setFormMessage('');
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const title = form.title.trim() || 'este presente';
+    setConfirmAction(
+      editingId
+        ? {
+            title: 'Salvar alterações',
+            message: <>Salvar as alterações em <strong className="text-zinc-900">{title}</strong>? A lista de presentes será atualizada na hora.</>,
+            confirmLabel: 'Salvar',
+            onConfirm: saveGift,
+          }
+        : {
+            title: 'Adicionar presente',
+            message: <>Adicionar <strong className="text-zinc-900">{title}</strong> à lista de presentes? Ele aparece para os convidados na hora.</>,
+            confirmLabel: 'Adicionar',
+            onConfirm: saveGift,
+          }
+    );
+  };
+
+  const saveGift = async () => {
     setIsSaving(true);
     setFormMessage('');
     try {
@@ -310,7 +332,23 @@ export function AdminGifts() {
                     <button
                       type="button"
                       disabled={busyId === gift.id}
-                      onClick={() => request('PATCH', { action: 'toggle', giftId: gift.id, isActive: !gift.is_active }, gift.id)}
+                      onClick={() =>
+                        setConfirmAction(
+                          gift.is_active
+                            ? {
+                                title: 'Ocultar presente',
+                                message: <>Ocultar <strong className="text-zinc-900">{gift.title}</strong>? Ele deixa de aparecer para os convidados, mas continua cadastrado.</>,
+                                confirmLabel: 'Ocultar',
+                                onConfirm: () => request('PATCH', { action: 'toggle', giftId: gift.id, isActive: false }, gift.id),
+                              }
+                            : {
+                                title: 'Mostrar presente',
+                                message: <>Mostrar <strong className="text-zinc-900">{gift.title}</strong> de novo na lista de presentes?</>,
+                                confirmLabel: 'Mostrar',
+                                onConfirm: () => request('PATCH', { action: 'toggle', giftId: gift.id, isActive: true }, gift.id),
+                              }
+                        )
+                      }
                       className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
                     >
                       {gift.is_active ? 'Ocultar' : 'Mostrar'}
@@ -318,11 +356,16 @@ export function AdminGifts() {
                     <button
                       type="button"
                       disabled={busyId === gift.id}
-                      onClick={() => {
-                        if (window.confirm(`Excluir "${gift.title}"? O histórico de quem o escolheu também será apagado.`)) {
-                          void request('DELETE', { giftId: gift.id }, gift.id);
-                        }
-                      }}
+                      onClick={() =>
+                        setConfirmAction({
+                          eyebrow: 'Confirmar exclusão',
+                          title: 'Excluir presente',
+                          message: <>Excluir <strong className="text-zinc-900">{gift.title}</strong>? O histórico de quem o escolheu também será apagado. Esta ação não pode ser desfeita.</>,
+                          confirmLabel: 'Excluir',
+                          tone: 'danger',
+                          onConfirm: () => request('DELETE', { giftId: gift.id }, gift.id),
+                        })
+                      }
                       className={`${SMALL} border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`}
                     >
                       Excluir
@@ -339,7 +382,7 @@ export function AdminGifts() {
         <p className={EYEBROW}>Quem presenteou</p>
         <p className="mt-2 text-sm text-zinc-600">
           Pix: confira no extrato (pelo valor e pelo nome de quem enviou) e confirme. Cancelar
-          libera o presente na lista.
+          libera o presente na lista; Excluir apaga o registro do histórico.
         </p>
         <div className="mt-4 max-h-[28rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream">
           <table className="w-full text-left text-sm">
@@ -348,7 +391,6 @@ export function AdminGifts() {
                 <th className="px-4 py-3">Presente</th>
                 <th className="px-4 py-3">Convidado</th>
                 <th className="px-4 py-3">Forma</th>
-                <th className="px-4 py-3">Recado</th>
                 <th className="px-4 py-3">Situação</th>
                 <th className="px-4 py-3 text-right">Ação</th>
               </tr>
@@ -365,7 +407,6 @@ export function AdminGifts() {
                     <p className="text-xs text-zinc-500">{item.invite_code_used}</p>
                   </td>
                   <td className="px-4 py-3">{item.method === 'pix' ? 'Pix' : 'Comprou na loja'}</td>
-                  <td className="max-w-[16rem] px-4 py-3 [overflow-wrap:anywhere]">{item.message || <span className="text-zinc-400">—</span>}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_CLASS[item.status]}`}>{STATUS_LABEL[item.status]}</span>
                   </td>
@@ -375,7 +416,20 @@ export function AdminGifts() {
                         <button
                           type="button"
                           disabled={busyId === item.id}
-                          onClick={() => request('PATCH', { action: 'contribution', contributionId: item.id, status: 'confirmed' }, item.id)}
+                          onClick={() =>
+                            setConfirmAction({
+                              title: 'Confirmar presente',
+                              message: (
+                                <>
+                                  Confirmar que <strong className="text-zinc-900">{formatNames(item.guest_name, item.invite_code_used)}</strong> presenteou{' '}
+                                  <strong className="text-zinc-900">{item.gift_title}</strong> ({formatPrice(item.price_cents)})?
+                                  {item.method === 'pix' ? ' Confira antes se o Pix caiu no extrato.' : ''}
+                                </>
+                              ),
+                              confirmLabel: 'Confirmar',
+                              onConfirm: () => request('PATCH', { action: 'contribution', contributionId: item.id, status: 'confirmed' }, item.id),
+                            })
+                          }
                           className={`${SMALL} border-olive-300 bg-olive-50 text-olive-800 hover:bg-olive-100`}
                         >
                           Confirmar
@@ -385,12 +439,48 @@ export function AdminGifts() {
                         <button
                           type="button"
                           disabled={busyId === item.id}
-                          onClick={() => request('PATCH', { action: 'contribution', contributionId: item.id, status: 'cancelled' }, item.id)}
+                          onClick={() =>
+                            setConfirmAction({
+                              title: 'Cancelar presente',
+                              message: (
+                                <>
+                                  Cancelar o registro de <strong className="text-zinc-900">{formatNames(item.guest_name, item.invite_code_used)}</strong> para{' '}
+                                  <strong className="text-zinc-900">{item.gift_title}</strong>? O presente volta a ficar disponível na lista.
+                                </>
+                              ),
+                              confirmLabel: 'Cancelar registro',
+                              tone: 'danger',
+                              onConfirm: () => request('PATCH', { action: 'contribution', contributionId: item.id, status: 'cancelled' }, item.id),
+                            })
+                          }
                           className={`${SMALL} border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`}
                         >
                           Cancelar
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        disabled={busyId === item.id}
+                        onClick={() =>
+                          setConfirmAction({
+                            eyebrow: 'Confirmar exclusão',
+                            title: 'Excluir do histórico',
+                            message: (
+                              <>
+                                Excluir o registro de <strong className="text-zinc-900">{formatNames(item.guest_name, item.invite_code_used)}</strong> para{' '}
+                                <strong className="text-zinc-900">{item.gift_title}</strong>?
+                                {item.status === 'cancelled' ? '' : ' O presente volta a ficar disponível na lista.'} Esta ação não pode ser desfeita.
+                              </>
+                            ),
+                            confirmLabel: 'Excluir',
+                            tone: 'danger',
+                            onConfirm: () => request('DELETE', { contributionId: item.id }, item.id),
+                          })
+                        }
+                        className={`${SMALL} border-zinc-800/20 text-zinc-700 hover:bg-zinc-800/5`}
+                      >
+                        Excluir
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -400,6 +490,8 @@ export function AdminGifts() {
           {!isLoading && contributions.length === 0 ? <p className="p-4 text-sm text-zinc-600">Ninguém presenteou ainda.</p> : null}
         </div>
       </div>
+
+      <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
     </section>
   );
 }

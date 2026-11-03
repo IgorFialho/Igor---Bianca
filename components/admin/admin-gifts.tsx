@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
+import { SearchField } from '@/components/admin/search-field';
 
 type AdminGift = {
   id: string;
@@ -30,7 +31,7 @@ type AdminContribution = {
 const CARD = 'rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8';
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
 const FIELD =
-  'w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
+  'w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
 const PRIMARY =
   'inline-flex items-center justify-center rounded-full bg-champagne-600 px-8 py-3.5 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100';
 const SMALL = 'rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60';
@@ -61,7 +62,7 @@ function priceToInput(cents: number) {
 type GiftFilter = 'all' | 'available' | 'pending' | 'confirmed' | 'hidden';
 
 const GIFT_FILTERS: { id: GiftFilter; label: string }[] = [
-  { id: 'all', label: 'Todas as situações' },
+  { id: 'all', label: 'Todos' },
   { id: 'available', label: 'Disponíveis' },
   { id: 'pending', label: 'Aguardando confirmação' },
   { id: 'confirmed', label: 'Confirmados' },
@@ -259,28 +260,20 @@ export function AdminGifts() {
             Presentes cadastrados ({isFiltering ? `${filteredGifts.length} de ${gifts.length}` : gifts.length})
           </p>
           {gifts.length > 0 ? (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por nome, descrição ou convidado"
-                aria-label="Buscar presente"
-                className={`${FIELD} py-2.5`}
-              />
-              <select
-                value={giftFilter}
-                onChange={(event) => setGiftFilter(event.target.value as GiftFilter)}
-                aria-label="Filtrar por situação"
-                className={`${FIELD} py-2.5 sm:w-60`}
-              >
-                {GIFT_FILTERS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SearchField
+              value={search}
+              onChange={setSearch}
+              placeholder="Buscar por nome, descrição ou convidado"
+              label="Buscar presente"
+              resultCount={filteredGifts.length}
+              filter={{
+                legend: 'Situação',
+                options: GIFT_FILTERS,
+                value: giftFilter,
+                defaultValue: 'all',
+                onChange: setGiftFilter,
+              }}
+            />
           ) : null}
           {!isLoading && gifts.length > 0 && filteredGifts.length === 0 ? (
             <p className="text-sm text-zinc-600">

@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
+import { SearchField } from '@/components/admin/search-field';
 
 type InviteCode = {
   id: string;
@@ -64,6 +65,43 @@ const ADMIN_TABS: { id: AdminTab; label: string }[] = [
 // Lembra a última aba aberta: recarregar o painel volta para ela.
 const ADMIN_TAB_KEY = 'igor-bianca-admin-tab';
 
+const INVITE_TYPES = [
+  { key: 'single', label: 'Convidado' },
+  { key: 'couple', label: 'Casal' },
+] as const;
+
+type AccessFilter = 'all' | 'yes' | 'no' | 'pending' | 'message';
+
+const ACCESS_FILTERS: { id: AccessFilter; label: string }[] = [
+  { id: 'all', label: 'Todas' },
+  { id: 'yes', label: 'Aceitaram' },
+  { id: 'no', label: 'Rejeitaram' },
+  { id: 'pending', label: 'Sem resposta' },
+  { id: 'message', label: 'Com mensagem' },
+];
+
+type CodeFilter = 'all' | 'single' | 'couple' | 'children';
+
+const CODE_FILTERS: { id: CodeFilter; label: string }[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'single', label: 'Convidados' },
+  { id: 'couple', label: 'Casais' },
+  { id: 'children', label: 'Exigem dados dos filhos' },
+];
+
+/** Texto sem acentos e em minúsculas, para a busca. */
+function normalize(text: string) {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/** Linhas não vazias do campo de nomes, já sem espaços nas pontas. */
+function nameLines(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [codes, setCodes] = useState<InviteCode[]>([]);
@@ -90,10 +128,16 @@ export default function AdminPage() {
     }
   };
   const [accesses, setAccesses] = useState<AccessItem[]>([]);
-  const [guestName, setGuestName] = useState('');
-  const [guestListText, setGuestListText] = useState('');
+  // "single": um código por linha (cada linha é um convidado); "couple": as linhas são os nomes do casal, num código só.
+  const [inviteType, setInviteType] = useState<'single' | 'couple'>('single');
+  const [namesText, setNamesText] = useState('');
+  const [codeSearch, setCodeSearch] = useState('');
+  const [codeFilter, setCodeFilter] = useState<CodeFilter>('all');
+  const [accessSearch, setAccessSearch] = useState('');
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>('all');
+  const [husbandName, setHusbandName] = useState('');
+  const [wifeName, setWifeName] = useState('');
   const [requiresChildrenDetailsDefault, setRequiresChildrenDetailsDefault] = useState(false);
-  const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -169,49 +213,61 @@ export default function AdminPage() {
 
   const handleGenerateCodes = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Mesma regra do servidor: um código por linha da lista de cima; vários nomes no campo de baixo viram um código só.
-    const perLine = guestListText.split('\n').filter((item) => item.trim()).length;
-    const linkedNames = guestName.split(/\r?\n/).filter((item) => item.trim()).length;
-    const total = perLine > 0 ? perLine : linkedNames > 1 ? 1 : quantity;
+    setError('');
+    if (inviteType === 'couple') {
+      const names = [husbandName.trim(), wifeName.trim()];
+      if (!names[0] || !names[1]) {
+        setError('Para um casal, informe o nome do homem e o da mulher.');
+        return;
+      }
+      setConfirmAction({
+        title: 'Gerar convite',
+        message: (
+          <>
+            Gerar <strong className="text-zinc-900">1 código</strong> de convite para o casal{' '}
+            <strong className="text-zinc-900">{names.join(' e ')}</strong>?
+          </>
+        ),
+        confirmLabel: 'Gerar',
+        onConfirm: () => generateCodes('couple', names),
+      });
+      return;
+    }
+
+    // Convidado: um código por linha.
+    const names = nameLines(namesText);
+    if (names.length === 0) {
+      setError('Informe o nome de pelo menos um convidado.');
+      return;
+    }
     setConfirmAction({
-      title: 'Gerar códigos',
+      title: 'Gerar convites',
       message: (
         <>
-          Gerar <strong className="text-zinc-900">{total === 1 ? '1 código' : `${total} códigos`}</strong> de convite
-          {perLine > 0 ? ', um para cada nome da lista' : linkedNames > 1 ? ' vinculado aos nomes informados' : ''}?
+          Gerar <strong className="text-zinc-900">{names.length === 1 ? '1 código' : `${names.length} códigos`}</strong> de convite
+          {names.length > 1 ? ', um para cada convidado da lista' : <> para <strong className="text-zinc-900">{names[0]}</strong></>}?
         </>
       ),
       confirmLabel: 'Gerar',
-      onConfirm: generateCodes,
+      onConfirm: () => generateCodes('single', names),
     });
   };
 
-  const generateCodes = async () => {
+  const generateCodes = async (type: 'single' | 'couple', names: string[]) => {
     setIsGenerating(true);
     setError('');
     setGeneratedInfo('');
-
-    const guests = guestListText
-      .split('\n')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-
-    const normalizedGuestName = guestName
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0)
-      .join('\n');
 
     try {
       const response = await fetch('/api/admin/codes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quantity,
-          guestName: normalizedGuestName,
-          guests,
-          requiresChildrenDetails: requiresChildrenDetailsDefault,
-        }),
+        // Casal: os nomes vão juntos em guestName (o servidor gera um código só, vinculado a todos).
+        body: JSON.stringify(
+          type === 'couple'
+            ? { quantity: 1, guestName: names.join('\n'), guests: [], requiresChildrenDetails: requiresChildrenDetailsDefault }
+            : { guestName: '', guests: names, requiresChildrenDetails: requiresChildrenDetailsDefault }
+        ),
       });
 
       if (response.status === 401) {
@@ -233,8 +289,9 @@ export default function AdminPage() {
         setGeneratedInfo(`Codigos gerados: ${data.generated.length} de ${data.requested}.`);
       }
 
-      setGuestName('');
-      setGuestListText('');
+      setNamesText('');
+      setHusbandName('');
+      setWifeName('');
       setRequiresChildrenDetailsDefault(false);
       await fetchDashboard();
     } catch (generateError) {
@@ -298,17 +355,34 @@ export default function AdminPage() {
     );
   };
 
+  // Busca na lista de códigos: pelo código ou pelos nomes do convite, sem diferenciar acentos.
+  const codeQuery = normalize(codeSearch.trim());
+  const filteredCodes = codes.filter((item) => {
+    // Casal = código vinculado a mais de um nome (o servidor junta os nomes com "|").
+    const isCouple = (item.guest_name ?? '').includes('|');
+    if (codeFilter === 'single' && isCouple) return false;
+    if (codeFilter === 'couple' && !isCouple) return false;
+    if (codeFilter === 'children' && !item.requires_children_details) return false;
+    return !codeQuery || normalize(`${item.code} ${item.guest_name ?? ''}`).includes(codeQuery);
+  });
+  const isFilteringCodes = codeQuery !== '' || codeFilter !== 'all';
+  const allVisibleSelected =
+    filteredCodes.length > 0 && filteredCodes.every((item) => selectedCodeIds.includes(item.id));
+
+  // "Selecionar todos" vale só para os códigos que aparecem na busca.
   const handleToggleSelectAll = () => {
-    if (codes.length === 0) {
+    if (filteredCodes.length === 0) {
       return;
     }
 
-    if (selectedCodeIds.length === codes.length) {
-      setSelectedCodeIds([]);
+    const visibleIds = filteredCodes.map((item) => item.id);
+
+    if (allVisibleSelected) {
+      setSelectedCodeIds((current) => current.filter((id) => !visibleIds.includes(id)));
       return;
     }
 
-    setSelectedCodeIds(codes.map((item) => item.id));
+    setSelectedCodeIds((current) => Array.from(new Set([...current, ...visibleIds])));
   };
 
   const handleDeleteCode = async () => {
@@ -484,19 +558,37 @@ export default function AdminPage() {
     );
   };
 
+  // Busca e filtro dos acessos: texto em código, nomes e mensagem; filtro pela resposta do RSVP.
+  const accessQuery = normalize(accessSearch.trim());
+  const filteredAccesses = accesses.filter((item) => {
+    if (accessFilter === 'yes' && item.attendance !== 'yes') return false;
+    if (accessFilter === 'no' && item.attendance !== 'no') return false;
+    if (accessFilter === 'pending' && item.attendance) return false;
+    if (accessFilter === 'message' && !item.dietary_notes) return false;
+    if (!accessQuery) return true;
+    return normalize(
+      [item.invite_code_used, item.guest_name, item.responder_full_name, item.children_details, item.dietary_notes]
+        .filter(Boolean)
+        .join(' ')
+    ).includes(accessQuery);
+  });
+  const isFilteringAccesses = accessQuery !== '' || accessFilter !== 'all';
+  const visibleAccessCodes = Array.from(new Set(filteredAccesses.map((item) => item.invite_code_used)));
+  const allVisibleAccessesSelected =
+    visibleAccessCodes.length > 0 && visibleAccessCodes.every((code) => selectedAccessCodes.includes(code));
+
+  // "Selecionar todos" vale só para os acessos que aparecem com a busca/filtro.
   const handleToggleSelectAllAccesses = () => {
-    if (accesses.length === 0) {
+    if (visibleAccessCodes.length === 0) {
       return;
     }
 
-    const allCodes = Array.from(new Set(accesses.map((item) => item.invite_code_used)));
-
-    if (selectedAccessCodes.length === allCodes.length) {
-      setSelectedAccessCodes([]);
+    if (allVisibleAccessesSelected) {
+      setSelectedAccessCodes((current) => current.filter((code) => !visibleAccessCodes.includes(code)));
       return;
     }
 
-    setSelectedAccessCodes(allCodes);
+    setSelectedAccessCodes((current) => Array.from(new Set([...current, ...visibleAccessCodes])));
   };
 
   const handleDeleteSelectedAccesses = () => {
@@ -565,8 +657,6 @@ export default function AdminPage() {
 
     await clearAllAccessHistory();
   };
-
-  const uniqueAccessCodes = Array.from(new Set(accesses.map((item) => item.invite_code_used)));
 
   const formatGuestNames = (rawValue: string | null) => {
     if (!rawValue) {
@@ -680,63 +770,95 @@ export default function AdminPage() {
         </div>
 
         {activeTab === 'codes' ? (
-        <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
-            <h2 className="font-display text-4xl leading-none text-zinc-800">Gerar códigos</h2>
+        <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
+          <h2 className="font-display text-4xl leading-none text-zinc-800">Lista de convidados</h2>
 
-            <form className="mt-4 space-y-3" onSubmit={handleGenerateCodes}>
+          {/* No computador o card ocupa quase a altura da tela; a tabela de códigos acompanha a altura do formulário. */}
+          <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-8 lg:min-h-[max(32rem,calc(100svh-22rem))] lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="lg:flex lg:flex-col">
+            <p className="text-xs lg:flex lg:min-h-[2.375rem] lg:items-center font-medium uppercase tracking-[0.2em] text-zinc-800/70">Gerar códigos</p>
+
+            <form className="mt-4 space-y-3 lg:flex lg:flex-1 lg:flex-col" onSubmit={handleGenerateCodes}>
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="guestListText">
-                  Nome da pessoa ou casal (um por linha)
-                </label>
-                <textarea
-                  id="guestListText"
-                  rows={6}
-                  value={guestListText}
-                  onChange={(event) => setGuestListText(event.target.value)}
-                  className="w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-                  placeholder={"Exemplo:\nJoao e Maria\nFamilia Souza\nCarla Lima"}
-                />
+                <div role="radiogroup" aria-label="Tipo de convite" className="grid grid-cols-2 gap-1 rounded-full border border-zinc-800/10 bg-cream p-1">
+                  {INVITE_TYPES.map((type) => (
+                    <button
+                      key={type.key}
+                      type="button"
+                      role="radio"
+                      aria-checked={inviteType === type.key}
+                      onClick={() => {
+                        setInviteType(type.key);
+                        setError('');
+                      }}
+                      className={`rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition-colors ${
+                        inviteType === type.key ? 'bg-champagne-600 text-[#fff9f1]' : 'text-zinc-700 hover:bg-zinc-800/5'
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <p className="text-xs text-zinc-600">
-                Se preencher os nomes acima, o sistema gera 1 codigo para cada linha.
-              </p>
+              {inviteType === 'couple' ? (
+                <div className="space-y-3">
+                  <div className="grid gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="husbandName">
+                        Nome do homem
+                      </label>
+                      <input
+                        id="husbandName"
+                        value={husbandName}
+                        onChange={(event) => setHusbandName(event.target.value)}
+                        className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                        placeholder="Ex.: Bruno Lima"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="wifeName">
+                        Nome da mulher
+                      </label>
+                      <input
+                        id="wifeName"
+                        value={wifeName}
+                        onChange={(event) => setWifeName(event.target.value)}
+                        className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                        placeholder="Ex.: Ana Lima"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-600">Gera 1 código compartilhado, vinculado aos dois nomes.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
+                  <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="namesText">
+                    Nomes dos convidados (um por linha)
+                  </label>
+                  <textarea
+                    id="namesText"
+                    rows={6}
+                    value={namesText}
+                    onChange={(event) => setNamesText(event.target.value)}
+                    className="w-full rounded-xl lg:flex-1 border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                    placeholder={'Exemplo:\nCarla Lima\nPedro Souza\nFamília Souza'}
+                  />
+                  <p className="text-xs text-zinc-600">Gera 1 código para cada linha.</p>
+                </div>
+              )}
 
-              <p className="text-xs text-zinc-600">
-                No campo abaixo, voce pode informar varios nomes (um por linha) para gerar um unico codigo compartilhado.
-              </p>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <textarea
-                  value={guestName}
-                  onChange={(event) => setGuestName(event.target.value)}
-                  rows={4}
-                  className="w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-                  placeholder={"Nomes vinculados ao codigo unico (opcional)\nExemplo:\nAna Lima\nBruno Lima"}
-                />
-                <label className="flex items-center gap-2 whitespace-nowrap text-xs text-zinc-700">
+              {/* No casal, o espaço que sobra no card fica abaixo do checkbox, e o botão vai para o rodapé. */}
+              <div className={`flex items-start pt-1 ${inviteType === 'couple' ? 'lg:flex-1' : ''}`}>
+                <label className="flex items-center gap-2.5 whitespace-nowrap text-sm text-zinc-700">
                   <input
                     type="checkbox"
                     checked={requiresChildrenDetailsDefault}
                     onChange={(event) => setRequiresChildrenDetailsDefault(event.target.checked)}
-                    className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
+                    className="h-[1.125rem] w-[1.125rem] rounded border-zinc-300 accent-[#8a5a2b]"
                   />
                   Exigir dados dos filhos
                 </label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="quantity">Quantidade</label>
-                <input
-                  id="quantity"
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={quantity}
-                  onChange={(event) => setQuantity(Number(event.target.value || 1))}
-                  className="w-24 rounded-full border border-zinc-800/15 bg-cream px-4 py-2 text-sm text-zinc-800 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-                />
               </div>
 
               <button
@@ -750,11 +872,13 @@ export default function AdminPage() {
 
             {generatedInfo ? <p className="mt-3 text-xs text-olive-800">{generatedInfo}</p> : null}
             {error ? <p className="mt-2 text-xs text-rose-700">{error}</p> : null}
-          </section>
+          </div>
 
-          <section className="flex flex-col rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
+          <div className="flex min-w-0 flex-col">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-4xl leading-none text-zinc-800">Códigos cadastrados</h2>
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">
+                Códigos cadastrados ({isFilteringCodes ? `${filteredCodes.length} de ${codes.length}` : codes.length})
+              </p>
               <button
                 type="button"
                 onClick={handleBatchDeleteRequest}
@@ -764,18 +888,51 @@ export default function AdminPage() {
                 {isDeletingBatch ? 'Excluindo lote...' : `Excluir selecionados (${selectedCodeIds.length})`}
               </button>
             </div>
+            {codes.length > 0 ? (
+              <div className="mt-4">
+                <SearchField
+                  value={codeSearch}
+                  onChange={setCodeSearch}
+                  placeholder="Buscar por nome ou código"
+                  label="Buscar convidado"
+                  resultCount={filteredCodes.length}
+                  filter={{
+                    legend: 'Mostrar',
+                    options: CODE_FILTERS,
+                    value: codeFilter,
+                    defaultValue: 'all',
+                    onChange: setCodeFilter,
+                  }}
+                />
+              </div>
+            ) : null}
+            {isFilteringCodes && filteredCodes.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-600">
+                Nenhum convidado encontrado.{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCodeSearch('');
+                    setCodeFilter('all');
+                  }}
+                  className="underline underline-offset-2 hover:text-zinc-900"
+                >
+                  Limpar busca
+                </button>
+              </p>
+            ) : null}
             <div className="mt-4 space-y-2 sm:hidden">
               <button
                 type="button"
                 onClick={handleToggleSelectAll}
                 className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full"
               >
-                {codes.length > 0 && selectedCodeIds.length === codes.length
+                {allVisibleSelected
                   ? 'Desmarcar todos'
                   : 'Selecionar todos'}
               </button>
 
-              {codes.map((item) => (
+              {filteredCodes.map((item) => (
                 <article key={item.id} className="rounded-2xl border border-zinc-800/10 bg-cream p-4 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -843,7 +1000,7 @@ export default function AdminPage() {
                       <input
                         type="checkbox"
                         aria-label="Selecionar todos os codigos"
-                        checked={codes.length > 0 && selectedCodeIds.length === codes.length}
+                        checked={allVisibleSelected}
                         onChange={handleToggleSelectAll}
                         className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                       />
@@ -856,7 +1013,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {codes.map((item) => (
+                  {filteredCodes.map((item) => (
                     <tr key={item.id} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
                       <td className="px-4 py-3 text-center">
                         <input
@@ -920,8 +1077,9 @@ export default function AdminPage() {
               ) : null}
             </div>
             </div>
-          </section>
-        </div>
+          </div>
+          </div>
+        </section>
         ) : null}
 
         {activeTab === 'accesses' ? (
@@ -949,18 +1107,56 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+
+          {accesses.length > 0 ? (
+            <div className="mt-6 space-y-3">
+              <SearchField
+                value={accessSearch}
+                onChange={setAccessSearch}
+                placeholder="Buscar por nome, código ou mensagem"
+                label="Buscar acesso"
+                resultCount={filteredAccesses.length}
+                filter={{
+                  legend: 'Resposta',
+                  options: ACCESS_FILTERS,
+                  value: accessFilter,
+                  defaultValue: 'all',
+                  onChange: setAccessFilter,
+                }}
+              />
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">
+                {isFilteringAccesses ? `${filteredAccesses.length} de ${accesses.length} acessos` : `${accesses.length} acessos`}
+              </p>
+              {isFilteringAccesses && filteredAccesses.length === 0 ? (
+                <p className="text-sm text-zinc-600">
+                  Nenhum acesso encontrado.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccessSearch('');
+                      setAccessFilter('all');
+                    }}
+                    className="underline underline-offset-2 hover:text-zinc-900"
+                  >
+                    Limpar busca
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mt-4 space-y-2 sm:hidden">
             <button
               type="button"
               onClick={handleToggleSelectAllAccesses}
               className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 w-full"
             >
-              {uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length
+              {allVisibleAccessesSelected
                 ? 'Desmarcar todos'
                 : 'Selecionar todos'}
             </button>
 
-            {accesses.map((item) => (
+            {filteredAccesses.map((item) => (
               <article key={`${item.invite_code_used}-${item.last_accessed_at}`} className="rounded-2xl border border-zinc-800/10 bg-cream p-4 text-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1057,7 +1253,7 @@ export default function AdminPage() {
                     <input
                       type="checkbox"
                       aria-label="Selecionar todos os acessos"
-                      checked={uniqueAccessCodes.length > 0 && selectedAccessCodes.length === uniqueAccessCodes.length}
+                      checked={allVisibleAccessesSelected}
                       onChange={handleToggleSelectAllAccesses}
                       className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                     />
@@ -1072,7 +1268,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {accesses.map((item) => (
+                {filteredAccesses.map((item) => (
                   <tr key={`${item.invite_code_used}-${item.last_accessed_at}`} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
                     <td className="px-4 py-3 text-center">
                       <input

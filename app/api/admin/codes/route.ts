@@ -17,7 +17,7 @@ function generateCode() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 
@@ -194,7 +194,7 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 

@@ -45,7 +45,7 @@ function readGiftInput(body: Record<string, unknown>) {
 
 // Lista todos os presentes (inclusive inativos) e todas as escolhas dos convidados.
 export async function GET(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) return unauthorized();
+  if (!(await isAdminRequestAuthorized(request))) return unauthorized();
 
   try {
     const [gifts, contributions] = await Promise.all([
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
 
 // Cadastra um presente.
 export async function POST(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) return unauthorized();
+  if (!(await isAdminRequestAuthorized(request))) return unauthorized();
 
   try {
     const input = readGiftInput(await request.json());
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
 // Ações: { action: 'toggle', giftId, isActive } | { action: 'contribution', contributionId, status }.
 export async function PATCH(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) return unauthorized();
+  if (!(await isAdminRequestAuthorized(request))) return unauthorized();
 
   try {
     const body = await request.json();
@@ -146,7 +146,7 @@ export async function PATCH(request: NextRequest) {
 
 // Exclui um presente (e o histórico de quem o escolheu).
 export async function DELETE(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) return unauthorized();
+  if (!(await isAdminRequestAuthorized(request))) return unauthorized();
 
   try {
     const body = await request.json();

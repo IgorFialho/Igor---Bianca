@@ -71,7 +71,7 @@ async function loadConfirmedGuests(): Promise<GuestEntry[]> {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 

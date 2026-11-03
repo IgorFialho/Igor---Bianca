@@ -14,7 +14,7 @@ type AccessSummaryRow = {
 };
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAdminRequestAuthorized(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
   }
 

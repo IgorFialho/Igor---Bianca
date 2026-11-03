@@ -96,3 +96,24 @@ CREATE TABLE IF NOT EXISTS gift_contributions (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_gift_active_contribution
   ON gift_contributions(gift_id) WHERE status IN ('pending', 'confirmed');
 CREATE INDEX IF NOT EXISTS idx_gift_contributions_created ON gift_contributions(created_at DESC);
+
+-- Painel admin: sessões de login (o cookie leva um token aleatório; aqui fica só o hash dele)
+-- e tentativas de login, usadas para bloquear força bruta. O app também cria estas tabelas sozinho.
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  password_fingerprint CHAR(32) NOT NULL,
+  ip VARCHAR(64),
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ip VARCHAR(64) NOT NULL,
+  success BOOLEAN NOT NULL,
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_time ON admin_login_attempts(attempted_at DESC);

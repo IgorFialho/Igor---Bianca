@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Portal } from '@/components/home/portal';
 import { Reveal } from '@/components/home/reveal';
 import { SiteHeader } from '@/components/home/site-header';
@@ -32,6 +32,46 @@ const FIELD =
   'w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
 
 type Step = 'choose' | 'pix' | 'store' | 'thanks';
+type SortMode = 'random' | 'price-asc' | 'price-desc';
+
+// Faixas de preço do filtro (em centavos; max exclusivo).
+const PRICE_RANGES = [
+  { id: 'all', label: 'Todos os valores', min: 0, max: Infinity },
+  { id: 'ate-100', label: 'Até R$ 100', min: 0, max: 100_01 },
+  { id: '100-300', label: 'R$ 100 a 300', min: 100_01, max: 300_01 },
+  { id: '300-600', label: 'R$ 300 a 600', min: 300_01, max: 600_01 },
+  { id: 'acima-600', label: 'Acima de R$ 600', min: 600_01, max: Infinity },
+] as const;
+type PriceRangeId = (typeof PRICE_RANGES)[number]['id'];
+
+/** Busca sem diferenciar maiúsculas nem acentos ("cafe" encontra "Café"). */
+function normalize(text: string) {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+const SORT_OPTIONS: { id: SortMode; label: string }[] = [
+  { id: 'random', label: 'Ordem aleat\u00f3ria' },
+  { id: 'price-asc', label: 'Menor pre\u00e7o' },
+  { id: 'price-desc', label: 'Maior pre\u00e7o' },
+];
+
+/** Op\u00e7\u00e3o do menu de filtros: marca \u00e0 direita quando escolhida. */
+function FilterOption({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+        selected ? 'bg-champagne-600/10 font-medium text-champagne-700' : 'text-zinc-800 hover:bg-zinc-800/5'
+      }`}
+    >
+      {children}
+      {selected ? <span aria-hidden="true">✓</span> : null}
+    </button>
+  );
+}
+
 type PixData = { payload: string; qrSvg: string; receiverName: string };
 
 function formatPrice(cents: number) {
@@ -55,6 +95,31 @@ export function GiftRegistry() {
   const [gifts, setGifts] = useState<PublicGift[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  // Ordem aleatória sorteada uma vez por visita: recarregar a lista (ex.: depois de presentear) não embaralha de novo.
+  const randomRank = useRef(new Map<string, number>());
+  const [search, setSearch] = useState('');
+  const [priceRange, setPriceRange] = useState<PriceRangeId>('all');
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('random');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  // Menu de filtros fecha ao clicar fora ou com Esc.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!filterMenuRef.current?.contains(event.target as Node)) setFiltersOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFiltersOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filtersOpen]);
 
   const [selected, setSelected] = useState<PublicGift | null>(null);
   const [step, setStep] = useState<Step>('choose');
@@ -79,7 +144,11 @@ export function GiftRegistry() {
       const response = await fetch('/api/gifts', { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || 'Erro ao carregar a lista.');
-      setGifts(data.gifts ?? []);
+      const list: PublicGift[] = data.gifts ?? [];
+      list.forEach((gift) => {
+        if (!randomRank.current.has(gift.id)) randomRank.current.set(gift.id, Math.random());
+      });
+      setGifts(list);
       setLoadError('');
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Erro ao carregar a lista.');
@@ -175,6 +244,33 @@ export function GiftRegistry() {
     }
   };
 
+  const visibleGifts = useMemo(() => {
+    const query = normalize(search.trim());
+    const range = PRICE_RANGES.find((item) => item.id === priceRange) ?? PRICE_RANGES[0];
+    const rank = (gift: PublicGift) => randomRank.current.get(gift.id) ?? 0;
+    return gifts
+      .filter((gift) => !query || normalize(`${gift.title} ${gift.description ?? ''}`).includes(query))
+      .filter((gift) => gift.priceCents >= range.min && gift.priceCents < range.max)
+      .filter((gift) => !onlyAvailable || gift.status === 'available')
+      .sort((a, b) => {
+        // Já presenteados sempre no fim; entre os demais, a ordem escolhida.
+        const taken = Number(a.status !== 'available') - Number(b.status !== 'available');
+        if (taken) return taken;
+        if (sortMode === 'price-asc') return a.priceCents - b.priceCents;
+        if (sortMode === 'price-desc') return b.priceCents - a.priceCents;
+        return rank(a) - rank(b);
+      });
+  }, [gifts, search, priceRange, onlyAvailable, sortMode]);
+
+  // Quantos filtros do menu estão ativos (aparece no botão "Filtros").
+  const activeFilters = Number(priceRange !== 'all') + Number(onlyAvailable) + Number(sortMode !== 'random');
+  const clearFilters = () => {
+    setSearch('');
+    setPriceRange('all');
+    setOnlyAvailable(false);
+    setSortMode('random');
+  };
+
   return (
     <main className="relative min-h-screen bg-cream px-6 pb-24 pt-8 text-zinc-800 md:px-10">
       <SiteHeader ctaLabel="Confirmar presença" ctaHref="/login#rsvp" links={NAV_LINKS} alwaysDark />
@@ -182,7 +278,7 @@ export function GiftRegistry() {
       <header className="mx-auto mt-16 max-w-3xl text-center md:mt-20">
         <Reveal>
           <p className={EYEBROW}>Lista de presentes</p>
-          <h1 className="mt-4 font-display text-[3rem] leading-[0.92] md:text-[4.5rem]">U m presente para o nosso novo lar</h1>
+          <h1 className="mt-4 font-display text-[3rem] leading-[0.92] md:text-[4.5rem]">Cada presente é um pedacinho do nosso sonho</h1>
         </Reveal>
         <Reveal delay={0.14}>
           <p className="mx-auto mt-6 max-w-2xl text-base text-zinc-600 md:text-lg">
@@ -193,6 +289,104 @@ export function GiftRegistry() {
       </header>
 
       <section aria-label="Presentes" className="mx-auto mt-14 w-full max-w-6xl">
+        {!isLoading && !loadError && gifts.length > 0 ? (
+          <div className="mb-10 space-y-4">
+            {/* Campo de busca com o menu de filtros embutido à direita. */}
+            <div ref={filterMenuRef} className="relative">
+              <div className="flex items-center rounded-full border border-zinc-800/15 bg-cream transition-shadow focus-within:border-champagne-600 focus-within:ring-2 focus-within:ring-champagne-600/20">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="ml-5 shrink-0 text-zinc-500">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar presente"
+                  aria-label="Buscar presente"
+                  className="w-full min-w-0 bg-transparent py-3 pl-3 pr-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none"
+                />
+                <span className="h-6 w-px shrink-0 bg-zinc-800/15" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen((value) => !value)}
+                  aria-expanded={filtersOpen}
+                  aria-haspopup="true"
+                  className="flex shrink-0 items-center gap-2 rounded-r-full py-3 pl-3 pr-5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-800/5"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M4 6h16M7 12h10M10 18h4" />
+                  </svg>
+                  Filtros
+                  {activeFilters > 0 ? (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-champagne-600 px-1.5 text-[0.7rem] text-[#fff9f1]">
+                      {activeFilters}
+                    </span>
+                  ) : null}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                    className={`transition-transform ${filtersOpen ? 'rotate-180' : ''}`}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {filtersOpen ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 top-full z-30 mt-2 w-full max-w-xs space-y-5 rounded-3xl border border-zinc-800/10 bg-[#fffaf1] p-5 text-left shadow-[0_24px_60px_rgba(47,36,27,0.16)]"
+                  >
+                    <fieldset className="space-y-1">
+                      <legend className={`${EYEBROW} mb-2`}>Ordenar</legend>
+                      {SORT_OPTIONS.map((option) => (
+                        <FilterOption key={option.id} selected={sortMode === option.id} onClick={() => setSortMode(option.id)}>
+                          {option.label}
+                        </FilterOption>
+                      ))}
+                    </fieldset>
+                    <fieldset className="space-y-1">
+                      <legend className={`${EYEBROW} mb-2`}>Valor</legend>
+                      {PRICE_RANGES.map((range) => (
+                        <FilterOption key={range.id} selected={priceRange === range.id} onClick={() => setPriceRange(range.id)}>
+                          {range.label}
+                        </FilterOption>
+                      ))}
+                    </fieldset>
+                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-800/5">
+                      Só disponíveis
+                      <input
+                        type="checkbox"
+                        checked={onlyAvailable}
+                        onChange={(event) => setOnlyAvailable(event.target.checked)}
+                        className="h-4 w-4 accent-champagne-600"
+                      />
+                    </label>
+                    <div className="flex items-center justify-between border-t border-zinc-800/10 pt-4">
+                      <button type="button" onClick={clearFilters} className="text-sm text-zinc-600 underline underline-offset-4 hover:text-zinc-800">
+                        Limpar
+                      </button>
+                      <button type="button" onClick={() => setFiltersOpen(false)} className="rounded-full bg-champagne-600 px-5 py-2 text-xs font-medium uppercase tracking-[0.16em] text-[#fff9f1]">
+                        Ver {visibleGifts.length}
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          </div>
+        ) : null}
         {isLoading ? <p className="text-center text-zinc-600">Carregando presentes…</p> : null}
         {loadError ? <p className="text-center text-rose-700">{loadError}</p> : null}
         {!isLoading && !loadError && gifts.length === 0 ? (
@@ -200,7 +394,7 @@ export function GiftRegistry() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {gifts.map((gift, index) => {
+          {visibleGifts.map((gift, index) => {
             const isTaken = gift.status !== 'available';
             return (
               <Reveal key={gift.id} delay={(index % 3) * 0.1}>
@@ -243,6 +437,14 @@ export function GiftRegistry() {
             );
           })}
         </div>
+        {gifts.length > 0 && visibleGifts.length === 0 ? (
+          <p className="py-10 text-center text-zinc-600">
+            Nenhum presente encontrado.{' '}
+            <button type="button" onClick={clearFilters} className="underline underline-offset-4 hover:text-zinc-800">
+              Limpar filtros
+            </button>
+          </p>
+        ) : null}
       </section>
 
       <Portal>

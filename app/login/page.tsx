@@ -36,11 +36,11 @@ const HERO_GALLERY: [HeroPhoto, HeroPhoto, HeroPhoto, HeroPhoto] = [
   { src: '/imagens/casal/casal-10.jpeg' },
   { src: '/imagens/casal/casal-11.jpeg' },
 ];
-// Carrossel do rodapé (troca a cada 8s): o jardim do convite (Roman Odintsov / Pexels), a foto do casal
-// que não aparece no resto da home, a parede de rosas (karaz flowers / Unsplash) e as flores do Save the Date.
+// Carrossel do rodapé (troca a cada 8s): o jardim do convite (Roman Odintsov / Pexels), o campo de flores
+// ao pôr do sol, a parede de rosas (karaz flowers / Unsplash) e as flores do Save the Date.
 const FOOTER_PHOTOS: FooterPhoto[] = [
   { src: '/imagens/convite/jardim-fundo.jpg', mobileSrc: '/imagens/convite/jardim-fundo-mobile.jpg', position: '50% 60%', quote: 'o nosso para sempre fica ainda mais bonito com vocês ao nosso lado.' },
-  { src: '/imagens/casal.jpeg', quote: 'você é a minha pessoa favorita para viver todos os capítulos da vida.' },
+  { src: '/imagens/convite/campo-flores-fundo.jpg', mobileSrc: '/imagens/convite/campo-flores-fundo-mobile.jpg', position: '50% 55%', quote: 'você é a minha pessoa favorita para viver todos os capítulos da vida.' },
   { src: '/imagens/convite/rosas-fundo.jpg', mobileSrc: '/imagens/convite/rosas-fundo-mobile.jpg', position: '50% 50%', quote: 'o amor floresce quando é cultivado todos os dias.' },
   { src: '/imagens/convite/flores-fundo.jpg', mobileSrc: '/imagens/convite/flores-fundo-mobile.jpg', position: '50% 60%', quote: 'obrigado por fazerem parte da nossa história. nos vemos no grande dia!' },
 ];

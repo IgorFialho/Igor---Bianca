@@ -10,6 +10,10 @@ type InviteCodeRow = {
   requires_children_details: boolean;
   is_active: boolean;
   created_at: string;
+  rsvp_attendance?: 'yes' | 'no' | null;
+  rsvp_responder_name?: string | null;
+  rsvp_children_count?: number;
+  rsvp_children?: { fullName: string; age: number }[];
 };
 
 function generateCode() {
@@ -22,11 +26,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Cada código vem com a resposta mais recente do RSVP (para o relatório de convidados): presença,
+    // nomes digitados por quem confirmou, quantidade de filhos e, quando informados, nome e idade de cada um.
     const result = await db.query<InviteCodeRow>(
       `
-        SELECT id, code, guest_name, requires_children_details, is_active, created_at
-        FROM invitation_codes
-        ORDER BY created_at DESC
+        SELECT
+          i.id, i.code, i.guest_name, i.requires_children_details, i.is_active, i.created_at,
+          r.attendance AS rsvp_attendance,
+          r.responder_full_name AS rsvp_responder_name,
+          COALESCE(r.children_count, 0) AS rsvp_children_count,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('fullName', TRIM(c.full_name), 'age', c.age) ORDER BY c.created_at, c.id)
+              FROM rsvp_children c
+              WHERE c.rsvp_response_id = r.id
+            ),
+            '[]'::json
+          ) AS rsvp_children
+        FROM invitation_codes i
+        LEFT JOIN LATERAL (
+          SELECT id, attendance, children_count, responder_full_name
+          FROM rsvp_responses
+          WHERE UPPER(invite_code_used) = UPPER(i.code)
+          ORDER BY submitted_at DESC, id DESC
+          LIMIT 1
+        ) r ON TRUE
+        ORDER BY i.created_at DESC
         LIMIT 1000
       `
     );

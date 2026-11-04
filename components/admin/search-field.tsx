@@ -5,29 +5,36 @@ import { useEffect, useRef, useState } from 'react';
 
 export type SearchFilterOption<T extends string> = { id: T; label: string };
 
+/** Um grupo de opções do menu de filtros (ex.: "Resposta"). */
+export type SearchFilterGroup<T extends string = string> = {
+  legend: string;
+  options: SearchFilterOption<T>[];
+  value: T;
+  /** Opção que representa "sem filtro" (não conta no contador do botão). */
+  defaultValue: T;
+  onChange: (value: T) => void;
+};
+
 type SearchFieldProps<T extends string> = {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   label: string;
   /** Menu de filtros embutido à direita do campo (opcional). */
-  filter?: {
-    legend: string;
-    options: SearchFilterOption<T>[];
-    value: T;
-    /** Opção que representa "sem filtro" (não conta no contador do botão). */
-    defaultValue: T;
-    onChange: (value: T) => void;
-  };
+  filter?: SearchFilterGroup<T>;
+  /** Vários grupos no mesmo menu (ex.: "Pessoas" e "Resposta"), combinados entre si. */
+  filters?: SearchFilterGroup[];
   /** Quantos itens aparecem com a busca/filtro atuais (texto do botão "Ver N"). */
   resultCount: number;
 };
 
 /** Mesmo campo de busca da página /presentes: lupa à esquerda e o botão "Filtros" dentro do campo, à direita. */
-export function SearchField<T extends string>({ value, onChange, placeholder, label, filter, resultCount }: SearchFieldProps<T>) {
+export function SearchField<T extends string>({ value, onChange, placeholder, label, filter, filters, resultCount }: SearchFieldProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const activeFilters = filter && filter.value !== filter.defaultValue ? 1 : 0;
+  const groups: SearchFilterGroup[] = filters ?? (filter ? [filter as unknown as SearchFilterGroup] : []);
+  const hasFilters = groups.length > 0;
+  const activeFilters = groups.filter((group) => group.value !== group.defaultValue).length;
 
   // Menu de filtros fecha ao clicar fora ou com Esc.
   useEffect(() => {
@@ -61,7 +68,7 @@ export function SearchField<T extends string>({ value, onChange, placeholder, la
           aria-label={label}
           className="w-full min-w-0 bg-transparent py-3 pl-3 pr-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none"
         />
-        {filter ? (
+        {hasFilters ? (
           <>
             <span className="h-6 w-px shrink-0 bg-zinc-800/15" aria-hidden="true" />
             <button
@@ -99,7 +106,7 @@ export function SearchField<T extends string>({ value, onChange, placeholder, la
       </div>
 
       <AnimatePresence>
-        {filter && isOpen ? (
+        {hasFilters && isOpen ? (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -107,15 +114,16 @@ export function SearchField<T extends string>({ value, onChange, placeholder, la
             transition={{ duration: 0.2 }}
             className="absolute right-0 top-full z-30 mt-2 w-full max-w-xs space-y-5 rounded-3xl border border-zinc-800/10 bg-[#fffaf1] p-5 text-left shadow-[0_24px_60px_rgba(47,36,27,0.16)]"
           >
-            <fieldset className="space-y-1">
-              <legend className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">{filter.legend}</legend>
-              {filter.options.map((option) => {
-                const selected = filter.value === option.id;
+            {groups.map((group) => (
+            <fieldset key={group.legend} className="space-y-1">
+              <legend className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">{group.legend}</legend>
+              {group.options.map((option) => {
+                const selected = group.value === option.id;
                 return (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => filter.onChange(option.id)}
+                    onClick={() => group.onChange(option.id)}
                     aria-pressed={selected}
                     className={`flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
                       selected ? 'bg-champagne-600/10 font-medium text-champagne-700' : 'text-zinc-800 hover:bg-zinc-800/5'
@@ -127,11 +135,12 @@ export function SearchField<T extends string>({ value, onChange, placeholder, la
                 );
               })}
             </fieldset>
+            ))}
             <div className="flex items-center justify-between border-t border-zinc-800/10 pt-4">
               <button
                 type="button"
                 onClick={() => {
-                  filter.onChange(filter.defaultValue);
+                  groups.forEach((group) => group.onChange(group.defaultValue));
                   onChange('');
                 }}
                 className="text-sm text-zinc-600 underline underline-offset-4 hover:text-zinc-800"

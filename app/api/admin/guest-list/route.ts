@@ -127,8 +127,11 @@ async function buildPdf(guests: GuestEntry[]) {
     return lines;
   };
 
-  const adults = guests.reduce((total, entry) => total + entry.names.length, 0);
-  const children = guests.reduce((total, entry) => total + Math.max(entry.childrenCount, entry.children.length), 0);
+  // Mesma regra do relatório do painel: filhos com mais de 12 anos contam como adultos; sem idade, como crianças.
+  const olderChildren = guests.reduce((total, entry) => total + entry.children.filter((child) => child.age > 12).length, 0);
+  const allChildren = guests.reduce((total, entry) => total + Math.max(entry.childrenCount, entry.children.length), 0);
+  const adults = guests.reduce((total, entry) => total + entry.names.length, 0) + olderChildren;
+  const children = allChildren - olderChildren;
   const generatedAt = new Date().toLocaleString('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     dateStyle: 'long',

@@ -14,6 +14,11 @@ type InviteCode = {
   requires_children_details: boolean;
   is_active: boolean;
   created_at: string;
+  // Resposta mais recente do RSVP deste código (usada no relatório de convidados).
+  rsvp_attendance?: 'yes' | 'no' | null;
+  rsvp_responder_name?: string | null;
+  rsvp_children_count?: number;
+  rsvp_children?: { fullName: string; age: number }[];
 };
 
 type AccessItem = {
@@ -1138,7 +1143,7 @@ export default function AdminPage() {
         </section>
         ) : null}
 
-        {activeTab === 'codes' ? <GuestReport codes={codes} accesses={accesses} isLoading={isLoading} /> : null}
+        {activeTab === 'codes' ? <GuestReport codes={codes} isLoading={isLoading} /> : null}
 
         {activeTab === 'accesses' ? (
         <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">

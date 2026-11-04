@@ -3,26 +3,52 @@
 import { useMemo, useState } from 'react';
 import { SearchField, type SearchFilterOption } from '@/components/admin/search-field';
 
-type ReportCode = { id: string; code: string; guest_name: string | null };
-type ReportAccess = { invite_code_used: string; attendance: 'yes' | 'no' | null };
+type ReportChild = { fullName: string; age: number };
+type ReportCode = {
+  id: string;
+  code: string;
+  guest_name: string | null;
+  rsvp_attendance?: 'yes' | 'no' | null;
+  /** Nomes digitados por quem confirmou presença ("Nome | Nome"). */
+  rsvp_responder_name?: string | null;
+  rsvp_children_count?: number;
+  rsvp_children?: ReportChild[];
+};
 
 type ResponseStatus = 'yes' | 'no' | 'pending';
 type ResponseFilter = 'all' | ResponseStatus;
+type PeopleFilter = 'all' | 'adults' | 'children';
 
 type GuestRow = {
   key: string;
   name: string;
   code: string;
-  companions: string[];
+  /** Quem divide o convite (para adultos) ou de quem é filho(a) (para crianças). */
+  related: string[];
+  /** Nome cadastrado no código, quando quem confirmou digitou um nome diferente. */
+  registeredAs: string | null;
+  isChild: boolean;
+  isAdult: boolean;
+  /** Idade informada no RSVP (só para filhos); null quando não foi informada. */
+  age: number | null;
   isCouple: boolean;
   response: ResponseStatus;
 };
 
+// Filhos com mais de 12 anos contam como adultos.
+const CHILD_MAX_AGE = 12;
+
 const RESPONSE_FILTERS: SearchFilterOption<ResponseFilter>[] = [
-  { id: 'all', label: 'Todos' },
+  { id: 'all', label: 'Todas' },
   { id: 'yes', label: 'Confirmaram' },
   { id: 'no', label: 'Recusaram' },
   { id: 'pending', label: 'Sem resposta' },
+];
+
+const PEOPLE_FILTERS: SearchFilterOption<PeopleFilter>[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'adults', label: 'Adultos' },
+  { id: 'children', label: 'Crianças' },
 ];
 
 const RESPONSE_BADGE: Record<ResponseStatus, { label: string; className: string }> = {
@@ -40,95 +66,161 @@ const splitNames = (raw: string | null) =>
     .filter((item) => item.length > 0);
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const ageLabel = (age: number) => (age === 1 ? '1 ano' : `${age} anos`);
 
-// Relatório da lista de convidados: um nome por linha (casais viram duas linhas, ligadas pelo mesmo código).
-// É calculado a partir dos códigos e respostas que o painel já carregou, então acompanha cada mudança na hora.
-export function GuestReport({ codes, accesses, isLoading }: { codes: ReportCode[]; accesses: ReportAccess[]; isLoading: boolean }) {
+// Relatório da lista de convidados: um nome por linha, agrupado por convite (adultos e, logo abaixo, os filhos
+// informados no RSVP). Quem já confirmou presença aparece com o nome que digitou no RSVP; os demais, com o nome
+// cadastrado no código. Calculado a partir dos códigos que o painel já carregou, então acompanha cada mudança.
+export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoading: boolean }) {
   const [search, setSearch] = useState('');
   const [responseFilter, setResponseFilter] = useState<ResponseFilter>('all');
+  const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('all');
 
   const { rows, unnamedCodes } = useMemo(() => {
-    const responseByCode = new Map<string, ResponseStatus>();
-    for (const access of accesses) {
-      if (access.attendance) responseByCode.set(access.invite_code_used.toUpperCase(), access.attendance);
-    }
+    const invites = codes
+      .map((code) => {
+        const registered = splitNames(code.guest_name);
+        const typed = code.rsvp_attendance === 'yes' ? splitNames(code.rsvp_responder_name ?? null) : [];
+        return { code, registered, names: typed.length > 0 ? typed : registered };
+      })
+      .filter((invite) => invite.registered.length > 0)
+      .sort((a, b) => a.names[0].localeCompare(b.names[0], 'pt-BR', { sensitivity: 'base' }));
 
     const list: GuestRow[] = [];
-    let unnamed = 0;
-    for (const code of codes) {
-      const names = splitNames(code.guest_name);
-      if (names.length === 0) {
-        unnamed += 1;
-        continue;
-      }
-      const response = responseByCode.get(code.code.toUpperCase()) ?? 'pending';
+    for (const { code, names, registered } of invites) {
+      const response: ResponseStatus = code.rsvp_attendance === 'yes' ? 'yes' : code.rsvp_attendance === 'no' ? 'no' : 'pending';
+      const isCouple = names.length > 1;
+      const sameCount = registered.length === names.length;
+
       names.forEach((name, index) => {
+        // Mostra o nome cadastrado só quando difere do digitado (pareado pela ordem; se a quantidade mudou, mostra todos).
+        const original = sameCount ? registered[index] : registered.join(' e ');
         list.push({
-          key: `${code.id}-${index}`,
+          key: `${code.id}-a${index}`,
           name,
           code: code.code,
-          companions: names.filter((_, other) => other !== index),
-          isCouple: names.length > 1,
+          related: names.filter((_, other) => other !== index),
+          registeredAs: normalize(original) !== normalize(name) ? original : null,
+          isChild: false,
+          isAdult: true,
+          age: null,
+          isCouple,
           response,
         });
       });
+
+      // Filhos só existem em quem confirmou presença.
+      if (response !== 'yes') continue;
+      const children = code.rsvp_children ?? [];
+      children.forEach((child, index) => {
+        const age = Number.isFinite(child.age) ? child.age : null;
+        const isAdult = age !== null && age > CHILD_MAX_AGE;
+        list.push({
+          key: `${code.id}-c${index}`,
+          name: child.fullName,
+          code: code.code,
+          related: names,
+          registeredAs: null,
+          isChild: true,
+          isAdult,
+          age,
+          isCouple,
+          response,
+        });
+      });
+      // Convite sem "Exigir dados dos filhos": só a quantidade foi informada (idade desconhecida, conta como criança).
+      const missing = Math.max(0, (code.rsvp_children_count ?? 0) - children.length);
+      for (let index = 0; index < missing; index++) {
+        list.push({
+          key: `${code.id}-m${index}`,
+          name: missing > 1 ? `Filho(a) ${index + 1} sem nome informado` : 'Filho(a) sem nome informado',
+          code: code.code,
+          related: names,
+          registeredAs: null,
+          isChild: true,
+          isAdult: false,
+          age: null,
+          isCouple,
+          response,
+        });
+      }
     }
-    list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+
+    const unnamed = codes.length - invites.length;
     return { rows: list, unnamedCodes: unnamed };
-  }, [codes, accesses]);
+  }, [codes]);
 
   const query = normalize(search.trim());
   const filteredRows = rows.filter((row) => {
     if (responseFilter !== 'all' && row.response !== responseFilter) return false;
-    return !query || normalize(`${row.name} ${row.code} ${row.companions.join(' ')}`).includes(query);
+    if (peopleFilter === 'adults' && !row.isAdult) return false;
+    if (peopleFilter === 'children' && row.isAdult) return false;
+    return !query || normalize(`${row.name} ${row.registeredAs ?? ''} ${row.code} ${row.related.join(' ')}`).includes(query);
   });
-  const isFiltering = query !== '' || responseFilter !== 'all';
+  const isFiltering = query !== '' || responseFilter !== 'all' || peopleFilter !== 'all';
 
+  const adults = rows.filter((row) => row.isAdult).length;
+  const children = rows.length - adults;
+  const childrenWithoutAge = rows.filter((row) => row.isChild && row.age === null).length;
   const confirmed = rows.filter((row) => row.response === 'yes').length;
   const declined = rows.filter((row) => row.response === 'no').length;
   const pending = rows.length - confirmed - declined;
   const invites = codes.length - unnamedCodes;
 
-  const stats = [
-    { label: 'Convidados na lista', value: rows.length, highlight: true },
+  const peopleStats = [
+    { label: 'Total de convidados', value: rows.length, highlight: true },
+    { label: 'Adultos', value: adults },
+    { label: 'Crianças', value: children },
+  ];
+  const responseStats = [
     { label: 'Convites', value: invites },
     { label: 'Confirmaram', value: confirmed },
     { label: 'Recusaram', value: declined },
     { label: 'Sem resposta', value: pending },
   ];
 
+  const statCard = (stat: { label: string; value: number; highlight?: boolean }) => (
+    <div
+      key={stat.label}
+      className={`rounded-2xl border px-5 py-4 ${
+        stat.highlight ? 'border-champagne-600/30 bg-champagne-600 text-[#fff9f1]' : 'border-zinc-800/10 bg-cream text-zinc-800'
+      }`}
+    >
+      <p className={`text-[0.68rem] font-medium uppercase tracking-[0.18em] ${stat.highlight ? 'text-[#fff9f1]/80' : 'text-zinc-800/70'}`}>
+        {stat.label}
+      </p>
+      <p className="mt-1 font-display text-4xl leading-none tabular-nums" aria-live="polite">
+        {isLoading ? '…' : stat.value}
+      </p>
+    </div>
+  );
+
+  const notes = [
+    `Filhos com mais de ${CHILD_MAX_AGE} anos contam como adultos.`,
+    childrenWithoutAge > 0 ? `${plural(childrenWithoutAge, 'criança está', 'crianças estão')} sem idade informada no RSVP.` : '',
+    unnamedCodes > 0 ? `${plural(unnamedCodes, 'código sem nome não entra', 'códigos sem nome não entram')} na contagem.` : '',
+  ].filter(Boolean);
+
   return (
     <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-4xl leading-none text-zinc-800">Relatório de convidados</h2>
-          <p className="mt-2 text-sm text-zinc-600">Todos os nomes cadastrados, atualizado em tempo real.</p>
-        </div>
+      <div>
+        <h2 className="font-display text-4xl leading-none text-zinc-800">Relatório de convidados</h2>
+        <p className="mt-2 text-sm text-zinc-600">Quem confirmou aparece com o nome que digitou no RSVP. Atualizado em tempo real.</p>
       </div>
 
-      {/* No celular o total ocupa a linha inteira e os outros 4 ficam em duas colunas; no computador, 5 lado a lado. */}
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className={`rounded-2xl border px-5 py-4 ${stat.highlight ? 'col-span-2 lg:col-span-1' : ''} ${
-              stat.highlight ? 'border-champagne-600/30 bg-champagne-600 text-[#fff9f1]' : 'border-zinc-800/10 bg-cream text-zinc-800'
-            }`}
-          >
-            <p className={`text-[0.68rem] font-medium uppercase tracking-[0.18em] ${stat.highlight ? 'text-[#fff9f1]/80' : 'text-zinc-800/70'}`}>
-              {stat.label}
-            </p>
-            <p className="mt-1 font-display text-4xl leading-none tabular-nums" aria-live="polite">
-              {isLoading ? '…' : stat.value}
-            </p>
+      <p className="mt-6 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Pessoas</p>
+      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {peopleStats.map((stat) => (
+          <div key={stat.label} className={stat.highlight ? 'col-span-2 sm:col-span-1' : ''}>
+            {statCard(stat)}
           </div>
         ))}
       </div>
-      {unnamedCodes > 0 ? (
-        <p className="mt-3 text-xs text-zinc-600">
-          {plural(unnamedCodes, 'código sem nome não entra', 'códigos sem nome não entram')} na contagem.
-        </p>
-      ) : null}
+
+      <p className="mt-5 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Respostas</p>
+      <div className="mt-2 grid grid-cols-2 gap-3 lg:grid-cols-4">{responseStats.map(statCard)}</div>
+
+      <p className="mt-3 text-xs text-zinc-600">{notes.join(' ')}</p>
 
       {rows.length > 0 ? (
         <div className="mt-6 space-y-3">
@@ -138,13 +230,22 @@ export function GuestReport({ codes, accesses, isLoading }: { codes: ReportCode[
             placeholder="Buscar convidado por nome ou código"
             label="Buscar no relatório de convidados"
             resultCount={filteredRows.length}
-            filter={{
-              legend: 'Resposta',
-              options: RESPONSE_FILTERS,
-              value: responseFilter,
-              defaultValue: 'all',
-              onChange: setResponseFilter,
-            }}
+            filters={[
+              {
+                legend: 'Pessoas',
+                options: PEOPLE_FILTERS,
+                value: peopleFilter,
+                defaultValue: 'all',
+                onChange: (value: string) => setPeopleFilter(value as PeopleFilter),
+              },
+              {
+                legend: 'Resposta',
+                options: RESPONSE_FILTERS,
+                value: responseFilter,
+                defaultValue: 'all',
+                onChange: (value: string) => setResponseFilter(value as ResponseFilter),
+              },
+            ]}
           />
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">
             {isFiltering ? `${filteredRows.length} de ${plural(rows.length, 'convidado', 'convidados')}` : plural(rows.length, 'convidado', 'convidados')}
@@ -160,6 +261,7 @@ export function GuestReport({ codes, accesses, isLoading }: { codes: ReportCode[
             onClick={() => {
               setSearch('');
               setResponseFilter('all');
+              setPeopleFilter('all');
             }}
             className="underline underline-offset-2 hover:text-zinc-900"
           >
@@ -170,37 +272,52 @@ export function GuestReport({ codes, accesses, isLoading }: { codes: ReportCode[
 
       {filteredRows.length > 0 ? (
         <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
-        <div className="scroll-pill max-h-[32rem] overflow-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
-              <tr>
-                <th className="w-12 px-4 py-3 text-right">#</th>
-                <th className="px-4 py-3">Nome</th>
-                <th className="px-4 py-3">Convite</th>
-                <th className="hidden px-4 py-3 sm:table-cell">Tipo</th>
-                <th className="px-4 py-3">Resposta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row, index) => (
-                <tr key={row.key} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
-                  <td className="px-4 py-3 text-right tabular-nums text-zinc-500">{index + 1}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-zinc-800">{row.name}</p>
-                    {row.companions.length > 0 ? <p className="text-xs text-zinc-500">com {row.companions.join(' e ')}</p> : null}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.code}</td>
-                  <td className="hidden px-4 py-3 sm:table-cell">{row.isCouple ? 'Casal' : 'Convidado'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${RESPONSE_BADGE[row.response].className}`}>
-                      {RESPONSE_BADGE[row.response].label}
-                    </span>
-                  </td>
+          <div className="scroll-pill max-h-[32rem] overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
+                <tr>
+                  <th className="w-12 px-4 py-3 text-right">#</th>
+                  <th className="px-4 py-3">Nome</th>
+                  <th className="px-4 py-3">Convite</th>
+                  <th className="px-4 py-3">Categoria</th>
+                  <th className="px-4 py-3">Resposta</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredRows.map((row, index) => (
+                  <tr key={row.key} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
+                    <td className="px-4 py-3 text-right tabular-nums text-zinc-500">{index + 1}</td>
+                    <td className={`px-4 py-3 ${row.isChild ? 'pl-8' : ''}`}>
+                      <p className={row.isChild ? 'text-zinc-800' : 'font-medium text-zinc-800'}>
+                        {row.isChild ? <span className="mr-1.5 text-zinc-400" aria-hidden="true">↳</span> : null}
+                        {row.name}
+                      </p>
+                      {row.related.length > 0 ? (
+                        <p className="text-xs text-zinc-500">
+                          {row.isChild ? `filho(a) de ${row.related.join(' e ')}` : `com ${row.related.join(' e ')}`}
+                        </p>
+                      ) : null}
+                      {row.registeredAs ? <p className="text-xs italic text-zinc-400">cadastrado como {row.registeredAs}</p> : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.code}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {row.isAdult ? 'Adulto' : 'Criança'}
+                      {row.isChild ? (
+                        <span className="ml-1 text-xs text-zinc-500">· {row.age === null ? 'idade não informada' : ageLabel(row.age)}</span>
+                      ) : row.isCouple ? (
+                        <span className="ml-1 text-xs text-zinc-500">· casal</span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${RESPONSE_BADGE[row.response].className}`}>
+                        {RESPONSE_BADGE[row.response].label}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 

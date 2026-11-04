@@ -16,8 +16,8 @@ const SESSION_IDLE_SECONDS = 60 * 60 * 2;
 // Atualiza "último uso" no máximo a cada 5 minutos, para não escrever no banco a cada clique.
 const SESSION_TOUCH_SECONDS = 60 * 5;
 
-// Limites de tentativas erradas.
-const ATTEMPT_WINDOW_MINUTES = 15;
+// Limites de tentativas erradas: ao atingir o limite, o login fica bloqueado por 5 minutos.
+const ATTEMPT_WINDOW_MINUTES = 5;
 const MAX_FAILURES_PER_IP = 5;
 const MAX_FAILURES_TOTAL = 30;
 

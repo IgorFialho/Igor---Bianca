@@ -377,9 +377,17 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section id="rsvp" className={`${SECTION} scroll-mt-24`}>
+      {/* Frase do convite + confirmação de presença numa seção só, do tamanho da tela (o menu a centraliza inteira). */}
+      <section
+        id="rsvp"
+        className="relative flex min-h-[100svh] w-full scroll-mt-24 items-center justify-center px-6 py-20 md:px-12 md:py-24"
+      >
         <div className="mx-auto flex max-w-6xl flex-col items-center text-center">
-          <Reveal className="w-full">
+          <ScrollWords
+            text="Criamos este convite para compartilhar com você os detalhes do nosso casamento. Estamos muito felizes e contamos com sua presença no nosso grande dia."
+            className="w-full max-w-5xl font-display text-[2rem] leading-[1.05] tracking-tight text-zinc-800 md:text-[3.5rem]"
+          />
+          <Reveal className="mt-14 w-full md:mt-20">
             <h2 className={HEADING}>Confirme sua presença</h2>
           </Reveal>
           <Reveal delay={0.16} className="mt-5 w-full">
@@ -423,13 +431,6 @@ export default function LoginPage() {
         isLoading={isLoadingMessages}
         emptyMessage="Ainda não há mensagens. Seja o primeiro!"
       />
-
-      <section className={`${SECTION} flex justify-center text-center`}>
-        <ScrollWords
-          text="Criamos este convite para compartilhar com você os detalhes do nosso casamento. Estamos muito felizes e contamos com sua presença no nosso grande dia."
-          className="w-full max-w-[90vw] font-display text-[2.6rem] leading-[1.05] tracking-tight text-zinc-800 md:text-[5rem]"
-        />
-      </section>
 
       <section id="presentes" className={`${SECTION} scroll-mt-24 text-center`}>
         <div className="mx-auto flex max-w-3xl flex-col items-center">

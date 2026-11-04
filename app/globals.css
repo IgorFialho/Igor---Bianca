@@ -127,6 +127,20 @@ body {
   background: transparent;
 }
 
+/* Áreas roláveis dentro de uma moldura arredondada (tabelas e janelas do admin): a moldura recorta tudo
+   (overflow-hidden), então a barra vai até o fim e os cantos dela seguem a curva da borda.
+   O Chrome ignora os seletores ::-webkit-scrollbar quando scrollbar-width/scrollbar-color estão definidos,
+   então aqui eles voltam ao padrão para valer a alça em pílula (só em Chrome/Edge/Safari). */
+@supports selector(::-webkit-scrollbar) {
+  .scroll-pill {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+.scroll-pill::-webkit-scrollbar-track {
+  border-radius: 0;
+}
+
 /* Áreas que escondem a barra de propósito (ex.: carrossel de post-its) continuam escondidas. */
 [class*='scrollbar-width:none'] {
   scrollbar-width: none;

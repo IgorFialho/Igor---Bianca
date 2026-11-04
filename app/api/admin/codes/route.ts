@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         SELECT id, code, guest_name, requires_children_details, is_active, created_at
         FROM invitation_codes
         ORDER BY created_at DESC
-        LIMIT 200
+        LIMIT 1000
       `
     );
 

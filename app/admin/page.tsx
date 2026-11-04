@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { SearchField } from '@/components/admin/search-field';
+import { GuestReport } from '@/components/admin/guest-report';
 
 type InviteCode = {
   id: string;
@@ -199,6 +200,23 @@ export default function AdminPage() {
 
     run();
   }, [router]);
+
+  // Mantém o painel em dia (ex.: códigos gerados ou respostas chegando de outro aparelho): recarrega a cada
+  // 30 segundos e ao voltar para a aba do navegador. Sem recarregar com a aba escondida.
+  const fetchDashboardRef = useRef(fetchDashboard);
+  fetchDashboardRef.current = fetchDashboard;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchDashboardRef.current().catch(() => undefined);
+    };
+    const timer = window.setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) {
@@ -1028,7 +1046,8 @@ export default function AdminPage() {
                 que sobra: fica posicionada por cima dele (absolute), então nunca estica o cartão e rola por dentro
                 quando há mais códigos. Em telas menores, altura limitada a ~6 códigos. */}
             <div className="relative mt-6 hidden sm:block lg:min-h-[16rem] lg:flex-1">
-            <div className="max-h-[26rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream lg:absolute lg:inset-0 lg:max-h-none">
+            <div className="overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream lg:absolute lg:inset-0">
+            <div className="scroll-pill max-h-[26rem] overflow-auto lg:h-full lg:max-h-none">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                   <tr>
@@ -1113,10 +1132,13 @@ export default function AdminPage() {
               ) : null}
             </div>
             </div>
+            </div>
           </div>
           </div>
         </section>
         ) : null}
+
+        {activeTab === 'codes' ? <GuestReport codes={codes} accesses={accesses} isLoading={isLoading} /> : null}
 
         {activeTab === 'accesses' ? (
         <section className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
@@ -1292,7 +1314,8 @@ export default function AdminPage() {
             ))}
           </div>
 
-          <div className="mt-6 hidden max-h-[28rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream sm:block">
+          <div className="mt-6 hidden overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream sm:block">
+          <div className="scroll-pill max-h-[28rem] overflow-auto">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                 <tr>
@@ -1402,6 +1425,7 @@ export default function AdminPage() {
               <p className="p-3 text-sm text-zinc-600">Nenhum acesso registrado ainda.</p>
             ) : null}
           </div>
+          </div>
         </section>
         ) : null}
 
@@ -1454,14 +1478,18 @@ export default function AdminPage() {
           <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-lg">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">{nameDialog.title}</p>
 
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
+            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
               <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Pais (nome)</p>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
             </div>
+            </div>
             
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
+            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
                 <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Filhos (nome e idade)</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.childrenText}</p>
+            </div>
             </div>
 
             <div className="mt-5 flex justify-end">
@@ -1484,8 +1512,10 @@ export default function AdminPage() {
             <h3 className="mt-2 whitespace-pre-line font-display text-4xl italic leading-none text-zinc-800">{formatGuestNames(messageDialog.guestName)}</h3>
             <p className="mt-1 text-xs text-zinc-600">Codigo: {messageDialog.code}</p>
 
-            <div className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream p-5">
+            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{messageDialog.text}</p>
+            </div>
             </div>
 
             <div className="mt-5 flex justify-end">

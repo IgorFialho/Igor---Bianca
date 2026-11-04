@@ -377,7 +377,8 @@ export function AdminGifts() {
           Pix: confira no extrato (pelo valor e pelo nome de quem enviou) e confirme. Cancelar
           libera o presente na lista; Excluir apaga o registro do histórico.
         </p>
-        <div className="mt-4 max-h-[28rem] overflow-auto rounded-2xl border border-zinc-800/10 bg-cream">
+        <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+        <div className="scroll-pill max-h-[28rem] overflow-auto">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
               <tr>
@@ -481,6 +482,7 @@ export function AdminGifts() {
             </tbody>
           </table>
           {!isLoading && contributions.length === 0 ? <p className="p-4 text-sm text-zinc-600">Ninguém presenteou ainda.</p> : null}
+        </div>
         </div>
       </div>
 

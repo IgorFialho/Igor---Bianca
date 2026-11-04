@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN latest_rsvp r ON r.invite_code_used_upper = UPPER(l.invite_code_used)
         GROUP BY l.invite_code_used, COALESCE(i.guest_name, l.guest_name)
         ORDER BY MAX(l.accessed_at) DESC
-        LIMIT 200
+        LIMIT 1000
       `
     );
 

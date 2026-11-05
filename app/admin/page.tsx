@@ -6,11 +6,15 @@ import { AdminGifts } from '@/components/admin/admin-gifts';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { SearchField } from '@/components/admin/search-field';
 import { GuestReport } from '@/components/admin/guest-report';
+import { EditCodeDialog, type EditCodeTarget } from '@/components/admin/edit-code-dialog';
+import { formatPhone, maskPhoneInput, whatsappLink } from '@/lib/phone';
 
 type InviteCode = {
   id: string;
   code: string;
   guest_name: string | null;
+  /** Telefone do convidado/casal (só dígitos). */
+  phone?: string | null;
   requires_children_details: boolean;
   is_active: boolean;
   created_at: string;
@@ -18,6 +22,7 @@ type InviteCode = {
   rsvp_attendance?: 'yes' | 'no' | null;
   rsvp_responder_name?: string | null;
   rsvp_children_count?: number;
+  rsvp_children_not_attending?: boolean;
   rsvp_children?: { fullName: string; age: number }[];
 };
 
@@ -144,6 +149,10 @@ export default function AdminPage() {
   const [accessFilter, setAccessFilter] = useState<AccessFilter>('all');
   const [husbandName, setHusbandName] = useState('');
   const [wifeName, setWifeName] = useState('');
+  const [couplePhone, setCouplePhone] = useState('');
+  // Código aberto na janela de edição (nomes e telefone).
+  const [editTarget, setEditTarget] = useState<EditCodeTarget | null>(null);
+  const closeEdit = useCallback(() => setEditTarget(null), []);
   const [requiresChildrenDetailsDefault, setRequiresChildrenDetailsDefault] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -289,7 +298,7 @@ export default function AdminPage() {
         // Casal: os nomes vão juntos em guestName (o servidor gera um código só, vinculado a todos).
         body: JSON.stringify(
           type === 'couple'
-            ? { quantity: 1, guestName: names.join('\n'), guests: [], requiresChildrenDetails: requiresChildrenDetailsDefault }
+            ? { quantity: 1, guestName: names.join('\n'), guests: [], phone: couplePhone, requiresChildrenDetails: requiresChildrenDetailsDefault }
             : { guestName: '', guests: names, requiresChildrenDetails: requiresChildrenDetailsDefault }
         ),
       });
@@ -316,6 +325,7 @@ export default function AdminPage() {
       setNamesText('');
       setHusbandName('');
       setWifeName('');
+      setCouplePhone('');
       setRequiresChildrenDetailsDefault(false);
       await fetchDashboard();
     } catch (generateError) {
@@ -350,6 +360,34 @@ export default function AdminPage() {
       setNotice({ type: 'error', message: `Nao foi possivel copiar ${label.toLowerCase()}.` });
     }
   };
+
+  // Salva nomes e telefone de um código (chamado pela janela de edição; erros aparecem na própria janela).
+  const handleSaveCode = async ({ id, names, phone }: { id: string; names: string[]; phone: string }) => {
+    const response = await fetch('/api/admin/codes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'edit', id, names, phone }),
+    });
+
+    if (response.status === 401) {
+      router.replace('/admin/login');
+      return;
+    }
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || 'Nao foi possivel salvar o convite.');
+    }
+
+    const updatedCode: InviteCode | undefined = data?.updated;
+    if (updatedCode) {
+      setCodes((previous) => previous.map((item) => (item.id === id ? { ...item, ...updatedCode } : item)));
+    }
+    setNotice({ type: 'success', message: 'Convite atualizado.' });
+  };
+
+  const openEdit = (item: InviteCode) =>
+    setEditTarget({ id: item.id, code: item.code, guestName: item.guest_name, phone: item.phone ?? null });
 
   const handleDeleteRequest = (codeId: string, codeLabel: string) => {
     setDeleteDialog({ mode: 'single', ids: [codeId], labels: [codeLabel] });
@@ -387,7 +425,7 @@ export default function AdminPage() {
     if (codeFilter === 'single' && isCouple) return false;
     if (codeFilter === 'couple' && !isCouple) return false;
     if (codeFilter === 'children' && !item.requires_children_details) return false;
-    return !codeQuery || normalize(`${item.code} ${item.guest_name ?? ''}`).includes(codeQuery);
+    return !codeQuery || normalize(`${item.code} ${item.guest_name ?? ''} ${item.phone ?? ''} ${formatPhone(item.phone)}`).includes(codeQuery);
   });
   const isFilteringCodes = codeQuery !== '' || codeFilter !== 'all';
   const allVisibleSelected =
@@ -887,6 +925,20 @@ export default function AdminPage() {
                         placeholder="Ex.: Ana Lima"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="couplePhone">
+                        Telefone <span className="normal-case tracking-normal text-zinc-500">(opcional)</span>
+                      </label>
+                      <input
+                        id="couplePhone"
+                        type="tel"
+                        inputMode="tel"
+                        value={couplePhone}
+                        onChange={(event) => setCouplePhone(maskPhoneInput(event.target.value))}
+                        className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                        placeholder="(31) 99999-9999"
+                      />
+                    </div>
                   </div>
                   <p className="text-xs text-zinc-600">Gera 1 código compartilhado, vinculado aos dois nomes.</p>
                 </div>
@@ -952,7 +1004,7 @@ export default function AdminPage() {
                 <SearchField
                   value={codeSearch}
                   onChange={setCodeSearch}
-                  placeholder="Buscar por nome ou código"
+                  placeholder="Buscar por nome, código ou telefone"
                   label="Buscar convidado"
                   resultCount={filteredCodes.length}
                   filter={{
@@ -1019,6 +1071,15 @@ export default function AdminPage() {
                   <p className="mt-2 text-xs text-zinc-500">Convidado</p>
                   <p className="whitespace-pre-line text-zinc-700">{formatGuestNames(item.guest_name)}</p>
 
+                  <p className="mt-2 text-xs text-zinc-500">Telefone</p>
+                  {whatsappLink(item.phone) ? (
+                    <a href={whatsappLink(item.phone) as string} target="_blank" rel="noopener noreferrer" className="text-zinc-700 underline decoration-zinc-300 underline-offset-2">
+                      {formatPhone(item.phone)}
+                    </a>
+                  ) : (
+                    <p className="text-zinc-500">Sem telefone</p>
+                  )}
+
                   <label className="mt-3 flex items-center gap-2 text-xs text-zinc-700">
                     <input
                       type="checkbox"
@@ -1035,14 +1096,23 @@ export default function AdminPage() {
                   <p className="mt-2 text-xs text-zinc-500">Criado em</p>
                   <p className="text-zinc-700">{new Date(item.created_at).toLocaleString('pt-BR')}</p>
 
-                  <button
-                    type="button"
-                    disabled={deletingCodeId === item.id || isDeletingBatch}
-                    onClick={() => handleDeleteRequest(item.id, item.code)}
-                    className="mt-4 inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 w-full"
-                  >
-                    {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
-                  </button>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      className="inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-zinc-800 transition-colors hover:bg-zinc-800/5"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingCodeId === item.id || isDeletingBatch}
+                      onClick={() => handleDeleteRequest(item.id, item.code)}
+                      className="inline-flex items-center justify-center rounded-full border border-rose-300 bg-rose-50 px-5 py-2.5 text-xs font-medium uppercase tracking-[0.12em] text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -1056,7 +1126,7 @@ export default function AdminPage() {
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
                   <tr>
-                    <th className="px-4 py-3 text-center">
+                    <th className="px-3 py-3 text-center">
                       <input
                         type="checkbox"
                         aria-label="Selecionar todos os codigos"
@@ -1065,17 +1135,18 @@ export default function AdminPage() {
                         className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                       />
                     </th>
-                    <th className="px-4 py-3">Codigo</th>
-                    <th className="px-4 py-3">Nome do Convite</th>
-                    <th className="px-4 py-3">Filhos</th>
-                    <th className="px-4 py-3">Criado em</th>
-                    <th className="px-4 py-3 text-right">Acao</th>
+                    <th className="px-3 py-3">Codigo</th>
+                    <th className="px-3 py-3">Nome do Convite</th>
+                    <th className="px-3 py-3">Telefone</th>
+                    <th className="px-3 py-3">Filhos</th>
+                    <th className="px-3 py-3">Criado em</th>
+                    <th className="px-3 py-3 text-right">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCodes.map((item) => (
                     <tr key={item.id} className="border-t border-zinc-800/10 text-zinc-700 transition-colors hover:bg-[#f6edd7]/50">
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <input
                           type="checkbox"
                           aria-label={`Selecionar codigo ${item.code}`}
@@ -1085,7 +1156,7 @@ export default function AdminPage() {
                           className="h-4 w-4 rounded border-zinc-300 accent-[#8a5a2b]"
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium text-zinc-800">
+                      <td className="px-3 py-3 font-medium text-zinc-800">
                         <button
                           type="button"
                           onClick={() => handleCopyCode(item.code, 'Codigo')}
@@ -1096,8 +1167,23 @@ export default function AdminPage() {
                           {item.code}
                         </button>
                       </td>
-                      <td className="px-4 py-3 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 whitespace-pre-line">{formatGuestNames(item.guest_name)}</td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        {whatsappLink(item.phone) ? (
+                          <a
+                            href={whatsappLink(item.phone) as string}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Abrir no WhatsApp"
+                            className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
+                          >
+                            {formatPhone(item.phone)}
+                          </a>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
                         <label className="flex items-center justify-center gap-2 text-xs text-zinc-700">
                           <input
                             type="checkbox"
@@ -1116,16 +1202,25 @@ export default function AdminPage() {
                           Exigir
                         </label>
                       </td>
-                      <td className="px-4 py-3">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          disabled={deletingCodeId === item.id || isDeletingBatch}
-                          onClick={() => handleDeleteRequest(item.id, item.code)}
-                          className="rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-medium text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
-                        </button>
+                      <td className="px-3 py-3 text-xs">{new Date(item.created_at).toLocaleString('pt-BR')}</td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(item)}
+                            className="rounded-full border border-zinc-800/20 px-3.5 py-1.5 text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-800/5"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingCodeId === item.id || isDeletingBatch}
+                            onClick={() => handleDeleteRequest(item.id, item.code)}
+                            className="rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-medium text-rose-800 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingCodeId === item.id ? 'Excluindo...' : 'Excluir'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1438,6 +1533,7 @@ export default function AdminPage() {
       </section>
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
+      <EditCodeDialog target={editTarget} onClose={closeEdit} onSave={handleSaveCode} />
 
       {deleteDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm">

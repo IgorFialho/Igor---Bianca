@@ -117,3 +117,9 @@ CREATE TABLE IF NOT EXISTS admin_login_attempts (
   attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_time ON admin_login_attempts(attempted_at DESC);
+
+-- Telefone do convidado/casal de cada código (só dígitos, com DDD). O app também cria esta coluna sozinho.
+ALTER TABLE invitation_codes ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+
+-- RSVP: o casal tem filhos, mas avisou que eles não irão. O app também cria esta coluna sozinho.
+ALTER TABLE rsvp_responses ADD COLUMN IF NOT EXISTS children_not_attending BOOLEAN NOT NULL DEFAULT FALSE;

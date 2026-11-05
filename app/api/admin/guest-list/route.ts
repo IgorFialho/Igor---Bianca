@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, degrees, rgb, setCharacterSpacing } from 'pdf-lib';
 import { isAdminRequestAuthorized } from '@/lib/admin-auth';
 import { db } from '@/lib/db';
+import { ensureRsvpSchema } from '@/lib/rsvp-schema';
 
 type ConfirmedRow = {
   invite_code_used: string;
   responder_full_name: string | null;
   children_count: number;
+  children_not_attending: boolean;
   children: { full_name: string; age: number }[] | null;
 };
 
 type GuestEntry = {
   names: string[];
   childrenCount: number;
+  childrenNotAttending: boolean;
   children: { fullName: string; age: number }[];
 };
 
@@ -38,11 +41,12 @@ const splitNames = (raw: string | null) =>
  * Os nomes são sempre os que o convidado digitou no RSVP (responder_full_name), nunca o nome cadastrado no código.
  */
 async function loadConfirmedGuests(): Promise<GuestEntry[]> {
+  await ensureRsvpSchema();
   const result = await db.query<ConfirmedRow>(
     `
       WITH latest AS (
         SELECT DISTINCT ON (UPPER(invite_code_used))
-          id, invite_code_used, responder_full_name, attendance, children_count
+          id, invite_code_used, responder_full_name, attendance, children_count, children_not_attending
         FROM rsvp_responses
         ORDER BY UPPER(invite_code_used), submitted_at DESC, id DESC
       )
@@ -50,6 +54,7 @@ async function loadConfirmedGuests(): Promise<GuestEntry[]> {
         l.invite_code_used,
         l.responder_full_name,
         l.children_count,
+        l.children_not_attending,
         (
           SELECT json_agg(json_build_object('full_name', TRIM(c.full_name), 'age', c.age) ORDER BY c.created_at, c.id)
           FROM rsvp_children c
@@ -64,6 +69,7 @@ async function loadConfirmedGuests(): Promise<GuestEntry[]> {
     .map((row: ConfirmedRow) => ({
       names: splitNames(row.responder_full_name),
       childrenCount: Number(row.children_count) || 0,
+      childrenNotAttending: Boolean(row.children_not_attending),
       children: (row.children ?? []).map((child) => ({ fullName: child.full_name, age: Number(child.age) })),
     }))
     .filter((entry: GuestEntry) => entry.names.length > 0)
@@ -203,8 +209,9 @@ async function buildPdf(guests: GuestEntry[]) {
       wrap(clean(`${child.fullName} — ${child.age} ${child.age === 1 ? 'ano' : 'anos'}`), sans, 10.5, nameWidth - 14)
     );
     const missingChildren = Math.max(0, entry.childrenCount - entry.children.length);
-    const missingLine =
-      missingChildren > 0
+    const missingLine = entry.childrenNotAttending
+      ? 'Os filhos não irão'
+      : missingChildren > 0
         ? `${missingChildren} ${missingChildren === 1 ? 'filho' : 'filhos'} sem nome e idade informados`
         : '';
     const hasChildren = childLines.length > 0 || missingLine !== '';

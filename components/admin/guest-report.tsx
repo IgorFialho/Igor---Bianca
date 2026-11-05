@@ -2,16 +2,20 @@
 
 import { useMemo, useState } from 'react';
 import { SearchField, type SearchFilterOption } from '@/components/admin/search-field';
+import { formatPhone, whatsappLink } from '@/lib/phone';
 
 type ReportChild = { fullName: string; age: number };
 type ReportCode = {
   id: string;
   code: string;
   guest_name: string | null;
+  phone?: string | null;
   rsvp_attendance?: 'yes' | 'no' | null;
   /** Nomes digitados por quem confirmou presença ("Nome | Nome"). */
   rsvp_responder_name?: string | null;
   rsvp_children_count?: number;
+  /** O casal tem filhos, mas avisou no RSVP que eles não irão. */
+  rsvp_children_not_attending?: boolean;
   rsvp_children?: ReportChild[];
 };
 
@@ -23,10 +27,14 @@ type GuestRow = {
   key: string;
   name: string;
   code: string;
+  /** Telefone do convite (só nas linhas de adultos do convite; filhos ficam sem). */
+  phone: string | null;
   /** Quem divide o convite (para adultos) ou de quem é filho(a) (para crianças). */
   related: string[];
   /** Nome cadastrado no código, quando quem confirmou digitou um nome diferente. */
   registeredAs: string | null;
+  /** Último adulto de um convite cujos filhos não irão (o aviso aparece só nessa linha). */
+  childrenNotAttending: boolean;
   isChild: boolean;
   isAdult: boolean;
   /** Idade informada no RSVP (só para filhos); null quando não foi informada. */
@@ -99,8 +107,10 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
           key: `${code.id}-a${index}`,
           name,
           code: code.code,
+          phone: code.phone ?? null,
           related: names.filter((_, other) => other !== index),
           registeredAs: normalize(original) !== normalize(name) ? original : null,
+          childrenNotAttending: response === 'yes' && Boolean(code.rsvp_children_not_attending) && index === names.length - 1,
           isChild: false,
           isAdult: true,
           age: null,
@@ -119,8 +129,10 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
           key: `${code.id}-c${index}`,
           name: child.fullName,
           code: code.code,
+          phone: null,
           related: names,
           registeredAs: null,
+          childrenNotAttending: false,
           isChild: true,
           isAdult,
           age,
@@ -135,8 +147,10 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
           key: `${code.id}-m${index}`,
           name: missing > 1 ? `Filho(a) ${index + 1} sem nome informado` : 'Filho(a) sem nome informado',
           code: code.code,
+          phone: null,
           related: names,
           registeredAs: null,
+          childrenNotAttending: false,
           isChild: true,
           isAdult: false,
           age: null,
@@ -155,7 +169,7 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
     if (responseFilter !== 'all' && row.response !== responseFilter) return false;
     if (peopleFilter === 'adults' && !row.isAdult) return false;
     if (peopleFilter === 'children' && row.isAdult) return false;
-    return !query || normalize(`${row.name} ${row.registeredAs ?? ''} ${row.code} ${row.related.join(' ')}`).includes(query);
+    return !query || normalize(`${row.name} ${row.registeredAs ?? ''} ${row.code} ${row.phone ?? ''} ${formatPhone(row.phone)} ${row.related.join(' ')}`).includes(query);
   });
   const isFiltering = query !== '' || responseFilter !== 'all' || peopleFilter !== 'all';
 
@@ -227,7 +241,7 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
           <SearchField
             value={search}
             onChange={setSearch}
-            placeholder="Buscar convidado por nome ou código"
+            placeholder="Buscar convidado por nome, código ou telefone"
             label="Buscar no relatório de convidados"
             resultCount={filteredRows.length}
             filters={[
@@ -279,6 +293,7 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
                   <th className="w-12 px-4 py-3 text-right">#</th>
                   <th className="px-4 py-3">Nome</th>
                   <th className="px-4 py-3">Convite</th>
+                  <th className="px-4 py-3">Telefone</th>
                   <th className="px-4 py-3">Categoria</th>
                   <th className="px-4 py-3">Resposta</th>
                 </tr>
@@ -298,8 +313,24 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
                         </p>
                       ) : null}
                       {row.registeredAs ? <p className="text-xs italic text-zinc-400">cadastrado como {row.registeredAs}</p> : null}
+                      {row.childrenNotAttending ? <p className="mt-0.5 text-xs font-medium text-amber-700">Filhos não irão</p> : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">{row.code}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {whatsappLink(row.phone) ? (
+                        <a
+                          href={whatsappLink(row.phone) as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abrir no WhatsApp"
+                          className="underline decoration-zinc-300 underline-offset-2 hover:text-zinc-950"
+                        >
+                          {formatPhone(row.phone)}
+                        </a>
+                      ) : (
+                        <span className="text-zinc-400">—</span>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {row.isAdult ? 'Adulto' : 'Criança'}
                       {row.isChild ? (

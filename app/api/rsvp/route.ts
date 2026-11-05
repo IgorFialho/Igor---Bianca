@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { limitMessage } from '@/lib/invite';
+import { ensureRsvpSchema } from '@/lib/rsvp-schema';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
     const childrenCount = Number.isFinite(Number(body?.childrenCount)) ? Number(body.childrenCount) : 0;
     const dietaryNotes = typeof body?.dietaryNotes === 'string' ? limitMessage(body.dietaryNotes.trim()) : null;
     const childrenDetailsRaw = Array.isArray(body?.childrenDetails) ? body.childrenDetails : [];
+    const childrenNotAttendingRaw = body?.childrenNotAttending === true;
 
     if (!inviteCode) {
       return NextResponse.json({ error: 'Codigo do convite ausente.' }, { status: 400 });
@@ -291,8 +293,17 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedAdultsCount = Math.max(0, Math.min(10, Math.floor(adultsCount)));
+    // "Os filhos não irão" só vale para quem confirmou num convite que pede os dados dos filhos; aí não vai nenhum filho.
+    const childrenNotAttending = childrenNotAttendingRaw && attendance === 'yes' && requiresChildrenDetails;
     const normalizedChildrenCount =
-      attendance === 'yes' ? Math.max(0, Math.min(10, Math.floor(childrenCount))) : 0;
+      attendance === 'yes' && !childrenNotAttending ? Math.max(0, Math.min(10, Math.floor(childrenCount))) : 0;
+
+    if (requiresChildrenDetails && attendance === 'yes' && !childrenNotAttending && normalizedChildrenCount === 0) {
+      return NextResponse.json(
+        { error: 'Informe quantos filhos irão ou marque que os filhos não irão.' },
+        { status: 400 }
+      );
+    }
 
     const normalizedChildrenDetails: ChildrenDetailInput[] = childrenDetailsRaw
       .map((item: unknown) => {
@@ -333,10 +344,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await db.query('BEGIN');
+    await ensureRsvpSchema();
 
+    // A resposta e os filhos são gravados juntos, numa única conexão (BEGIN/COMMIT valem para a mesma transação).
+    const client = await db.connect();
     try {
-      const insertRsvpResult = await db.query<{ id: string }>(
+      await client.query('BEGIN');
+      const insertRsvpResult = await client.query<{ id: string }>(
         `
           INSERT INTO rsvp_responses (
             invitation_code_id,
@@ -345,9 +359,10 @@ export async function POST(request: NextRequest) {
             attendance,
             adults_count,
             children_count,
-            dietary_notes
+            dietary_notes,
+            children_not_attending
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING id::text
         `,
         [
@@ -358,6 +373,7 @@ export async function POST(request: NextRequest) {
           normalizedAdultsCount,
           normalizedChildrenCount,
           dietaryNotes || null,
+          childrenNotAttending,
         ]
       );
 
@@ -365,7 +381,7 @@ export async function POST(request: NextRequest) {
 
       if (rsvpResponseId && normalizedChildrenCount > 0 && normalizedChildrenDetails.length > 0) {
         for (const child of normalizedChildrenDetails) {
-          await db.query(
+          await client.query(
             `
               INSERT INTO rsvp_children (rsvp_response_id, full_name, age)
               VALUES ($1, $2, $3)
@@ -375,10 +391,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await db.query('COMMIT');
+      await client.query('COMMIT');
     } catch (transactionError) {
-      await db.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => undefined);
       throw transactionError;
+    } finally {
+      client.release();
     }
 
     return NextResponse.json({ ok: true, locked: true });

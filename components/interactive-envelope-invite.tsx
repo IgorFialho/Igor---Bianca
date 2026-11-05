@@ -37,12 +37,38 @@ type ChildDetail = {
   age: string;
 };
 
+/** Gravata preta, ao lado do rótulo "Ele" no RSVP do casal. */
+function TieIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" className="shrink-0 text-zinc-900">
+      <path d="M9 2h6l-1.4 4.2h-3.2L9 2Z" fill="currentColor" />
+      <path d="M10.4 7.4h3.2l2.6 10.1L12 22l-4.2-4.5 2.6-10.1Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Laço rosa, ao lado do rótulo "Ela" no RSVP do casal. */
+function BowIcon() {
+  return (
+    <svg width="19" height="16" viewBox="0 0 28 24" aria-hidden="true" className="shrink-0 text-[#c97a8a]">
+      <path d="M12 10.5C9.5 6 3.5 3.5 2 5.5c-1.5 2 .2 9 2.7 10.2 2.4 1.1 6.3-1.3 7.3-3.2v-2Z" fill="currentColor" />
+      <path d="M16 10.5c2.5-4.5 8.5-7 10-5 1.5 2-.2 9-2.7 10.2-2.4 1.1-6.3-1.3-7.3-3.2v-2Z" fill="currentColor" />
+      <path d="M12.5 13.5 9.5 22l2.4-1.2 1.2 2.2 1-8.5h-1.6Zm3 0 3 8.5-2.4-1.2-1.2 2.2-1-8.5h1.6Z" fill="currentColor" opacity="0.85" />
+      <rect x="11.3" y="8.7" width="5.4" height="5.6" rx="2.2" fill="currentColor" />
+      <rect x="12.6" y="10" width="2.8" height="3" rx="1.2" fill="#fffaf1" opacity="0.35" />
+    </svg>
+  );
+}
+
 export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInviteProps) {
   const [envelopeState, setEnvelopeState] = useState<EnvelopeState>('fechado');
   const [showFinalCard, setShowFinalCard] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [hasResolvedInitialStatus, setHasResolvedInitialStatus] = useState(false);
+  // A consulta do RSVP falhou mesmo depois de tentar de novo: mostra um aviso com "Tentar novamente".
+  const [statusLoadFailed, setStatusLoadFailed] = useState(false);
+  const [statusRetryKey, setStatusRetryKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -52,6 +78,8 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   const [children, setChildren] = useState(0);
   const [requiresChildrenDetails, setRequiresChildrenDetails] = useState(false);
   const [childrenDetails, setChildrenDetails] = useState<ChildDetail[]>([]);
+  // Convite que pede os dados dos filhos: o casal diz se os filhos vão ("yes") ou não ("no").
+  const [childrenGoing, setChildrenGoing] = useState<'yes' | 'no' | null>(null);
   const [dietaryNeeds, setDietaryNeeds] = useState('');
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
@@ -86,26 +114,44 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
   useEffect(() => {
     if (!inviteCode) {
-      setHasResolvedInitialStatus(true);
+      if (!window.sessionStorage.getItem(INVITE_ACCESS_KEY)) {
+        setHasResolvedInitialStatus(true);
+      }
       return;
     }
 
     const controller = new AbortController();
+
+    // Uma falha passageira (servidor reiniciando, conexão do banco caindo) não pode fazer quem já respondeu
+    // ver o envelope de novo: tenta até 3 vezes antes de mostrar o aviso.
+    const fetchStatus = async () => {
+      const delays = [0, 800, 2000];
+      let lastError: unknown = null;
+      for (const delay of delays) {
+        if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        try {
+          const response = await fetch(`/api/rsvp?code=${encodeURIComponent(inviteCode)}`, {
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+          if (response.ok) return response.json();
+          lastError = new Error('Nao foi possivel verificar seu RSVP.');
+        } catch (error) {
+          if ((error as Error).name === 'AbortError') throw error;
+          lastError = error;
+        }
+      }
+      throw lastError;
+    };
 
     const checkRsvpStatus = async () => {
       setIsCheckingStatus(true);
       setSubmitError('');
 
       try {
-        const response = await fetch(`/api/rsvp?code=${encodeURIComponent(inviteCode)}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Nao foi possivel verificar seu RSVP.');
-        }
-
-        const data = await response.json();
+        const data = await fetchStatus();
+        setStatusLoadFailed(false);
 
         if (data?.submitted) {
           setIsLocked(true);
@@ -153,19 +199,20 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           );
         }
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          setSubmitError('Erro ao consultar status do RSVP.');
-        }
+        if ((error as Error).name === 'AbortError') return;
+        setStatusLoadFailed(true);
       } finally {
-        setIsCheckingStatus(false);
-        setHasResolvedInitialStatus(true);
+        if (!controller.signal.aborted) {
+          setIsCheckingStatus(false);
+          setHasResolvedInitialStatus(true);
+        }
       }
     };
 
     checkRsvpStatus();
 
     return () => controller.abort();
-  }, [inviteCode]);
+  }, [inviteCode, statusRetryKey]);
 
   useEffect(() => {
     setResponderFullNames((previous) => {
@@ -235,8 +282,21 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     setSubmitError('');
     setIsSubmitting(true);
 
+    const childrenNotAttending = attendance === 'yes' && requiresChildrenDetails && childrenGoing === 'no';
     const normalizedChildrenCount =
-      attendance === 'yes' && requiresChildrenDetails ? Math.max(0, Math.min(10, children)) : 0;
+      attendance === 'yes' && requiresChildrenDetails && !childrenNotAttending ? Math.max(0, Math.min(10, children)) : 0;
+
+    if (attendance === 'yes' && requiresChildrenDetails && childrenGoing === null) {
+      setSubmitError('Informe se seus filhos irão à cerimônia.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (attendance === 'yes' && requiresChildrenDetails && childrenGoing === 'yes' && normalizedChildrenCount === 0) {
+      setSubmitError('Informe quantos filhos irão (ou marque que eles não irão).');
+      setIsSubmitting(false);
+      return;
+    }
     const normalizedResponderFullNames = responderFullNames
       .slice(0, expectedResponderCount)
       .map((item) => item.trim())
@@ -291,6 +351,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           adultsCount: attendance === 'yes' ? 1 : 0,
           childrenCount: normalizedChildrenCount,
           childrenDetails: normalizedChildrenDetails,
+          childrenNotAttending,
           dietaryNotes: dietaryNeeds,
         }),
       });
@@ -337,7 +398,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     await sendRsvp();
   };
 
-  const isEnvelopeVisible = hasResolvedInitialStatus && !showFinalCard && !isLocked;
+  const isEnvelopeVisible = hasResolvedInitialStatus && !statusLoadFailed && !showFinalCard && !isLocked;
   const responderHeading = responderFullNames
     .slice(0, expectedResponderCount)
     .map((item) => item.trim())
@@ -420,6 +481,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                     setResponderFullNames(Array.from({ length: expectedResponderCount }, () => ''));
                     setChildren(0);
                     setChildrenDetails([]);
+                    setChildrenGoing(null);
                     setIsSubmitted(false);
                     setSubmitError('');
                     setConfirmationChoice(null);
@@ -434,30 +496,84 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
             <div className="space-y-5 border-t border-zinc-800/15 pt-6">
               <div className="space-y-3">
                 <p className={eyebrowClass}>
-                  {expectedResponderCount === 2
-                    ? 'Nome completo do casal "Ele e Ela"'
-                    : 'Nome completo do convidado'}
+                  {expectedResponderCount === 2 ? 'Nome completo do casal' : 'Nome completo do convidado'}
                 </p>
 
-                {responderFullNames.slice(0, expectedResponderCount).map((name, index) => (
-                  <input
-                    key={`responder-full-name-${index}`}
-                    value={name}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setResponderFullNames((previous) =>
-                        previous.map((item, itemIndex) => (itemIndex === index ? value : item))
-                      );
-                    }}
-                    disabled={isCheckingStatus || isSubmitting}
-                    placeholder="Digite o nome completo"
-                    aria-label={`Nome completo ${index + 1}`}
-                    className={fieldClass}
-                  />
-                ))}
+                {responderFullNames.slice(0, expectedResponderCount).map((name, index) => {
+                  // No casal, cada campo tem o seu rótulo ("Ele" em cima, "Ela" embaixo) para não haver dúvida.
+                  const coupleLabel = expectedResponderCount === 2 ? (index === 0 ? 'Ele' : 'Ela') : null;
+                  const inputId = `responder-full-name-${index}`;
+                  return (
+                    <div key={inputId} className="space-y-1.5">
+                      {coupleLabel ? (
+                        <label htmlFor={inputId} className={`${eyebrowClass} flex items-center gap-1.5 pl-5 text-left`}>
+                          {coupleLabel === 'Ele' ? <TieIcon /> : <BowIcon />}
+                          {coupleLabel}
+                        </label>
+                      ) : null}
+                      <input
+                        id={inputId}
+                        value={name}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setResponderFullNames((previous) =>
+                            previous.map((item, itemIndex) => (itemIndex === index ? value : item))
+                          );
+                        }}
+                        disabled={isCheckingStatus || isSubmitting}
+                        placeholder={coupleLabel ? `Nome completo d${coupleLabel === 'Ele' ? 'ele' : 'ela'}` : 'Digite o nome completo'}
+                        aria-label={coupleLabel ? undefined : `Nome completo ${index + 1}`}
+                        className={fieldClass}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               {requiresChildrenDetails ? (
+                <fieldset className="space-y-3">
+                  <legend className={`${eyebrowClass} mb-3`}>
+                    {expectedResponderCount === 2 ? 'Seus filhos irão?' : 'Seus filhos irão com você?'}
+                  </legend>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="cursor-pointer">
+                      <input
+                        className="peer sr-only"
+                        type="radio"
+                        name="childrenGoing"
+                        value="yes"
+                        disabled={isCheckingStatus || isSubmitting}
+                        checked={childrenGoing === 'yes'}
+                        onChange={() => {
+                          setChildrenGoing('yes');
+                          setChildren((current) => (current > 0 ? current : 1));
+                          setSubmitError('');
+                        }}
+                      />
+                      <span className={choiceClass}>Sim, vão conosco</span>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input
+                        className="peer sr-only"
+                        type="radio"
+                        name="childrenGoing"
+                        value="no"
+                        disabled={isCheckingStatus || isSubmitting}
+                        checked={childrenGoing === 'no'}
+                        onChange={() => {
+                          setChildrenGoing('no');
+                          setChildren(0);
+                          setChildrenDetails([]);
+                          setSubmitError('');
+                        }}
+                      />
+                      <span className={choiceClass}>Não vão</span>
+                    </label>
+                  </div>
+                </fieldset>
+              ) : null}
+
+              {requiresChildrenDetails && childrenGoing === 'yes' ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className={eyebrowClass}>Quantidade de crianças</p>
@@ -543,7 +659,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                   disabled={isCheckingStatus || isSubmitting}
                   value={dietaryNeeds}
                   onChange={(event) => setDietaryNeeds(limitMessage(event.target.value))}
-                  className={`${fieldClass} rounded-3xl py-4 pr-16`}
+                  className={`${fieldClass.replace('rounded-full', 'rounded-2xl')} py-4 pr-16`}
                   placeholder={attendance === 'no' ? 'Digite sua justificativa aqui (opcional)' : 'Escreva uma mensagem carinhosa (opcional)'}
                 />
                 <div className="absolute bottom-3 right-3">
@@ -718,6 +834,24 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
             </motion.div>
           ) : null}
         </AnimatePresence>
+
+        {statusLoadFailed && !showFinalCard ? (
+          <div role="alert" className="relative z-20 mx-auto mt-6 w-full max-w-md rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 text-center shadow-[0_24px_60px_rgba(47,36,27,0.12)] sm:p-8">
+            <p className={eyebrowClass}>Convite</p>
+            <h2 className="mt-2 font-display text-4xl italic leading-none text-zinc-800">Quase lá…</h2>
+            <p className="mt-4 text-sm text-zinc-600">
+              Não conseguimos carregar o seu convite agora. Verifique a sua conexão e tente de novo.
+            </p>
+            <button
+              type="button"
+              onClick={() => setStatusRetryKey((key) => key + 1)}
+              disabled={isCheckingStatus}
+              className={`${primaryButtonClass} mt-6`}
+            >
+              {isCheckingStatus ? 'Carregando…' : 'Tentar novamente'}
+            </button>
+          </div>
+        ) : null}
 
         <AnimatePresence mode="wait">
           {showFinalCard ? (

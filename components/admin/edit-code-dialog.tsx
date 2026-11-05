@@ -13,6 +13,8 @@ export type EditCodeTarget = {
 const FIELD =
   'w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
 const LABEL = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
+// Um convite é de um convidado (1) ou de um casal (2).
+const MAX_PEOPLE = 2;
 
 const splitNames = (raw: string | null) =>
   (raw ?? '')
@@ -22,7 +24,7 @@ const splitNames = (raw: string | null) =>
 
 /**
  * Janela para editar o nome (ou os nomes do casal) e o telefone ligados a um código.
- * Um campo por pessoa: dá para incluir ou tirar uma pessoa (ex.: virar casal).
+ * Um convite é de um convidado ou de um casal: dá para incluir a segunda pessoa (vira casal) ou tirá-la.
  */
 export function EditCodeDialog({
   target,
@@ -40,7 +42,7 @@ export function EditCodeDialog({
 
   useEffect(() => {
     if (!target) return;
-    const current = splitNames(target.guestName);
+    const current = splitNames(target.guestName).slice(0, MAX_PEOPLE);
     setNames(current.length > 0 ? current : ['']);
     setPhone(formatPhone(target.phone));
     setError('');
@@ -59,8 +61,7 @@ export function EditCodeDialog({
   if (!target) return null;
 
   const isCouple = names.length === 2;
-  const labelFor = (index: number) =>
-    isCouple ? (index === 0 ? 'Nome do homem' : 'Nome da mulher') : names.length === 1 ? 'Nome do convidado' : `Pessoa ${index + 1}`;
+  const labelFor = (index: number) => (isCouple ? (index === 0 ? 'Nome do homem' : 'Nome da mulher') : 'Nome do convidado');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -95,6 +96,7 @@ export function EditCodeDialog({
       onClick={() => (isSaving ? undefined : onClose())}
     >
       <form
+        autoComplete="off"
         onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
         className="w-full max-w-md rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8"
@@ -123,6 +125,9 @@ export function EditCodeDialog({
               </div>
               <input
                 id={`edit-name-${index}`}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 value={name}
                 autoFocus={index === 0}
                 onChange={(event) => {
@@ -136,13 +141,13 @@ export function EditCodeDialog({
             </div>
           ))}
 
-          {names.length < 6 ? (
+          {names.length < MAX_PEOPLE ? (
             <button
               type="button"
               onClick={() => setNames((current) => [...current, ''])}
               className="text-xs font-medium uppercase tracking-[0.14em] text-champagne-700 hover:text-champagne-600"
             >
-              + Adicionar pessoa
+              + Adicionar pessoa (casal)
             </button>
           ) : null}
 
@@ -152,6 +157,8 @@ export function EditCodeDialog({
             </label>
             <input
               id="edit-phone"
+              data-1p-ignore
+              data-lpignore="true"
               type="tel"
               inputMode="tel"
               autoComplete="off"

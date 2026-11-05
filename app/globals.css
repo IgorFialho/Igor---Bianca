@@ -127,6 +127,21 @@ body {
   background: transparent;
 }
 
+/* Campos preenchidos pelo navegador (autopreenchimento): mantêm a fonte, o espaçamento e as cores do site,
+   em vez da fonte do sistema e do fundo azul/amarelo que o Chrome aplica. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  -webkit-text-fill-color: #27272a;
+  -webkit-box-shadow: 0 0 0 1000px #fcf7ed inset;
+  caret-color: #27272a;
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* Áreas roláveis dentro de uma moldura arredondada (tabelas e janelas do admin): a moldura recorta tudo
    (overflow-hidden), então a barra vai até o fim e os cantos dela seguem a curva da borda.
    O Chrome ignora os seletores ::-webkit-scrollbar quando scrollbar-width/scrollbar-color estão definidos,

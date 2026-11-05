@@ -36,7 +36,7 @@ function ensurePhoneColumn() {
 /** Guarda só os dígitos do telefone (com DDD; aceita +55). Vazio = sem telefone. */
 function normalizePhone(value: unknown) {
   if (typeof value !== 'string') return null;
-  const digits = value.replace(/D/g, '');
+  const digits = value.replace(/\D/g, '');
   return digits.length > 0 ? digits.slice(0, 15) : null;
 }
 
@@ -267,11 +267,15 @@ export async function PATCH(request: NextRequest) {
       const names: string[] = Array.isArray(body?.names)
         ? body.names
             .filter((item: unknown) => typeof item === 'string')
-            .map((item: string) => item.replace(/|/g, ' ').replace(/s+/g, ' ').trim())
+            .map((item: string) => item.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim())
             .filter((item: string) => item.length > 0)
         : [];
       if (names.length === 0) {
         return NextResponse.json({ error: 'Informe pelo menos um nome.' }, { status: 400 });
+      }
+      // Um convite é de um convidado ou de um casal.
+      if (names.length > 2) {
+        return NextResponse.json({ error: 'Um convite pode ter no máximo duas pessoas (um casal).' }, { status: 400 });
       }
       const guestName = names.join(' | ');
       if (guestName.length > 150) {

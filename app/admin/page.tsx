@@ -142,6 +142,10 @@ export default function AdminPage() {
   // "single": um código por linha (cada linha é um convidado); "couple": as linhas são os nomes do casal, num código só.
   const [inviteType, setInviteType] = useState<'single' | 'couple'>('single');
   const [namesText, setNamesText] = useState('');
+  // Modo Convidado: um por vez (nome + telefone) ou, como opção, vários de uma vez em lista.
+  const [isGuestListMode, setIsGuestListMode] = useState(false);
+  const [singleGuestName, setSingleGuestName] = useState('');
+  const [singleGuestPhone, setSingleGuestPhone] = useState('');
   const [codeSearch, setCodeSearch] = useState('');
   const [codeFilter, setCodeFilter] = useState<CodeFilter>('all');
   const [accessSearch, setAccessSearch] = useState('');
@@ -267,10 +271,15 @@ export default function AdminPage() {
       return;
     }
 
-    // Convidado: um código por linha.
-    const names = nameLines(namesText);
+    // Convidado: um por vez (com telefone) ou, no modo lista, um código por linha.
+    const names = isGuestListMode ? nameLines(namesText) : [singleGuestName.trim()].filter(Boolean);
     if (names.length === 0) {
-      setError('Informe o nome de pelo menos um convidado.');
+      setError(isGuestListMode ? 'Informe o nome de pelo menos um convidado.' : 'Informe o nome do convidado.');
+      return;
+    }
+    const singlePhoneDigits = singleGuestPhone.replace(/\D/g, '');
+    if (!isGuestListMode && singlePhoneDigits.length > 0 && singlePhoneDigits.length < 10) {
+      setError('Telefone incompleto: informe o DDD e o número.');
       return;
     }
     setConfirmAction({
@@ -299,7 +308,7 @@ export default function AdminPage() {
         body: JSON.stringify(
           type === 'couple'
             ? { quantity: 1, guestName: names.join('\n'), guests: [], phone: couplePhone, requiresChildrenDetails: requiresChildrenDetailsDefault }
-            : { guestName: '', guests: names, requiresChildrenDetails: requiresChildrenDetailsDefault }
+            : { guestName: '', guests: names, phone: isGuestListMode ? '' : singleGuestPhone, requiresChildrenDetails: requiresChildrenDetailsDefault }
         ),
       });
 
@@ -323,6 +332,8 @@ export default function AdminPage() {
       }
 
       setNamesText('');
+      setSingleGuestName('');
+      setSingleGuestPhone('');
       setHusbandName('');
       setWifeName('');
       setCouplePhone('');
@@ -875,7 +886,7 @@ export default function AdminPage() {
           <div className="lg:flex lg:flex-col">
             <p className="text-xs lg:flex lg:min-h-[2.375rem] lg:items-center font-medium uppercase tracking-[0.2em] text-zinc-800/70">Gerar códigos</p>
 
-            <form className="mt-4 space-y-3 lg:flex lg:flex-1 lg:flex-col" onSubmit={handleGenerateCodes}>
+            <form className="mt-4 space-y-3 lg:flex lg:flex-1 lg:flex-col" onSubmit={handleGenerateCodes} autoComplete="off">
               <div className="space-y-2">
                 <div role="radiogroup" aria-label="Tipo de convite" className="grid grid-cols-2 gap-1 rounded-full border border-zinc-800/10 bg-cream p-1">
                   {INVITE_TYPES.map((type) => (
@@ -907,6 +918,9 @@ export default function AdminPage() {
                       </label>
                       <input
                         id="husbandName"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
                         value={husbandName}
                         onChange={(event) => setHusbandName(event.target.value)}
                         className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
@@ -919,6 +933,9 @@ export default function AdminPage() {
                       </label>
                       <input
                         id="wifeName"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
                         value={wifeName}
                         onChange={(event) => setWifeName(event.target.value)}
                         className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
@@ -931,6 +948,9 @@ export default function AdminPage() {
                       </label>
                       <input
                         id="couplePhone"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
                         type="tel"
                         inputMode="tel"
                         value={couplePhone}
@@ -943,24 +963,89 @@ export default function AdminPage() {
                   <p className="text-xs text-zinc-600">Gera 1 código compartilhado, vinculado aos dois nomes.</p>
                 </div>
               ) : (
-                <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
-                  <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="namesText">
-                    Nomes dos convidados (um por linha)
-                  </label>
-                  <textarea
-                    id="namesText"
-                    rows={6}
-                    value={namesText}
-                    onChange={(event) => setNamesText(event.target.value)}
-                    className="w-full rounded-xl lg:flex-1 border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-                    placeholder={'Exemplo:\nCarla Lima\nPedro Souza\nFamília Souza'}
-                  />
-                  <p className="text-xs text-zinc-600">Gera 1 código para cada linha.</p>
-                </div>
+                isGuestListMode ? (
+                  <div className="space-y-2 lg:flex lg:flex-1 lg:flex-col">
+                    <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="namesText">
+                      Nomes dos convidados (um por linha)
+                    </label>
+                    <textarea
+                      id="namesText"
+                      autoComplete="off"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      rows={6}
+                      value={namesText}
+                      onChange={(event) => setNamesText(event.target.value)}
+                      className="w-full rounded-xl lg:flex-1 border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                      placeholder={'Exemplo:\nCarla Lima\nPedro Souza\nFamília Souza'}
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-zinc-600">Gera 1 código para cada linha. O telefone pode ser incluído depois, em Editar.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsGuestListMode(false);
+                          setError('');
+                        }}
+                        className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+                      >
+                        Voltar para um por vez
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="singleGuestName">
+                        Nome do convidado
+                      </label>
+                      <input
+                        id="singleGuestName"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
+                        value={singleGuestName}
+                        onChange={(event) => setSingleGuestName(event.target.value)}
+                        className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                        placeholder="Ex.: Carla Lima"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70" htmlFor="singleGuestPhone">
+                        Telefone <span className="normal-case tracking-normal text-zinc-500">(opcional)</span>
+                      </label>
+                      <input
+                        id="singleGuestPhone"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
+                        type="tel"
+                        inputMode="tel"
+                        value={singleGuestPhone}
+                        onChange={(event) => setSingleGuestPhone(maskPhoneInput(event.target.value))}
+                        className="w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+                        placeholder="(31) 99999-9999"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-zinc-600">Gera 1 código para este convidado.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsGuestListMode(true);
+                          setError('');
+                        }}
+                        className="text-xs text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+                      >
+                        Adicionar vários de uma vez (lista)
+                      </button>
+                    </div>
+                  </div>
+                )
               )}
 
               {/* No casal, o espaço que sobra no card fica abaixo do checkbox, e o botão vai para o rodapé. */}
-              <div className={`flex items-start pt-1 ${inviteType === 'couple' ? 'lg:flex-1' : ''}`}>
+              <div className={`flex items-start pt-1 ${inviteType === 'couple' || !isGuestListMode ? 'lg:flex-1' : ''}`}>
                 <label className="flex items-center gap-2.5 whitespace-nowrap text-sm text-zinc-700">
                   <input
                     type="checkbox"

@@ -1206,7 +1206,7 @@ export default function AdminPage() {
                 que sobra: fica posicionada por cima dele (absolute), então nunca estica o cartão e rola por dentro
                 quando há mais códigos. Em telas menores, altura limitada a ~6 códigos. */}
             <div className="relative mt-6 hidden sm:block lg:min-h-[16rem] lg:flex-1">
-            <div className="overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream lg:absolute lg:inset-0">
+            <div className="safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream lg:absolute lg:inset-0">
             <div className="scroll-pill max-h-[26rem] overflow-auto lg:h-full lg:max-h-none">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
@@ -1499,7 +1499,7 @@ export default function AdminPage() {
             ))}
           </div>
 
-          <div className="mt-6 hidden overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream sm:block">
+          <div className="mt-6 hidden safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream sm:block">
           <div className="scroll-pill max-h-[28rem] overflow-auto">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
@@ -1664,14 +1664,14 @@ export default function AdminPage() {
           <div className="w-full rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8 max-w-lg">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">{nameDialog.title}</p>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
             <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
               <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Pais (nome)</p>
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.text}</p>
             </div>
             </div>
             
-            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
             <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
                 <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Filhos (nome e idade)</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{nameDialog.childrenText}</p>
@@ -1698,7 +1698,7 @@ export default function AdminPage() {
             <h3 className="mt-2 whitespace-pre-line font-display text-4xl italic leading-none text-zinc-800">{formatGuestNames(messageDialog.guestName)}</h3>
             <p className="mt-1 text-xs text-zinc-600">Codigo: {messageDialog.code}</p>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+            <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
             <div className="scroll-pill max-h-[45vh] overflow-auto p-5">
               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-800">{messageDialog.text}</p>
             </div>

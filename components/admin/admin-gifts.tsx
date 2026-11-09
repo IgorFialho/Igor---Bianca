@@ -302,7 +302,7 @@ export function AdminGifts() {
                     editingId === gift.id ? 'border-champagne-600 ring-2 ring-champagne-600/20' : 'border-zinc-800/10'
                   }`}
                 >
-                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f6edd7]">
+                  <div className="safari-clip relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f6edd7]">
                     {gift.image_url ? <img src={gift.image_url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-2xl">🎁</span>}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -377,7 +377,7 @@ export function AdminGifts() {
           Pix: confira no extrato (pelo valor e pelo nome de quem enviou) e confirme. Cancelar
           libera o presente na lista; Excluir apaga o registro do histórico.
         </p>
-        <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+        <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
         <div className="scroll-pill max-h-[28rem] overflow-auto">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">

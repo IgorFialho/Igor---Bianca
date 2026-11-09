@@ -285,7 +285,7 @@ export function GuestReport({ codes, isLoading }: { codes: ReportCode[]; isLoadi
       ) : null}
 
       {filteredRows.length > 0 ? (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+        <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
           <div className="scroll-pill max-h-[32rem] overflow-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">

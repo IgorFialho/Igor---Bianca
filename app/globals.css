@@ -142,6 +142,13 @@ textarea:-webkit-autofill {
   transition: background-color 9999s ease-out 0s;
 }
 
+/* Safari: molduras arredondadas com overflow-hidden deixam de recortar o conteúdo que vira camada própria
+   (área que rola, cabeçalho fixo, animações) e os cantos aparecem quadrados. A máscara obriga o recorte. */
+.safari-clip {
+  isolation: isolate;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+
 /* Áreas roláveis dentro de uma moldura arredondada (tabelas e janelas do admin): a moldura recorta tudo
    (overflow-hidden), então a barra vai até o fim e os cantos dela seguem a curva da borda.
    O Chrome ignora os seletores ::-webkit-scrollbar quando scrollbar-width/scrollbar-color estão definidos,

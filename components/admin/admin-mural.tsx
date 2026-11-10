@@ -9,6 +9,8 @@ const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70
 const FIELD =
   'w-full rounded-xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
 const BUTTON = 'inline-flex items-center justify-center rounded-full px-5 py-2.5 text-xs font-medium uppercase tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-60';
+// No iPhone o campo de data tem largura mínima própria e estoura o card: força caber e alinha o texto à esquerda.
+const DATE_FIELD = `${FIELD} block min-w-0 max-w-full appearance-none min-h-[46px] text-left [&::-webkit-date-and-time-value]:text-left`;
 const PRIMARY = `${BUTTON} bg-champagne-600 text-[#fff9f1] hover:opacity-90`;
 const SECONDARY = `${BUTTON} border border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`;
 const DANGER = `${BUTTON} border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`;
@@ -221,23 +223,23 @@ export function AdminMural() {
 
             <div className="space-y-3 border-t border-zinc-800/10 pt-5">
               <p className={EYEBROW}>Agendamento</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1.5">
                   <label htmlFor="mural-opens-at" className="text-xs text-zinc-600">
                     Abrir automaticamente em
                   </label>
-                  <input id="mural-opens-at" type="datetime-local" value={opensAtInput} onChange={(event) => setOpensAtInput(event.target.value)} className={FIELD} />
+                  <input id="mural-opens-at" type="datetime-local" value={opensAtInput} onChange={(event) => setOpensAtInput(event.target.value)} className={DATE_FIELD} />
                   {opensAtInput ? (
                     <button type="button" onClick={() => setOpensAtInput('')} className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-800">
                       limpar
                     </button>
                   ) : null}
                 </div>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <label htmlFor="mural-closes-at" className="text-xs text-zinc-600">
                     Fechar automaticamente em
                   </label>
-                  <input id="mural-closes-at" type="datetime-local" value={closesAtInput} min={opensAtInput || undefined} onChange={(event) => setClosesAtInput(event.target.value)} className={FIELD} />
+                  <input id="mural-closes-at" type="datetime-local" value={closesAtInput} min={opensAtInput || undefined} onChange={(event) => setClosesAtInput(event.target.value)} className={DATE_FIELD} />
                   {closesAtInput ? (
                     <button type="button" onClick={() => setClosesAtInput('')} className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-800">
                       limpar

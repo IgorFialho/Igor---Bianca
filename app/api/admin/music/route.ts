@@ -7,6 +7,7 @@ import {
   DEFAULT_TRACK_ID,
   MUSIC_PAGES,
   MUSIC_PAGE_KEYS,
+  TRACK_ARTIST_MAX_LENGTH,
   TRACK_TITLE_MAX_LENGTH,
   ensureMusicSchema,
   getMusicSettings,
@@ -51,8 +52,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Envio inválido. Tente de novo.' }, { status: 400 });
       }
       const title = cleanText(body?.title, TRACK_TITLE_MAX_LENGTH) || 'Música sem nome';
+      const artist = cleanText(body?.artist, TRACK_ARTIST_MAX_LENGTH) || null;
       const duration = Number.isFinite(Number(body?.duration)) ? Number(body.duration) : null;
-      await db.query('INSERT INTO music_tracks (title, public_id, duration) VALUES ($1, $2, $3) ON CONFLICT (public_id) DO NOTHING', [title, publicId, duration]);
+      await db.query('INSERT INTO music_tracks (title, artist, public_id, duration) VALUES ($1, $2, $3, $4) ON CONFLICT (public_id) DO NOTHING', [
+        title,
+        artist,
+        publicId,
+        duration,
+      ]);
       return NextResponse.json({ ok: true });
     }
 
@@ -71,11 +78,17 @@ export async function PATCH(request: NextRequest) {
     const tracks = await listTracks();
     const validIds = new Set(tracks.map((track) => track.id));
 
-    // Renomear uma música.
-    if (body?.action === 'rename') {
+    // Editar nome e autoria de uma música (a original do site guarda os dados nas configurações).
+    if (body?.action === 'edit') {
       const title = cleanText(body?.title, TRACK_TITLE_MAX_LENGTH);
+      const artist = cleanText(body?.artist, TRACK_ARTIST_MAX_LENGTH) || null;
       if (!title) return NextResponse.json({ error: 'Informe um nome.' }, { status: 400 });
-      const result = await db.query('UPDATE music_tracks SET title = $2 WHERE id::text = $1', [String(body?.id ?? ''), title]);
+      const id = String(body?.id ?? '');
+      if (id === DEFAULT_TRACK_ID) {
+        await db.query('UPDATE music_settings SET default_title = $1, default_artist = $2, updated_at = NOW() WHERE id = 1', [title, artist]);
+        return NextResponse.json({ ok: true });
+      }
+      const result = await db.query('UPDATE music_tracks SET title = $2, artist = $3 WHERE id::text = $1', [id, title, artist]);
       return result.rowCount ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Música não encontrada.' }, { status: 404 });
     }
 

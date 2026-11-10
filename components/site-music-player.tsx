@@ -12,7 +12,7 @@ export const MEDIA_RECORDING_EVENT = 'igor-bianca:recording';
 // Música original do site: usada enquanto a configuração do painel não chega (e se ela falhar).
 const DEFAULT_MUSIC_URL = '/sons/musica-fundo.mp3';
 
-type PageTrack = { id: string; title: string; url: string } | null;
+type PageTrack = { id: string; title: string; artist?: string | null; url: string } | null;
 type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
 
 /** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite). */
@@ -40,6 +40,8 @@ export function SiteMusicPlayer() {
   const [isVolumeInteracting, setIsVolumeInteracting] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // Cada toque no player adia o fechamento automático.
+  const [interaction, setInteraction] = useState(0);
 
   // Sem player no admin e no telão do mural (projetado na festa).
   const isAdminRoute = pathname.startsWith('/admin') || pathname.startsWith('/mural/telao');
@@ -371,8 +373,9 @@ export function SiteMusicPlayer() {
     }
   }, [isCollapsed]);
 
+  // Aberto e sem uso por 6 s: volta a ser só o disco (não fecha enquanto mexe no volume).
   useEffect(() => {
-    if (isAdminRoute) {
+    if (isAdminRoute || isCollapsed || isVolumeOpen || isVolumeInteracting) {
       return;
     }
 
@@ -381,7 +384,7 @@ export function SiteMusicPlayer() {
     }, 6000);
 
     return () => window.clearTimeout(collapseTimer);
-  }, [isAdminRoute, pathname]);
+  }, [isAdminRoute, pathname, isCollapsed, isVolumeOpen, isVolumeInteracting, interaction]);
 
   useEffect(() => {
     if (!isVolumeOpen || isVolumeInteracting) {
@@ -442,116 +445,202 @@ export function SiteMusicPlayer() {
     }
   };
 
+  // Nome da música desta página (aparece em "Tocando agora").
+  const currentTrack = config && pageTrackUrl ? Object.values(config.pages).find((page) => page?.url === pageTrackUrl) : null;
+  const trackTitle = currentTrack?.title ?? 'Música original do site';
+  // Autoria (artista/compositor): aparece no player por cuidado com o direito de uso.
+  const trackArtist = currentTrack?.artist?.trim() || null;
+
   if (isAdminRoute) {
     return null;
   }
 
+  const volumePercent = Math.round(volume * 100);
+  const spring = { type: 'spring', stiffness: 420, damping: 34, mass: 0.8 } as const;
+
   return (
     // Página "sem música": o player some, mas o áudio continua montado (para voltar do mesmo ponto).
-    <div
-      className={`gold-frame fixed left-7 top-[30px] z-[60] w-fit max-w-[calc(100vw-1rem)] rounded-xl bg-white/65 px-2 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:left-8 sm:px-3 sm:text-[0.68rem] ${
-        hasMusic ? '' : 'hidden'
-      }`}
-      aria-hidden={!hasMusic}
-    >
-      <div className="flex items-center gap-2 sm:gap-3">
-        <button
+    <div className={`fixed left-5 top-[22px] z-[60] sm:left-7 sm:top-[26px] ${hasMusic ? '' : 'hidden'}`} aria-hidden={!hasMusic}>
+      <motion.div
+        layout
+        transition={spring}
+        className={`music-pill relative flex items-center ${isCollapsed ? 'gap-0 p-1' : 'gap-2.5 p-1 pr-2 sm:gap-3'}`}
+        style={{ borderRadius: 999 }}
+        // Qualquer toque, clique ou tecla no player adia o fechamento automático.
+        onPointerDownCapture={() => setInteraction((value) => value + 1)}
+        onClickCapture={() => setInteraction((value) => value + 1)}
+        onKeyDownCapture={() => setInteraction((value) => value + 1)}
+      >
+        {/* Disco: abre/fecha o player. Gira tocando; brilho pulsando em volta. */}
+        <motion.button
+          layout="position"
           type="button"
           onClick={() => setIsCollapsed((current) => !current)}
-          className="login-audio-btn flex h-8 w-8 items-center justify-center p-0"
-          aria-label={isCollapsed ? 'Expandir player' : 'Retrair player'}
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+          aria-label={isCollapsed ? 'Abrir o player de música' : 'Fechar o player de música'}
+          aria-expanded={!isCollapsed}
+          whileTap={{ scale: 0.92 }}
         >
-          {isCollapsed ? (
-            <motion.span
-              className="login-audio-disc"
-              animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
-              transition={
-                isMusicPlaying
-                  ? { duration: 2.2, ease: 'linear', repeat: Infinity }
-                  : { duration: 0.35, ease: 'easeOut' }
-              }
-            />
-          ) : (
-            '<'
-          )}
-        </button>
+          <AnimatePresence>
+            {isMusicPlaying ? (
+              <motion.span
+                key="halo"
+                className="music-halo pointer-events-none absolute inset-0 rounded-full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.55, 0], scale: [1, 1.55] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 2.4, ease: 'easeOut', repeat: Infinity }}
+              />
+            ) : null}
+          </AnimatePresence>
+          <motion.span
+            className="music-disc relative block h-10 w-10 rounded-full"
+            animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
+            transition={isMusicPlaying ? { duration: 3.2, ease: 'linear', repeat: Infinity } : { duration: 0.6, ease: 'easeOut' }}
+          />
+        </motion.button>
 
         <AnimatePresence initial={false}>
           {!isCollapsed ? (
             <motion.div
-              initial={{ opacity: 0, x: -10, width: 0 }}
-              animate={{ opacity: 1, x: 0, width: 'auto' }}
-              exit={{ opacity: 0, x: -10, width: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="overflow-visible"
+              key="controls"
+              initial={{ opacity: 0, x: -8, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              className="flex items-center gap-2.5 sm:gap-3"
             >
-              <div className="login-audio-shell">
-                <motion.span
-                  className="login-audio-disc"
-                  animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
-                  transition={
-                    isMusicPlaying
-                      ? { duration: 2.2, ease: 'linear', repeat: Infinity }
-                      : { duration: 0.35, ease: 'easeOut' }
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={togglePlayback}
-                  className="login-audio-btn"
-                  aria-label={isMusicPlaying ? 'Pausar musica' : 'Tocar musica'}
-                >
-                  {isMusicPlaying ? 'Pause' : 'Play'}
-                </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsVolumeInteracting(false);
-                      setIsVolumeOpen((current) => !current);
-                    }}
-                    className="login-audio-btn"
-                    aria-label="Abrir controle de volume"
-                  >
-                    {isMobile ? `V ${Math.round(volume * 100)}%` : `Vol ${Math.round(volume * 100)}%`}
-                  </button>
-                  <AnimatePresence>
-                    {isVolumeOpen ? (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                        className="login-volume-popover"
-                        onPointerEnter={() => setIsVolumeInteracting(true)}
-                        onPointerLeave={() => setIsVolumeInteracting(false)}
-                        onPointerDown={() => setIsVolumeInteracting(true)}
-                        onPointerUp={() => setIsVolumeInteracting(false)}
-                        onFocusCapture={() => setIsVolumeInteracting(true)}
-                        onBlurCapture={(event) => {
-                          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                            setIsVolumeInteracting(false);
-                          }
-                        }}
-                      >
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={volume}
-                          onChange={(event) => handleVolumeChange(Number(event.target.value))}
-                          onPointerDown={() => setIsVolumeInteracting(true)}
-                          onPointerUp={() => setIsVolumeInteracting(false)}
-                          onFocus={() => setIsVolumeInteracting(true)}
-                          onBlur={() => setIsVolumeInteracting(false)}
-                          className="login-volume-slider"
-                          aria-label="Controle de volume"
-                        />
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
+              {/* Tocando agora + nome da música (desliza quando é longo) */}
+              <div className="min-w-0 w-[7.5rem] sm:w-[10rem]">
+                <p className="flex items-center gap-1.5 whitespace-nowrap text-[0.55rem] font-medium uppercase tracking-[0.16em] text-champagne-700/80 sm:tracking-[0.22em]">
+                  <span className="flex h-2.5 items-end gap-[2px]" aria-hidden="true">
+                    {[0, 1, 2, 3].map((bar) => (
+                      <span
+                        key={bar}
+                        className={`music-eq-bar w-[2px] rounded-full ${isMusicPlaying ? '' : 'music-eq-bar--idle'}`}
+                        style={{ animationDelay: `${bar * -0.27}s` }}
+                      />
+                    ))}
+                  </span>
+                  {isMusicPlaying ? 'Tocando agora' : 'Em pausa'}
+                </p>
+                {/* Nome da música (desliza quando é longo) e, embaixo, a autoria. */}
+                <div className={`${trackTitle.length > 18 ? 'music-marquee ' : ''}mt-0.5 overflow-hidden whitespace-nowrap font-display text-[0.95rem] italic leading-tight text-zinc-800`}>
+                  <span className={trackTitle.length > 18 ? 'music-marquee-track' : ''}>
+                    {trackTitle}
+                    {trackTitle.length > 18 ? <span aria-hidden="true">{'  ✦  ' + trackTitle}</span> : null}
+                  </span>
                 </div>
+                {trackArtist ? (
+                  <div
+                    className={`${trackArtist.length > 26 ? 'music-marquee ' : ''}overflow-hidden whitespace-nowrap text-[0.62rem] leading-tight text-zinc-600`} title={`Autoria: ${trackArtist}`}>
+                    <span className={trackArtist.length > 26 ? 'music-marquee-track' : ''}>
+                      por {trackArtist}
+                      {trackArtist.length > 26 ? <span aria-hidden="true">{'  ·  por ' + trackArtist}</span> : null}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Play / pausa */}
+              <motion.button
+                type="button"
+                onClick={togglePlayback}
+                whileTap={{ scale: 0.88 }}
+                className="music-play flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#fff9f1]"
+                aria-label={isMusicPlaying ? 'Pausar música' : 'Tocar música'}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {isMusicPlaying ? (
+                    <motion.svg
+                      key="pause"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      initial={{ scale: 0.4, opacity: 0, rotate: -90 }}
+                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                      exit={{ scale: 0.4, opacity: 0, rotate: 90 }}
+                      transition={{ duration: 0.18 }}
+                      aria-hidden="true"
+                    >
+                      <rect x="6.5" y="5" width="3.6" height="14" rx="1.4" fill="currentColor" />
+                      <rect x="13.9" y="5" width="3.6" height="14" rx="1.4" fill="currentColor" />
+                    </motion.svg>
+                  ) : (
+                    <motion.svg
+                      key="play"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4 translate-x-[1px]"
+                      initial={{ scale: 0.4, opacity: 0, rotate: 90 }}
+                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                      exit={{ scale: 0.4, opacity: 0, rotate: -90 }}
+                      transition={{ duration: 0.18 }}
+                      aria-hidden="true"
+                    >
+                      <path d="M8 5.6v12.8c0 .8.9 1.3 1.6.9l10-6.4a1 1 0 0 0 0-1.8l-10-6.4C8.9 4.3 8 4.8 8 5.6Z" fill="currentColor" />
+                    </motion.svg>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+
+              {/* Volume */}
+              <div className="relative">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => {
+                    setIsVolumeInteracting(false);
+                    setIsVolumeOpen((current) => !current);
+                  }}
+                  className="music-icon-btn flex h-9 w-9 items-center justify-center rounded-full"
+                  aria-label={`Volume ${volumePercent}%`}
+                  aria-expanded={isVolumeOpen}
+                >
+                  <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor" stroke="none" />
+                    {volume === 0 ? (
+                      <path d="m16 9.5 5 5m0-5-5 5" />
+                    ) : (
+                      <>
+                        <path d="M15.5 9.2a4 4 0 0 1 0 5.6" opacity={volume > 0 ? 1 : 0.25} />
+                        <path d="M18.3 6.6a7.6 7.6 0 0 1 0 10.8" opacity={volume > 0.45 ? 1 : 0.25} />
+                      </>
+                    )}
+                  </svg>
+                </motion.button>
+                <AnimatePresence>
+                  {isVolumeOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="music-volume-pop absolute right-0 top-[calc(100%+0.6rem)] flex w-48 items-center gap-3 rounded-2xl px-4 py-3"
+                      onPointerEnter={() => setIsVolumeInteracting(true)}
+                      onPointerLeave={() => setIsVolumeInteracting(false)}
+                      onPointerDown={() => setIsVolumeInteracting(true)}
+                      onPointerUp={() => setIsVolumeInteracting(false)}
+                      onFocusCapture={() => setIsVolumeInteracting(true)}
+                      onBlurCapture={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                          setIsVolumeInteracting(false);
+                        }
+                      }}
+                    >
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={volume}
+                        onChange={(event) => handleVolumeChange(Number(event.target.value))}
+                        className="music-range flex-1"
+                        style={{ ['--fill' as string]: `${volumePercent}%` }}
+                        aria-label="Volume da música"
+                      />
+                      <span className="w-8 text-right text-[0.7rem] font-medium tabular-nums text-champagne-700">{volumePercent}%</span>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
             </motion.div>
           ) : null}
@@ -576,7 +665,7 @@ export function SiteMusicPlayer() {
           {/* A música (src) é definida conforme a página, pela configuração do painel. */}
           Seu navegador nao suporta audio.
         </audio>
-      </div>
+      </motion.div>
     </div>
   );
 }

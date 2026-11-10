@@ -16,7 +16,7 @@ const SMALL = 'rounded-full border px-3 py-1 text-xs font-medium transition-colo
 const MAX_MUSIC_BYTES = 40 * 1024 * 1024;
 const NO_MUSIC = '__sem__';
 
-type Track = { id: string; title: string; url: string; builtIn: boolean; duration: number | null };
+type Track = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null };
 type Page = { key: string; label: string; path: string };
 type Settings = { mode: 'single' | 'per_page'; singleTrack: string; pageTracks: Record<string, string | null> };
 
@@ -53,9 +53,9 @@ export function AdminMusic() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [upload, setUpload] = useState<{ file: File; title: string; duration: number | null } | null>(null);
+  const [upload, setUpload] = useState<{ file: File; title: string; artist: string; duration: number | null } | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; title: string; artist: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
   const closeConfirm = useCallback(() => setConfirmAction(null), []);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -115,11 +115,17 @@ export function AdminMusic() {
       return;
     }
     const title = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 80) || 'Música';
-    setUpload({ file, title, duration: await readAudioDuration(file) });
+    setUpload({ file, title, artist: '', duration: await readAudioDuration(file) });
   };
 
   const sendUpload = async () => {
     if (!upload) return;
+    // Autoria obrigatória: aparece no player, por cuidado com o direito de uso.
+    if (upload.artist.trim().length < 2) {
+      setError('Informe a autoria da música (artista/intérprete) antes de enviar.');
+      document.getElementById('music-upload-artist')?.focus();
+      return;
+    }
     setError('');
     setProgress(0);
     try {
@@ -131,6 +137,7 @@ export function AdminMusic() {
         version: result.version,
         signature: result.signature,
         title: upload.title.trim() || 'Música',
+        artist: upload.artist.trim(),
         duration: result.duration ?? upload.duration,
       });
       setUpload(null);
@@ -162,9 +169,9 @@ export function AdminMusic() {
   const saveRename = async () => {
     if (!renaming) return;
     try {
-      await request('PATCH', { action: 'rename', id: renaming.id, title: renaming.title });
+      await request('PATCH', { action: 'edit', id: renaming.id, title: renaming.title, artist: renaming.artist });
       setRenaming(null);
-      setMessage('Nome atualizado.');
+      setMessage('Música atualizada.');
       await load();
     } catch (renameError) {
       setError(renameError instanceof Error ? renameError.message : 'Não foi possível renomear.');
@@ -342,6 +349,19 @@ export function AdminMusic() {
                   disabled={progress !== null}
                   className={FIELD}
                 />
+                <label htmlFor="music-upload-artist" className="text-xs text-zinc-600">
+                  Autoria <span className="text-rose-700">*</span> <span className="text-zinc-400">(artista/intérprete; se quiser, compositor e licença)</span>
+                </label>
+                <input
+                  id="music-upload-artist"
+                  value={upload.artist}
+                  onChange={(event) => setUpload({ ...upload, artist: event.target.value })}
+                  maxLength={120}
+                  disabled={progress !== null}
+                  placeholder="Ex.: Ed Sheeran · composição de Ed Sheeran"
+                  className={FIELD}
+                />
+                <p className="text-xs text-zinc-500">A autoria aparece no player do site. Usem músicas que vocês tenham direito de tocar.</p>
                 {progress !== null ? (
                   <div aria-live="polite">
                     <div className="flex justify-between text-xs text-zinc-600">
@@ -369,36 +389,60 @@ export function AdminMusic() {
                 <div key={track.id} className="space-y-2 border-b border-zinc-800/10 p-4 last:border-b-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     {renaming?.id === track.id ? (
-                      <div className="flex min-w-0 flex-1 gap-2">
+                      <div className="grid min-w-0 flex-1 gap-2">
                         <input
                           value={renaming.title}
                           onChange={(event) => setRenaming({ ...renaming, title: event.target.value })}
                           maxLength={80}
-                          aria-label="Novo nome"
+                          aria-label="Nome da música"
+                          placeholder="Nome da música"
                           className={FIELD}
                         />
-                        <button type="button" onClick={saveRename} className={`${SMALL} border-champagne-600 bg-champagne-600 text-[#fff9f1]`}>
-                          Salvar
-                        </button>
-                        <button type="button" onClick={() => setRenaming(null)} className={`${SMALL} border-zinc-800/20 text-zinc-800`}>
-                          Cancelar
-                        </button>
+                        <input
+                          value={renaming.artist}
+                          onChange={(event) => setRenaming({ ...renaming, artist: event.target.value })}
+                          maxLength={120}
+                          aria-label="Autoria"
+                          placeholder="Autoria (artista/intérprete; compositor, licença)"
+                          className={FIELD}
+                        />
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={saveRename} className={`${SMALL} border-champagne-600 bg-champagne-600 text-[#fff9f1]`}>
+                            Salvar
+                          </button>
+                          <button type="button" onClick={() => setRenaming(null)} className={`${SMALL} border-zinc-800/20 text-zinc-800`}>
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <p className="min-w-0 truncate text-sm font-medium text-zinc-800">
-                        {track.title}
-                        {track.duration ? <span className="ml-2 text-xs font-normal text-zinc-500">{formatDuration(track.duration)}</span> : null}
-                        {track.builtIn ? <span className="ml-2 text-xs font-normal text-zinc-500">(já vem com o site)</span> : null}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-zinc-800">
+                          {track.title}
+                          {track.duration ? <span className="ml-2 text-xs font-normal text-zinc-500">{formatDuration(track.duration)}</span> : null}
+                          {track.builtIn ? <span className="ml-2 text-xs font-normal text-zinc-500">(já vem com o site)</span> : null}
+                        </p>
+                        {track.artist ? (
+                          <p className="truncate text-xs text-zinc-600">{track.artist}</p>
+                        ) : (
+                          <p className="text-xs font-medium text-rose-700">Sem autoria informada: clique em Editar para incluir</p>
+                        )}
+                      </div>
                     )}
-                    {!track.builtIn && renaming?.id !== track.id ? (
+                    {renaming?.id !== track.id ? (
                       <div className="flex gap-1.5">
-                        <button type="button" onClick={() => setRenaming({ id: track.id, title: track.title })} className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}>
-                          Renomear
+                        <button
+                          type="button"
+                          onClick={() => setRenaming({ id: track.id, title: track.title, artist: track.artist ?? '' })}
+                          className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
+                        >
+                          Editar
                         </button>
-                        <button type="button" onClick={() => askDelete(track)} className={`${SMALL} border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`}>
-                          Excluir
-                        </button>
+                        {!track.builtIn ? (
+                          <button type="button" onClick={() => askDelete(track)} className={`${SMALL} border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`}>
+                            Excluir
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

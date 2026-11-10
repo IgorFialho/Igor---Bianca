@@ -8,6 +8,8 @@ import { musicUrl } from '@/lib/cloudinary';
 /** Música que já vem com o site (public/sons): fica sempre disponível e não pode ser excluída. */
 export const DEFAULT_TRACK_ID = 'padrao';
 export const DEFAULT_TRACK = { id: DEFAULT_TRACK_ID, title: 'Música original do site', url: '/sons/musica-fundo.mp3', builtIn: true };
+/** Autoria (artista/intérprete, compositor, licença…): aparece no player, por cuidado com o direito de uso. */
+export const TRACK_ARTIST_MAX_LENGTH = 120;
 
 /** Páginas que podem ter música própria (o /rsvp faz parte do convite). */
 export const MUSIC_PAGES = [
@@ -20,7 +22,7 @@ export type MusicPageKey = (typeof MUSIC_PAGES)[number]['key'];
 export const MUSIC_PAGE_KEYS = MUSIC_PAGES.map((page) => page.key) as MusicPageKey[];
 
 export type MusicMode = 'single' | 'per_page';
-export type MusicTrack = { id: string; title: string; url: string; builtIn: boolean; duration: number | null };
+export type MusicTrack = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null };
 /** Por página: id da música ou null ("sem música"). */
 export type MusicSettings = { mode: MusicMode; singleTrack: string; pageTracks: Record<MusicPageKey, string | null> };
 
@@ -48,6 +50,11 @@ export function ensureMusicSchema() {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         INSERT INTO music_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+        -- Autoria das músicas (inclusive da original do site, que não fica na tabela de músicas).
+        ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS artist VARCHAR(${TRACK_ARTIST_MAX_LENGTH});
+        ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_title VARCHAR(${TRACK_TITLE_MAX_LENGTH});
+        ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_artist VARCHAR(${TRACK_ARTIST_MAX_LENGTH});
       `
     )
     .then(() => undefined)
@@ -60,12 +67,23 @@ export function ensureMusicSchema() {
 
 export async function listTracks(): Promise<MusicTrack[]> {
   await ensureMusicSchema();
-  const result = await db.query<{ id: string; title: string; public_id: string; duration: string | null }>(
-    'SELECT id::text, title, public_id, duration::text FROM music_tracks ORDER BY created_at ASC'
-  );
+  const [result, defaults] = await Promise.all([
+    db.query<{ id: string; title: string; artist: string | null; public_id: string; duration: string | null }>(
+      'SELECT id::text, title, artist, public_id, duration::text FROM music_tracks ORDER BY created_at ASC'
+    ),
+    db.query<{ default_title: string | null; default_artist: string | null }>('SELECT default_title, default_artist FROM music_settings WHERE id = 1'),
+  ]);
+  const original = defaults.rows[0];
   return [
-    { ...DEFAULT_TRACK, duration: null },
-    ...result.rows.map((row) => ({ id: row.id, title: row.title, url: musicUrl(row.public_id), builtIn: false, duration: row.duration ? Number(row.duration) : null })),
+    { ...DEFAULT_TRACK, title: original?.default_title || DEFAULT_TRACK.title, artist: original?.default_artist || null, duration: null },
+    ...result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      artist: row.artist || null,
+      url: musicUrl(row.public_id),
+      builtIn: false,
+      duration: row.duration ? Number(row.duration) : null,
+    })),
   ];
 }
 
@@ -93,10 +111,10 @@ export async function getPublicMusic() {
   const resolve = (id: string | null) => {
     if (id === null) return null;
     const track = byId.get(id) ?? byId.get(DEFAULT_TRACK_ID)!;
-    return { id: track.id, title: track.title, url: track.url };
+    return { id: track.id, title: track.title, artist: track.artist, url: track.url };
   };
   const pages = Object.fromEntries(
     MUSIC_PAGE_KEYS.map((key) => [key, resolve(settings.mode === 'single' ? settings.singleTrack : settings.pageTracks[key])])
-  ) as Record<MusicPageKey, { id: string; title: string; url: string } | null>;
+  ) as Record<MusicPageKey, { id: string; title: string; artist: string | null; url: string } | null>;
   return { mode: settings.mode, pages };
 }

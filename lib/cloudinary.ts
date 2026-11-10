@@ -81,9 +81,26 @@ export function createUploadSignature(kind: MediaKind, videoCrop: string | null 
   };
 }
 
+// Músicas do site (enviadas pelo painel). O Cloudinary trata áudio como "video".
+export const MUSIC_FOLDER = 'igor-bianca/musicas';
+export const MUSIC_TAG = 'musica';
+
+/** Dados para o painel enviar uma música direto ao Cloudinary. */
+export function createMusicUploadSignature() {
+  const { cloudName, apiKey } = getConfig();
+  const params: Record<string, string | number> = { folder: MUSIC_FOLDER, tags: MUSIC_TAG, timestamp: Math.floor(Date.now() / 1000) };
+  return { uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, apiKey, signature: sign(params), params };
+}
+
+/** Endereço de uma música enviada, sempre em MP3 (o Cloudinary converte outros formatos de áudio). */
+export function musicUrl(publicId: string) {
+  const { cloudName } = getConfig();
+  return `https://res.cloudinary.com/${cloudName}/video/upload/${publicId}.mp3`;
+}
+
 /** Confere que o arquivo informado foi mesmo enviado ao nosso Cloudinary (assinatura devolvida no envio). */
-export function verifyUploadResponse(publicId: string, version: string | number, signature: string) {
-  if (!publicId.startsWith(`${MURAL_FOLDER}/`)) return false;
+export function verifyUploadResponse(publicId: string, version: string | number, signature: string, folder: string = MURAL_FOLDER) {
+  if (!publicId.startsWith(`${folder}/`)) return false;
   const { apiSecret } = getConfig();
   const expected = createHash('sha1').update(`public_id=${publicId}&version=${version}${apiSecret}`).digest('hex');
   return expected === signature;

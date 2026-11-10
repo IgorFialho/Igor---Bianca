@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
 import { AdminMural } from '@/components/admin/admin-mural';
+import { AdminMusic } from '@/components/admin/admin-music';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { AdminIdentity } from '@/components/admin/admin-identity';
 import { SearchField } from '@/components/admin/search-field';
@@ -67,13 +68,14 @@ type AccessActionDialogState = {
   inviteCodes: string[];
 } | null;
 
-type AdminTab = 'codes' | 'accesses' | 'gifts' | 'mural';
+type AdminTab = 'codes' | 'accesses' | 'gifts' | 'mural' | 'music';
 
 const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: 'codes', label: 'Lista de convidados' },
   { id: 'accesses', label: 'Acessos ao convite' },
   { id: 'gifts', label: 'Lista de presentes' },
   { id: 'mural', label: 'Mural' },
+  { id: 'music', label: 'Músicas' },
 ];
 
 // Lembra a última aba aberta: recarregar o painel volta para ela.
@@ -1623,6 +1625,7 @@ export default function AdminPage() {
         {activeTab === 'gifts' ? <AdminGifts /> : null}
 
         {activeTab === 'mural' ? <AdminMural /> : null}
+        {activeTab === 'music' ? <AdminMusic /> : null}
       </section>
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />

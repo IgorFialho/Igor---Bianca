@@ -9,11 +9,31 @@ const MUSIC_STATE_KEY = 'igor-bianca-music';
 /** Disparado pela câmera do mural ao começar (detail: true) e terminar (false) uma gravação. */
 export const MEDIA_RECORDING_EVENT = 'igor-bianca:recording';
 
+// Música original do site: usada enquanto a configuração do painel não chega (e se ela falhar).
+const DEFAULT_MUSIC_URL = '/sons/musica-fundo.mp3';
+
+type PageTrack = { id: string; title: string; url: string } | null;
+type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
+
+/** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite). */
+function musicPageKey(pathname: string) {
+  if (pathname.startsWith('/login')) return 'login';
+  if (pathname.startsWith('/convite') || pathname.startsWith('/rsvp')) return 'convite';
+  if (pathname.startsWith('/presentes')) return 'presentes';
+  if (pathname.startsWith('/mural')) return 'mural';
+  return null;
+}
+
 export function SiteMusicPlayer() {
   const pathname = usePathname();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // A música foi pausada pelo site (vídeo com som/gravação), não pela pessoa: volta sozinha depois.
   const pausedForMediaRef = useRef(false);
+  // Página "sem música": pausou só por causa da página; volta ao abrir uma página com música.
+  const pausedForPageRef = useRef(false);
+  const [config, setConfig] = useState<MusicConfig | null>(null);
+  const currentSrcRef = useRef<string | null>(null);
+  const restoredRef = useRef(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [volume, setVolume] = useState(0.25);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
@@ -23,6 +43,45 @@ export function SiteMusicPlayer() {
 
   // Sem player no admin e no telão do mural (projetado na festa).
   const isAdminRoute = pathname.startsWith('/admin') || pathname.startsWith('/mural/telao');
+
+  // Música desta página: a do painel; antes de carregar (ou se falhar), a original. Página fora da lista mantém a atual.
+  // A configuração demorou ou falhou: segue com a música original (como o site sempre funcionou).
+  const [useFallback, setUseFallback] = useState(false);
+  // Entrou pela introdução antes de a configuração chegar: a música começa assim que ela chegar.
+  const pendingStartRef = useRef(false);
+  const pageKey = musicPageKey(pathname);
+  const lastTrackRef = useRef<string | null>(DEFAULT_MUSIC_URL);
+  // undefined = ainda esperando a configuração.
+  let pageTrackUrl: string | null | undefined;
+  if (!config) pageTrackUrl = useFallback ? DEFAULT_MUSIC_URL : undefined;
+  else if (pageKey) pageTrackUrl = config.pages[pageKey]?.url ?? null;
+  else pageTrackUrl = lastTrackRef.current;
+  if (pageTrackUrl !== undefined) lastTrackRef.current = pageTrackUrl;
+  const hasMusic = pageTrackUrl !== null;
+
+  // Configuração do painel (de novo ao voltar para a aba, para pegar mudanças feitas no painel).
+  useEffect(() => {
+    if (isAdminRoute) return;
+    let cancelled = false;
+    const fallbackTimer = window.setTimeout(() => setUseFallback(true), 3000);
+    const load = () =>
+      fetch('/api/music', { cache: 'no-store' })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (cancelled) return;
+          if (data?.pages) setConfig(data);
+          else setUseFallback(true);
+        })
+        .catch(() => !cancelled && setUseFallback(true));
+    load();
+    const onVisible = () => document.visibilityState === 'visible' && load();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fallbackTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isAdminRoute]);
 
   const startPlayback = useCallback(
     async (allowMutedFallback: boolean) => {
@@ -98,9 +157,10 @@ export function SiteMusicPlayer() {
     const handleIntroEnter = () => {
       const audioElement = audioRef.current;
 
-      if (audioElement && audioElement.paused) {
-        void startPlayback(false);
-      }
+      // Entrada pela introdução (/login): a música começa aqui, como sempre — se a página tiver música.
+      if (!audioElement || !audioElement.paused) return;
+      if (audioElement.getAttribute('src')) void startPlayback(false);
+      else pendingStartRef.current = true;
     };
 
     window.addEventListener(INTRO_ENTER_EVENT, handleIntroEnter);
@@ -111,23 +171,22 @@ export function SiteMusicPlayer() {
   // Lembra se a música estava tocando (e em que ponto) para continuar ao abrir outra página do site por fora
   // da navegação (QR Code do telão, link no WhatsApp, nova aba, recarregar). Se o navegador bloquear o som
   // automático, a música volta no primeiro toque na tela. Quem pausou de propósito continua com ela pausada.
+  const removeGestureListenersRef = useRef<() => void>(() => undefined);
+
   useEffect(() => {
     if (isAdminRoute) return;
     const audioElement = audioRef.current;
     if (!audioElement) return;
 
-    let saved: { on?: boolean; t?: number } | null = null;
-    try {
-      saved = JSON.parse(window.localStorage.getItem(MUSIC_STATE_KEY) || 'null');
-    } catch {
-      saved = null;
-    }
-
     const save = () => {
       try {
         window.localStorage.setItem(
           MUSIC_STATE_KEY,
-          JSON.stringify({ on: !audioElement.paused || pausedForMediaRef.current, t: audioElement.currentTime })
+          JSON.stringify({
+            on: !audioElement.paused || pausedForMediaRef.current || pausedForPageRef.current,
+            t: audioElement.currentTime,
+            src: currentSrcRef.current,
+          })
         );
       } catch {
         // Sem armazenamento: só não lembra.
@@ -137,36 +196,104 @@ export function SiteMusicPlayer() {
     audioElement.addEventListener('pause', save);
     const saveTimer = window.setInterval(() => !audioElement.paused && save(), 4000);
 
-    let removeGestureListeners = () => {};
-    if (saved?.on && audioElement.paused) {
-      if (typeof saved.t === 'number' && saved.t > 0) {
-        try {
-          audioElement.currentTime = saved.t;
-        } catch {
-          // Ainda sem metadados: começa do início.
-        }
-      }
-      void startPlayback(false).then((started) => {
-        if (started) return;
-        const resumeOnGesture = () => {
-          removeGestureListeners();
-          if (audioElement.paused) void startPlayback(true);
-        };
-        const events = ['pointerdown', 'keydown', 'touchend'] as const;
-        events.forEach((name) => window.addEventListener(name, resumeOnGesture, { once: true, capture: true }));
-        removeGestureListeners = () => events.forEach((name) => window.removeEventListener(name, resumeOnGesture, { capture: true }));
-      });
-    }
-
     return () => {
-      removeGestureListeners();
+      removeGestureListenersRef.current();
       window.clearInterval(saveTimer);
       audioElement.removeEventListener('play', save);
       audioElement.removeEventListener('pause', save);
     };
-    // Só ao abrir o site (o player continua montado entre as páginas).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminRoute]);
+
+  /** Ao abrir o site: se a música estava tocando, continua (no mesmo ponto, se for a mesma música). */
+  const restoreSavedState = useCallback(
+    (audioElement: HTMLAudioElement, src: string) => {
+      let saved: { on?: boolean; t?: number; src?: string | null } | null = null;
+      try {
+        saved = JSON.parse(window.localStorage.getItem(MUSIC_STATE_KEY) || 'null');
+      } catch {
+        saved = null;
+      }
+      if (!saved?.on || !audioElement.paused) return;
+      const sameTrack = (saved.src ?? DEFAULT_MUSIC_URL) === src;
+      const resumeAt = sameTrack && typeof saved.t === 'number' && saved.t > 0 ? saved.t : 0;
+      if (resumeAt) {
+        // A música acabou de ser carregada: o ponto só pode ser aplicado depois que o navegador lê a duração.
+        const seek = () => {
+          try {
+            if (audioElement.getAttribute('src') === src && audioElement.currentTime < 1) audioElement.currentTime = resumeAt;
+          } catch {
+            // Sem como pular: começa do início.
+          }
+        };
+        if (audioElement.readyState >= 1) seek();
+        else audioElement.addEventListener('loadedmetadata', seek, { once: true });
+      }
+      void startPlayback(false).then((started) => {
+        if (started) return;
+        // Navegador bloqueou o som automático: volta no primeiro toque na tela.
+        const resumeOnGesture = () => {
+          removeGestureListenersRef.current();
+          if (audioElement.paused && audioElement.getAttribute('src')) void startPlayback(true);
+        };
+        const events = ['pointerdown', 'keydown', 'touchend'] as const;
+        events.forEach((name) => window.addEventListener(name, resumeOnGesture, { once: true, capture: true }));
+        removeGestureListenersRef.current = () => {
+          events.forEach((name) => window.removeEventListener(name, resumeOnGesture, { capture: true }));
+          removeGestureListenersRef.current = () => undefined;
+        };
+      });
+    },
+    [startPlayback]
+  );
+
+  // Troca de página: mesma música → continua tocando; música diferente → troca (tocando, se estava tocando);
+  // página "sem música" → pausa e volta ao entrar numa página com música.
+  useEffect(() => {
+    if (isAdminRoute) {
+      // O player sai da tela no painel; ao voltar, o áudio é outro e precisa receber a música de novo.
+      currentSrcRef.current = null;
+      restoredRef.current = false;
+      return;
+    }
+    const audioElement = audioRef.current;
+    if (!audioElement || pageTrackUrl === undefined) return;
+
+    if (pageTrackUrl === null) {
+      pendingStartRef.current = false;
+      removeGestureListenersRef.current();
+      if (!audioElement.paused || pausedForMediaRef.current) {
+        pausedForPageRef.current = true;
+        pausedForMediaRef.current = false;
+        audioElement.pause();
+      }
+      return;
+    }
+
+    if (currentSrcRef.current !== pageTrackUrl) {
+      const wasOn = currentSrcRef.current !== null && (!audioElement.paused || pausedForPageRef.current || pausedForMediaRef.current);
+      currentSrcRef.current = pageTrackUrl;
+      pausedForPageRef.current = false;
+      pausedForMediaRef.current = false;
+      audioElement.src = pageTrackUrl;
+      audioElement.load();
+      if (pendingStartRef.current) {
+        pendingStartRef.current = false;
+        restoredRef.current = true;
+        void startPlayback(true);
+      } else if (!restoredRef.current) {
+        restoredRef.current = true;
+        restoreSavedState(audioElement, pageTrackUrl);
+      } else if (wasOn) {
+        void startPlayback(true);
+      }
+      return;
+    }
+
+    if (pausedForPageRef.current) {
+      pausedForPageRef.current = false;
+      void startPlayback(true);
+    }
+  }, [pageTrackUrl, isAdminRoute, startPlayback, restoreSavedState]);
 
   // Vídeo com som (ex.: post do mural) ou gravação pela câmera: a música pausa e volta sozinha ao terminar.
   useEffect(() => {
@@ -295,6 +422,7 @@ export function SiteMusicPlayer() {
 
     if (audioElement.paused) {
       pausedForMediaRef.current = false;
+      pausedForPageRef.current = false;
       await startPlayback(isMobile);
       return;
     }
@@ -319,7 +447,13 @@ export function SiteMusicPlayer() {
   }
 
   return (
-    <div className="gold-frame fixed left-7 top-[30px] z-[60] w-fit max-w-[calc(100vw-1rem)] rounded-xl bg-white/65 px-2 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:left-8 sm:px-3 sm:text-[0.68rem]">
+    // Página "sem música": o player some, mas o áudio continua montado (para voltar do mesmo ponto).
+    <div
+      className={`gold-frame fixed left-7 top-[30px] z-[60] w-fit max-w-[calc(100vw-1rem)] rounded-xl bg-white/65 px-2 py-2 text-[0.62rem] uppercase tracking-[0.18em] text-zinc-700 backdrop-blur-md sm:left-8 sm:px-3 sm:text-[0.68rem] ${
+        hasMusic ? '' : 'hidden'
+      }`}
+      aria-hidden={!hasMusic}
+    >
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
@@ -439,7 +573,7 @@ export function SiteMusicPlayer() {
           className="sr-only"
           aria-label="Player de musica de fundo"
         >
-          <source src="/sons/musica-fundo.mp3" type="audio/mpeg" />
+          {/* A música (src) é definida conforme a página, pela configuração do painel. */}
           Seu navegador nao suporta audio.
         </audio>
       </div>

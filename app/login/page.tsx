@@ -114,7 +114,7 @@ const NAV_LINKS = [
   { label: 'Cerimônia', href: '#cerimonia' },
   { label: 'Confirmar presença', href: '#rsvp' },
   { label: 'Mensagens', href: '#mensagens' },
-  { label: 'Lista de presentes', href: '#presentes' },
+  { label: 'Lista de presentes', href: '/presentes' },
   // Aqui vai até a seção do mural (centralizada); nas outras páginas, o mesmo item abre a página /mural.
   { label: 'Mural', href: '#mural' },
   { label: 'Perguntas', href: '#perguntas' },

@@ -5,9 +5,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { INTRO_ENTER_EVENT } from '@/components/intro-arco';
 
+const MUSIC_STATE_KEY = 'igor-bianca-music';
+/** Disparado pela câmera do mural ao começar (detail: true) e terminar (false) uma gravação. */
+export const MEDIA_RECORDING_EVENT = 'igor-bianca:recording';
+
 export function SiteMusicPlayer() {
   const pathname = usePathname();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // A música foi pausada pelo site (vídeo com som/gravação), não pela pessoa: volta sozinha depois.
+  const pausedForMediaRef = useRef(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [volume, setVolume] = useState(0.25);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
@@ -15,7 +21,8 @@ export function SiteMusicPlayer() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const isAdminRoute = pathname.startsWith('/admin');
+  // Sem player no admin e no telão do mural (projetado na festa).
+  const isAdminRoute = pathname.startsWith('/admin') || pathname.startsWith('/mural/telao');
 
   const startPlayback = useCallback(
     async (allowMutedFallback: boolean) => {
@@ -101,6 +108,135 @@ export function SiteMusicPlayer() {
     return () => window.removeEventListener(INTRO_ENTER_EVENT, handleIntroEnter);
   }, [isAdminRoute, startPlayback]);
 
+  // Lembra se a música estava tocando (e em que ponto) para continuar ao abrir outra página do site por fora
+  // da navegação (QR Code do telão, link no WhatsApp, nova aba, recarregar). Se o navegador bloquear o som
+  // automático, a música volta no primeiro toque na tela. Quem pausou de propósito continua com ela pausada.
+  useEffect(() => {
+    if (isAdminRoute) return;
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+
+    let saved: { on?: boolean; t?: number } | null = null;
+    try {
+      saved = JSON.parse(window.localStorage.getItem(MUSIC_STATE_KEY) || 'null');
+    } catch {
+      saved = null;
+    }
+
+    const save = () => {
+      try {
+        window.localStorage.setItem(
+          MUSIC_STATE_KEY,
+          JSON.stringify({ on: !audioElement.paused || pausedForMediaRef.current, t: audioElement.currentTime })
+        );
+      } catch {
+        // Sem armazenamento: só não lembra.
+      }
+    };
+    audioElement.addEventListener('play', save);
+    audioElement.addEventListener('pause', save);
+    const saveTimer = window.setInterval(() => !audioElement.paused && save(), 4000);
+
+    let removeGestureListeners = () => {};
+    if (saved?.on && audioElement.paused) {
+      if (typeof saved.t === 'number' && saved.t > 0) {
+        try {
+          audioElement.currentTime = saved.t;
+        } catch {
+          // Ainda sem metadados: começa do início.
+        }
+      }
+      void startPlayback(false).then((started) => {
+        if (started) return;
+        const resumeOnGesture = () => {
+          removeGestureListeners();
+          if (audioElement.paused) void startPlayback(true);
+        };
+        const events = ['pointerdown', 'keydown', 'touchend'] as const;
+        events.forEach((name) => window.addEventListener(name, resumeOnGesture, { once: true, capture: true }));
+        removeGestureListeners = () => events.forEach((name) => window.removeEventListener(name, resumeOnGesture, { capture: true }));
+      });
+    }
+
+    return () => {
+      removeGestureListeners();
+      window.clearInterval(saveTimer);
+      audioElement.removeEventListener('play', save);
+      audioElement.removeEventListener('pause', save);
+    };
+    // Só ao abrir o site (o player continua montado entre as páginas).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminRoute]);
+
+  // Vídeo com som (ex.: post do mural) ou gravação pela câmera: a música pausa e volta sozinha ao terminar.
+  useEffect(() => {
+    if (isAdminRoute) return;
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+    let activeVideo: HTMLVideoElement | null = null;
+    let recording = false;
+
+    const pauseForMedia = () => {
+      if (!audioElement.paused) {
+        pausedForMediaRef.current = true;
+        audioElement.pause();
+      }
+    };
+    const resumeAfterMedia = () => {
+      if (!pausedForMediaRef.current || recording) return;
+      if (activeVideo && activeVideo.isConnected && !activeVideo.paused && !activeVideo.muted) return;
+      activeVideo = null;
+      pausedForMediaRef.current = false;
+      void startPlayback(true);
+    };
+    const isAudibleVideo = (target: EventTarget | null): target is HTMLVideoElement =>
+      target instanceof HTMLVideoElement && !target.muted && target.volume > 0;
+
+    const onPlay = (event: Event) => {
+      if (isAudibleVideo(event.target) && !event.target.paused) {
+        activeVideo = event.target;
+        pauseForMedia();
+      }
+    };
+    const onStop = (event: Event) => {
+      if (event.target === activeVideo) resumeAfterMedia();
+    };
+    const onVolume = (event: Event) => {
+      const video = event.target;
+      if (!(video instanceof HTMLVideoElement) || video.paused) return;
+      if (isAudibleVideo(video)) {
+        activeVideo = video;
+        pauseForMedia();
+      } else if (video === activeVideo) {
+        resumeAfterMedia();
+      }
+    };
+    const onRecording = (event: Event) => {
+      recording = (event as CustomEvent<boolean>).detail === true;
+      if (recording) pauseForMedia();
+      else resumeAfterMedia();
+    };
+
+    document.addEventListener('play', onPlay, true);
+    document.addEventListener('pause', onStop, true);
+    document.addEventListener('ended', onStop, true);
+    document.addEventListener('volumechange', onVolume, true);
+    window.addEventListener(MEDIA_RECORDING_EVENT, onRecording);
+    // Vídeo fechado (janela do post saiu da tela) sem disparar "pause".
+    const watcher = window.setInterval(() => {
+      if (activeVideo && !activeVideo.isConnected) resumeAfterMedia();
+    }, 800);
+
+    return () => {
+      document.removeEventListener('play', onPlay, true);
+      document.removeEventListener('pause', onStop, true);
+      document.removeEventListener('ended', onStop, true);
+      document.removeEventListener('volumechange', onVolume, true);
+      window.removeEventListener(MEDIA_RECORDING_EVENT, onRecording);
+      window.clearInterval(watcher);
+    };
+  }, [isAdminRoute, startPlayback]);
+
   useEffect(() => {
     if (isCollapsed) {
       setIsVolumeOpen(false);
@@ -158,10 +294,13 @@ export function SiteMusicPlayer() {
     }
 
     if (audioElement.paused) {
+      pausedForMediaRef.current = false;
       await startPlayback(isMobile);
       return;
     }
 
+    // Pausa feita pela pessoa: não volta sozinha depois de vídeos.
+    pausedForMediaRef.current = false;
     audioElement.pause();
     setIsMusicPlaying(false);
   };

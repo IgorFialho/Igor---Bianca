@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { INVITE_ACCESS_KEY } from '@/lib/invite';
+import { INVITE_ACCESS_KEY, INVITE_REMEMBER_KEY } from '@/lib/invite';
 import { FittedText } from '@/components/home/fitted-text';
 import { Hero, type HeroPhoto } from '@/components/home/hero';
 import { Reveal, REVEAL_EASE } from '@/components/home/reveal';
@@ -114,6 +114,7 @@ const NAV_LINKS = [
   { label: 'Confirmar presença', href: '#rsvp' },
   { label: 'Mensagens', href: '#mensagens' },
   { label: 'Lista de presentes', href: '/presentes' },
+  { label: 'Mural', href: '/mural' },
   { label: 'Perguntas', href: '#perguntas' },
 ];
 
@@ -253,6 +254,12 @@ export default function LoginPage() {
       }
 
       window.sessionStorage.setItem(INVITE_ACCESS_KEY, data.code || trimmedCode);
+      // Lembra o código neste aparelho: o mural (e outras abas) não pedem de novo.
+      try {
+        window.localStorage.setItem(INVITE_REMEMBER_KEY, data.code || trimmedCode);
+      } catch {
+        // Sem armazenamento (ex.: navegação privada): o mural pede o código.
+      }
       router.push('/convite');
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Erro inesperado.';

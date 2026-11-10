@@ -123,3 +123,6 @@ ALTER TABLE invitation_codes ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
 
 -- RSVP: o casal tem filhos, mas avisou que eles não irão. O app também cria esta coluna sozinho.
 ALTER TABLE rsvp_responses ADD COLUMN IF NOT EXISTS children_not_attending BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Mural do casamento (mural_settings, mural_posts, mural_likes, mural_comments): criadas automaticamente pelo app
+-- na primeira vez que o mural é usado; a definição completa está em lib/mural.ts (ensureMuralSchema).

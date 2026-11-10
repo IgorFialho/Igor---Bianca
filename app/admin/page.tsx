@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
+import { AdminMural } from '@/components/admin/admin-mural';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { SearchField } from '@/components/admin/search-field';
 import { GuestReport } from '@/components/admin/guest-report';
@@ -65,12 +66,13 @@ type AccessActionDialogState = {
   inviteCodes: string[];
 } | null;
 
-type AdminTab = 'codes' | 'accesses' | 'gifts';
+type AdminTab = 'codes' | 'accesses' | 'gifts' | 'mural';
 
 const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: 'codes', label: 'Lista de convidados' },
   { id: 'accesses', label: 'Acessos ao convite' },
   { id: 'gifts', label: 'Lista de presentes' },
+  { id: 'mural', label: 'Mural' },
 ];
 
 // Lembra a última aba aberta: recarregar o painel volta para ela.
@@ -850,7 +852,7 @@ export default function AdminPage() {
               <nav
                 role="tablist"
                 aria-label="Seções do painel"
-                className="grid grid-cols-3 gap-1 rounded-[1.25rem] border border-zinc-800/10 bg-cream p-1 sm:flex sm:rounded-full"
+                className="grid grid-cols-2 gap-1 rounded-[1.25rem] border border-zinc-800/10 bg-cream p-1 sm:flex sm:rounded-full"
               >
                 {ADMIN_TABS.map((tab) => (
                   <button
@@ -1615,6 +1617,8 @@ export default function AdminPage() {
         ) : null}
 
         {activeTab === 'gifts' ? <AdminGifts /> : null}
+
+        {activeTab === 'mural' ? <AdminMural /> : null}
       </section>
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />

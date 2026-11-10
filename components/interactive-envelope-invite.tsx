@@ -18,6 +18,7 @@ const NAV_LINKS = [
   { label: 'Cerimônia', href: '/login#cerimonia' },
   { label: 'Mensagens', href: '/login#mensagens' },
   { label: 'Lista de presentes', href: '/presentes' },
+  { label: 'Mural', href: '/mural' },
   { label: 'Perguntas', href: '/login#perguntas' },
 ];
 

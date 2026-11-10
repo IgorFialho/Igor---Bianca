@@ -19,6 +19,7 @@ const NAV_LINKS = [
   { label: 'Cerimônia', href: '/login#cerimonia' },
   { label: 'Confirmar presença', href: '/login#rsvp' },
   { label: 'Mensagens', href: '/login#mensagens' },
+  { label: 'Mural', href: '/mural' },
   { label: 'Perguntas', href: '/login#perguntas' },
 ];
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;

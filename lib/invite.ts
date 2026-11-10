@@ -1,4 +1,6 @@
 export const INVITE_ACCESS_KEY = 'wedding-invite-access';
+/** Código do convite lembrado neste aparelho (não some ao fechar a aba): o mural não pede o código de novo. */
+export const INVITE_REMEMBER_KEY = 'igor-bianca-mural-code';
 
 export type AttendanceChoice = 'yes' | 'no' | '';
 

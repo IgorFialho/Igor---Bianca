@@ -114,8 +114,9 @@ const NAV_LINKS = [
   { label: 'Cerimônia', href: '#cerimonia' },
   { label: 'Confirmar presença', href: '#rsvp' },
   { label: 'Mensagens', href: '#mensagens' },
-  { label: 'Lista de presentes', href: '/presentes' },
-  { label: 'Mural', href: '/mural' },
+  { label: 'Lista de presentes', href: '#presentes' },
+  // Aqui vai até a seção do mural (centralizada); nas outras páginas, o mesmo item abre a página /mural.
+  { label: 'Mural', href: '#mural' },
   { label: 'Perguntas', href: '#perguntas' },
 ];
 
@@ -132,18 +133,6 @@ const VENUE_PHOTOS: VenuePhoto[] = [
 ];
 const GOOGLE_MAPS_URL =
   'https://www.google.com/maps/search/?api=1&query=Av.+Otacilio+Negrao+de+Lima,+7630+-+Pampulha,+Belo+Horizonte+-+MG,+31365-450';
-
-// Fundo da seção do mural enquanto ainda há poucas postagens (depois, entram as fotos dos convidados).
-const MURAL_FALLBACK_PHOTOS = [
-  '/imagens/casal/casal-04.jpeg',
-  '/imagens/casal/casal-05.jpeg',
-  '/imagens/casal/casal-06.jpeg',
-  '/imagens/casal/casal-07.jpeg',
-  '/imagens/casal/casal-09.jpeg',
-  '/imagens/casal/casal-12.jpeg',
-  '/imagens/casal/casal-13.jpeg',
-  '/imagens/casal/casal-03.jpeg',
-];
 
 // Espaçamento lateral e vertical padrão das seções de conteúdo.
 const SECTION = 'relative w-full px-6 py-24 md:px-12 md:py-32';
@@ -481,7 +470,6 @@ export default function LoginPage() {
         title="Compartilhe o nosso dia"
         text="No dia do casamento, poste aqui as fotos e os vídeos que você fizer. Eles aparecem na hora para todos os convidados."
         ctaLabel="Ver o mural"
-        fallbackPhotos={MURAL_FALLBACK_PHOTOS}
         headingClassName={HEADING}
         eyebrowClassName={EYEBROW}
       />

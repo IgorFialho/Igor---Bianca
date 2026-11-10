@@ -19,19 +19,37 @@ function sectionScrollTop(element: HTMLElement) {
   const top = rect.top + window.scrollY;
   const viewport = window.innerHeight;
 
-  // Distância entre o topo da seção e o primeiro conteúdo visível (título, texto, foto ou formulário).
-  const firstContent = element.querySelector('h1, h2, h3, h4, p, img, picture, form');
-  const contentOffset = firstContent
-    ? Math.max(0, firstContent.getBoundingClientRect().top - rect.top)
-    : parseFloat(window.getComputedStyle(element).paddingTop) || 0;
-  const centeredGap = (viewport - rect.height) / 2;
+  // Faixa ocupada pelo conteúdo de verdade (títulos, textos, fotos, botões, contagem...), sem o espaçamento da
+  // seção nem enfeites de fundo (aria-hidden). É ela que fica centralizada, e não a caixa da seção.
+  let contentTop = Infinity;
+  let contentBottom = -Infinity;
+  element.querySelectorAll('h1, h2, h3, h4, p, span, img, picture, video, form, button, a, li, svg').forEach((child) => {
+    if (child.closest('[aria-hidden="true"]')) return;
+    const box = child.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    // Blocos que ainda não apareceram estão deslocados (sobem 20px ao surgir): mede onde vão ficar.
+    let shift = 0;
+    for (let node: Element | null = child; node && node !== element; node = node.parentElement) {
+      const transform = window.getComputedStyle(node).transform;
+      if (transform && transform !== 'none') shift += new DOMMatrixReadOnly(transform).m42;
+    }
+    contentTop = Math.min(contentTop, box.top - shift - rect.top);
+    contentBottom = Math.max(contentBottom, box.bottom - shift - rect.top);
+  });
+  if (!Number.isFinite(contentTop)) {
+    contentTop = 0;
+    contentBottom = rect.height;
+  }
+  const contentHeight = contentBottom - contentTop;
 
-  // Centraliza, desde que o começo do conteúdo não fique escondido atrás do menu.
-  if (rect.height <= viewport && centeredGap + contentOffset >= HEADER_OFFSET) {
-    return Math.max(0, top - centeredGap);
+  // Cabe na tela: o meio do conteúdo vai para o meio da tela, desde que o começo não fique atrás do menu.
+  if (contentHeight <= viewport - HEADER_OFFSET) {
+    const centeredTop = Math.max(HEADER_OFFSET, (viewport - contentHeight) / 2);
+    return Math.max(0, top + contentTop - centeredTop);
   }
 
-  return Math.max(0, top - Math.max(0, HEADER_OFFSET - contentOffset));
+  // Mais alto que a tela (ex.: "Nossa história"): o conteúdo começa logo abaixo do menu.
+  return Math.max(0, top + contentTop - HEADER_OFFSET);
 }
 
 // Rolagem suave em todo o site, igual à Cordially (Lenis com lerp 0.18): a roda do mouse vira um

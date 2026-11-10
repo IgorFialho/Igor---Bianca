@@ -16,7 +16,7 @@ const lockedMessage = (minutes: number) =>
 export async function POST(request: NextRequest) {
   try {
     if (!isAdminPasswordConfigured()) {
-      console.error('ADMIN_USERNAME ausente ou ADMIN_PASSWORD com menos de 12 caracteres: login do admin desativado.');
+      console.error('ADMIN_IGOR_PASSWORD e ADMIN_BIANCA_PASSWORD ausentes (ou com menos de 12 caracteres): login do admin desativado.');
       return NextResponse.json({ error: 'Login do painel indisponível no momento.' }, { status: 503 });
     }
 
@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
     const username = typeof body?.username === 'string' ? body.username.slice(0, 100) : '';
     const password = typeof body?.password === 'string' ? body.password.slice(0, 200) : '';
 
-    if (!validateAdminCredentials(username, password)) {
+    const admin = validateAdminCredentials(username, password);
+    if (!admin) {
       await recordLoginAttempt(ip, false);
       // Pequena espera em toda senha errada: deixa tentativas em massa bem mais lentas.
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -53,9 +54,9 @@ export async function POST(request: NextRequest) {
     }
 
     await recordLoginAttempt(ip, true);
-    const token = await createAdminSession(request);
+    const token = await createAdminSession(request, admin);
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({ ok: true, admin });
     response.cookies.set({
       name: ADMIN_AUTH_COOKIE,
       value: token,

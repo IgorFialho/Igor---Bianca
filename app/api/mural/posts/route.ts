@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAdminSession } from '@/lib/admin-auth';
 import { destroyMedia, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
 import {
   CAPTION_MAX_LENGTH,
@@ -23,14 +24,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const viewerId = readViewerId(body?.viewerId);
-    const name = readAuthorName(body?.name);
+    // Noivo/noiva logados no painel publicam com o próprio nome e o post sai em destaque.
+    const admin = await getAdminSession(request);
+    const name = admin ? admin.name : readAuthorName(body?.name);
     if (!viewerId) {
       return NextResponse.json({ error: 'Recarregue a página e tente de novo.' }, { status: 400 });
     }
     if (!name) {
       return NextResponse.json({ error: 'Informe o seu nome para publicar.' }, { status: 400 });
     }
-    if (!(await getMuralSettings()).isOpen) {
+    // Noivo/noiva podem publicar mesmo com o mural fechado para os convidados.
+    if (!admin && !(await getMuralSettings()).isOpen) {
       return NextResponse.json({ error: 'O mural ainda não está aberto para postagens.' }, { status: 403 });
     }
 
@@ -64,12 +68,12 @@ export async function POST(request: NextRequest) {
     const duration = Number.isFinite(Number(body?.duration)) ? Number(body.duration) : null;
     const result = await db.query<{ id: string }>(
       `
-        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, caption, media_type, public_id, width, height, duration, ip)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, caption, media_type, public_id, width, height, duration, ip)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (public_id) DO NOTHING
         RETURNING id::text
       `,
-      [guest?.id ?? null, viewerId, name, caption, kind, publicId, toInt(body?.width), toInt(body?.height), duration, ip]
+      [guest?.id ?? null, viewerId, name, admin?.role ?? null, caption, kind, publicId, toInt(body?.width), toInt(body?.height), duration, ip]
     );
     return NextResponse.json({ ok: true, id: result.rows[0]?.id ?? null });
   } catch (error) {

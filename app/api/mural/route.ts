@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isCloudinaryConfigured } from '@/lib/cloudinary';
+import { getAdminSession } from '@/lib/admin-auth';
 import { getMuralSettings, listPosts, readViewerId, resolveGuest } from '@/lib/mural';
 
 export const dynamic = 'force-dynamic';
@@ -10,14 +11,17 @@ export async function GET(request: NextRequest) {
   try {
     const viewerId = readViewerId(request.nextUrl.searchParams.get('viewerId'));
     const code = request.nextUrl.searchParams.get('code');
-    const [settings, posts, guest] = await Promise.all([
+    const [settings, posts, guest, admin] = await Promise.all([
       getMuralSettings(),
       listPosts({ viewerCode: viewerId }),
       code ? resolveGuest(code) : Promise.resolve(null),
+      getAdminSession(request),
     ]);
     return NextResponse.json(
       {
         suggestedName: guest?.name ?? null,
+        // Noivo/noiva logados no painel: publicam com o próprio nome e o post sai em destaque.
+        viewerAdmin: admin ? { role: admin.role, name: admin.name } : null,
         settings: { ...settings, uploadsReady: isCloudinaryConfigured() },
         posts,
       },

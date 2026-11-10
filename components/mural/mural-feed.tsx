@@ -19,6 +19,8 @@ import {
   storeAuthorName,
   timeAgo,
   uploadToCloudinary,
+  type MuralAdminView,
+  type MuralAuthorRole,
   type MuralCommentView,
   type MuralPostView,
   type MuralSettingsView,
@@ -102,11 +104,211 @@ function CommentIcon({ className = '' }: { className?: string }) {
   );
 }
 
-function Avatar({ name, size = 'h-9 w-9' }: { name: string; size?: string }) {
+function Avatar({ name, size = 'h-9 w-9', role = null }: { name: string; size?: string; role?: MuralAuthorRole | null }) {
   return (
     <span className={`${size} flex shrink-0 items-center justify-center rounded-full bg-champagne-600/15 text-xs font-semibold text-champagne-700`} aria-hidden="true">
-      {initials(name)}
+      {/* Noivo/noiva: gravata ou laço no lugar das iniciais. */}
+      {role === 'noivo' ? (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+          <path d="M9 2h6l-1.4 4.2h-3.2L9 2Z" fill="currentColor" />
+          <path d="M10.4 7.4h3.2l2.6 10.1L12 22l-4.2-4.5 2.6-10.1Z" fill="currentColor" />
+        </svg>
+      ) : role === 'noiva' ? (
+        <svg viewBox="0 0 28 24" className="h-5 w-6" aria-hidden="true">
+          <path d="M12 10.5C9.5 6 3.5 3.5 2 5.5c-1.5 2 .2 9 2.7 10.2 2.4 1.1 6.3-1.3 7.3-3.2v-2Z" fill="currentColor" />
+          <path d="M16 10.5c2.5-4.5 8.5-7 10-5 1.5 2-.2 9-2.7 10.2-2.4 1.1-6.3-1.3-7.3-3.2v-2Z" fill="currentColor" />
+          <path d="M12.5 13.5 9.5 22l2.4-1.2 1.2 2.2 1-8.5h-1.6Zm3 0 3 8.5-2.4-1.2-1.2 2.2-1-8.5h1.6Z" fill="currentColor" opacity="0.85" />
+          <rect x="11.3" y="8.7" width="5.4" height="5.6" rx="2.2" fill="currentColor" />
+        </svg>
+      ) : (
+        initials(name)
+      )}
     </span>
+  );
+}
+
+/** Selo "Noivo" ou "Noiva" ao lado do nome, nos posts do casal (o ícone fica no círculo do usuário). */
+function RoleBadge({ role }: { role: MuralAuthorRole }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+        // Mesmas cores da moldura de cada um: ouro rosé (noiva) e ouro com oliva (noivo).
+        role === 'noiva'
+          ? 'from-[#f6d6d0] to-[#dca196] text-[#7a3546] shadow-[0_2px_8px_rgba(170,90,95,0.3)]'
+          : 'from-[#eadbab] to-[#c3a35e] text-[#3a4526] shadow-[0_2px_8px_rgba(110,120,70,0.3)]'
+      }`}
+    >
+      {role === 'noivo' ? 'Noivo' : 'Noiva'}
+    </span>
+  );
+}
+
+// Molduras dos posts do noivo e da noiva: uma divisória fina logo acima e outra logo abaixo da foto, quase
+// encostando nela, no próprio card (a foto fica inteira, no celular e no computador). Mesma estrutura, detalhes próprios:
+// - noiva: linha em ouro rosé com espirais nas pontas e um ramo de florzinhas brancas no meio;
+// - noivo: linha em dourado com oliva, volutinhas com folha nas pontas e um enfeite de volutas no meio.
+type FrameTheme = {
+  ornament: string;
+  accent: string;
+};
+
+const FRAME_THEMES: Record<MuralAuthorRole, FrameTheme> = {
+  noiva: { ornament: '#bf7f72', accent: '#c97a8a' },
+  noivo: { ornament: '#7d7a47', accent: '#a88b4c' },
+};
+
+/** Espiral da ponta da divisória da noiva (desenhada para a ponta esquerda, curvando para baixo). */
+function BrideCurl({ color, className }: { color: string; className: string }) {
+  return (
+    <svg viewBox="0 0 22 20" className={`h-5 w-[22px] shrink-0 ${className}`} aria-hidden="true">
+      <path d="M22 5H9C4.5 5 2.5 8.6 3.2 11.8c.7 3.2 4.6 4.2 6.3 1.8 1.4-1.9.3-4.4-1.9-4.1-1.5.2-2 1.7-1.3 2.6" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="6.4" cy="12.2" r="1.1" fill={color} />
+    </svg>
+  );
+}
+
+/** Ramo central da divisória da noiva: florzinhas brancas, botões e folhinhas, espelhados. */
+function BrideRoses({ line }: { line: string }) {
+  // Florzinha branca de cinco pétalas, com contorno rosé bem leve (para aparecer no fundo rosado) e miolo dourado.
+  const flower = (cx: number, r: number) => {
+    const petal = r * 0.52;
+    const distance = r * 0.55;
+    return (
+      <g key={`flor-${cx}`}>
+        {[0, 1, 2, 3, 4].map((index) => {
+          const angle = (index * 72 - 90) * (Math.PI / 180);
+          return (
+            <circle
+              key={index}
+              cx={cx + Math.cos(angle) * distance}
+              cy={9 + Math.sin(angle) * distance}
+              r={petal}
+              fill="#ffffff"
+              stroke="#e3b2a9"
+              strokeWidth="0.55"
+            />
+          );
+        })}
+        <circle cx={cx} cy="9" r={r * 0.28} fill="#e2b85f" />
+      </g>
+    );
+  };
+  const leaf = (x: number, flip: boolean, up: boolean) => (
+    <path
+      key={`folha-${x}-${up}`}
+      d={`M${x} 9c${flip ? -2 : 2} ${up ? -4.5 : 4.5} ${flip ? -6 : 6} ${up ? -5 : 5} ${flip ? -8 : 8} ${up ? -3.5 : 3.5}c${flip ? 2.6 : -2.6} ${up ? 3 : -3} ${flip ? 5.8 : -5.8} ${up ? 3.6 : -3.6} ${flip ? 8 : -8} ${up ? 3.5 : -3.5}Z`}
+      fill={LEAF}
+    />
+  );
+  return (
+    <svg viewBox="0 0 120 18" className="h-[18px] w-[120px] shrink-0" aria-hidden="true">
+      <path d="M0 9h120" stroke={line} strokeWidth="1.5" />
+      {[leaf(30, true, true), leaf(30, true, false), leaf(90, false, true), leaf(90, false, false), leaf(46, true, false), leaf(74, false, true)]}
+      {[flower(51, 7), flower(69, 7), flower(37, 4.6), flower(83, 4.6)]}
+      {/* Botões brancos */}
+      <circle cx="23" cy="9" r="2.2" fill="#ffffff" stroke="#e3b2a9" strokeWidth="0.55" />
+      <circle cx="97" cy="9" r="2.2" fill="#ffffff" stroke="#e3b2a9" strokeWidth="0.55" />
+      <circle cx="16" cy="9" r="1.2" fill={line} />
+      <circle cx="104" cy="9" r="1.2" fill={line} />
+    </svg>
+  );
+}
+
+/**
+ * Divisória da noiva (acima e abaixo da foto, quase encostando nela): linha fina em ouro rosé com espirais nas
+ * pontas e um ramo de florzinhas brancas no meio. Embaixo ela é espelhada (as espirais curvam para cima, na direção da foto).
+ */
+function BrideDivider({ position }: { position: 'top' | 'bottom' }) {
+  const color = FRAME_THEMES.noiva.ornament;
+  const isTop = position === 'top';
+  return (
+    <div className={`flex h-5 items-start px-2 ${isTop ? 'mb-[3px]' : 'mt-[3px] -scale-y-100'}`} aria-hidden="true">
+      <BrideCurl color={color} className="" />
+      <span className="mt-[4.25px] h-[1.5px] flex-1" style={{ backgroundColor: color }} />
+      {/* O caule das rosas (y=9) fica na mesma altura da linha (y=5). */}
+      <span className="-mt-1 flex items-start">
+        <BrideRoses line={color} />
+      </span>
+      <span className="mt-[4.25px] h-[1.5px] flex-1" style={{ backgroundColor: color }} />
+      <BrideCurl color={color} className="-scale-x-100" />
+    </div>
+  );
+}
+
+/** Ponta da divisória do noivo: volutinha com uma folha (desenhada para a ponta esquerda). */
+function GroomEnd({ color, className }: { color: string; className: string }) {
+  return (
+    <svg viewBox="0 0 26 20" className={`h-5 w-[26px] shrink-0 ${className}`} aria-hidden="true">
+      <path d="M26 6H12" stroke={color} strokeWidth="1.5" />
+      <path d="M12 6c-3 0-5.2 1.4-6.6 3.4-1.5 2.2-.8 5 1.6 5.4 2 .3 3.1-1.5 2.3-3-.6-1-2-1.1-2.6-.2" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12.5 6c-2.6-3.2-6.8-4.2-9.6-2.6 2.4 2.6 6.1 3.5 9.6 2.6Z" fill={color} />
+      <circle cx="2.4" cy="8.4" r="1.2" fill={color} />
+    </svg>
+  );
+}
+
+/** Enfeite central da divisória do noivo: volutas espelhadas curvando para baixo, folhas e um botão no meio. */
+function GroomCenter({ color, accent }: { color: string; accent: string }) {
+  const half = (
+    <>
+      <path d="M35 6c-4.2 0-8.4 1.5-10.4 4.6-1.9 3 0 6.4 3 6.2 2.4-.2 3.3-2.7 1.8-4-1.2-1-2.9-.3-2.9 1" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <path d="M33.5 6c-3.2-2.8-7.6-3.4-10.4-1.7 2.8 2.3 6.6 3 10.4 1.7Z" fill={color} />
+      <path d="M22 6c-2.4 1-3.6 3-3.2 5 1.9-.7 3.1-2.6 3.2-5Z" fill={color} opacity="0.85" />
+    </>
+  );
+  return (
+    <svg viewBox="0 0 70 20" className="h-5 w-[70px] shrink-0" aria-hidden="true">
+      <path d="M0 6h70" stroke={color} strokeWidth="1.5" />
+      {half}
+      <g transform="translate(70 0) scale(-1 1)">{half}</g>
+      <path d="M35 3.2c-2.1 2.6-2.1 6.2 0 9.4 2.1-3.2 2.1-6.8 0-9.4Z" fill={color} />
+      <circle cx="35" cy="15.6" r="1.6" fill={accent} />
+    </svg>
+  );
+}
+
+/**
+ * Divisória do noivo (acima e abaixo da foto, quase encostando nela): linha fina em dourado com oliva, volutinhas
+ * nas pontas e o enfeite de volutas no meio. Embaixo ela é espelhada (as volutas curvam para cima, na direção da foto).
+ */
+function GroomDivider({ position }: { position: 'top' | 'bottom' }) {
+  const { ornament, accent } = FRAME_THEMES.noivo;
+  const isTop = position === 'top';
+  return (
+    <div className={`flex h-5 items-start px-2 ${isTop ? 'mb-[3px]' : 'mt-[3px] -scale-y-100'}`} aria-hidden="true">
+      <GroomEnd color={ornament} className="" />
+      <span className="mt-[5.25px] h-[1.5px] flex-1" style={{ backgroundColor: ornament }} />
+      <GroomCenter color={ornament} accent={accent} />
+      <span className="mt-[5.25px] h-[1.5px] flex-1" style={{ backgroundColor: ornament }} />
+      <GroomEnd color={ornament} className="-scale-x-100" />
+    </div>
+  );
+}
+
+/** Faixa da moldura (acima ou abaixo da foto), no estilo de cada um. */
+function FrameBand({ role, position }: { role: MuralAuthorRole; position: 'top' | 'bottom' }) {
+  return role === 'noiva' ? <BrideDivider position={position} /> : <GroomDivider position={position} />;
+}
+
+/** Moldura dos posts do noivo/noiva: faixas acima e abaixo da foto. Posts de convidados passam direto. */
+function CoupleFrame({ role, children }: { role: MuralAuthorRole | null; children: React.ReactNode }) {
+  if (!role) return <>{children}</>;
+  return (
+    <>
+      <FrameBand role={role} position="top" />
+      {children}
+      <FrameBand role={role} position="bottom" />
+    </>
+  );
+}
+
+/** Nome de quem postou, com o selo quando é o noivo ou a noiva. */
+function AuthorName({ name, role }: { name: string; role: MuralAuthorRole | null }) {
+  return (
+    <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-zinc-800">
+      <span className="truncate">{name}</span>
+      {role ? <RoleBadge role={role} /> : null}
+    </p>
   );
 }
 
@@ -126,6 +328,9 @@ export function MuralFeed() {
   // Mural aberto: o aparelho tem um identificador próprio e quem publica informa o nome (lembrado aqui).
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [authorName, setAuthorName] = useState('');
+  // Noivo/noiva logados no painel neste navegador: publicam com o próprio nome e em destaque.
+  const [viewerAdmin, setViewerAdmin] = useState<MuralAdminView | null>(null);
+  const viewerAdminRef = useRef<MuralAdminView | null>(null);
   const [settings, setSettings] = useState<MuralSettingsView | null>(null);
   const [posts, setPosts] = useState<MuralPostView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,7 +346,8 @@ export function MuralFeed() {
 
   const updateAuthorName = useCallback((name: string) => {
     setAuthorName(name);
-    storeAuthorName(name);
+    // O nome do noivo/noiva vem do login; não substitui o nome lembrado para quando sair do painel.
+    if (!viewerAdminRef.current) storeAuthorName(name);
   }, []);
 
   const loadFeed = useCallback(
@@ -157,8 +363,12 @@ export function MuralFeed() {
         if (!response.ok) throw new Error(data?.error || 'Erro ao carregar o mural.');
         setSettings(data.settings);
         setPosts(data.posts);
+        const admin: MuralAdminView | null = data.viewerAdmin ?? null;
+        viewerAdminRef.current = admin;
+        setViewerAdmin(admin);
+        if (admin) setAuthorName(admin.name);
         // Quem entrou com o código do convite já vem com o nome sugerido.
-        if (data.suggestedName && !readAuthorName()) setAuthorName(data.suggestedName);
+        else if (data.suggestedName && !readAuthorName()) setAuthorName(data.suggestedName);
         setLoadError('');
       } catch (error) {
         if (!silent) setLoadError(error instanceof Error ? error.message : 'Erro ao carregar o mural.');
@@ -295,6 +505,7 @@ export function MuralFeed() {
             key="composer"
             viewerId={viewerId}
             authorName={authorName}
+            viewerAdmin={viewerAdmin}
             onAuthorName={updateAuthorName}
             onClose={() => setIsComposerOpen(false)}
             onPosted={() => {
@@ -600,11 +811,21 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
   const longCaption = caption.length > 120;
 
   return (
-    <article ref={cardRef} className="-mx-4 overflow-hidden border-b sm:mx-0 border-zinc-800/10 pb-6 sm:rounded-[1.5rem] sm:border sm:bg-[#fffaf1] sm:pb-4 sm:shadow-[0_18px_40px_rgba(47,36,27,0.06)] safari-clip">
+    <article
+      ref={cardRef}
+      className={`-mx-4 overflow-hidden border-b pb-6 sm:mx-0 sm:rounded-[1.5rem] sm:border sm:pb-4 safari-clip ${
+        // Fundo do card: rosado no post da noiva, marfim esverdeado no do noivo, creme nos dos convidados.
+        post.authorRole === 'noiva'
+          ? 'border-[#ecc9c1] bg-[#fcefec] sm:shadow-[0_18px_40px_rgba(170,90,95,0.14)]'
+          : post.authorRole === 'noivo'
+            ? 'border-[#ddd6b2] bg-[#f4f3e4] sm:shadow-[0_18px_40px_rgba(75,91,51,0.14)]'
+            : 'border-zinc-800/10 sm:bg-[#fffaf1] sm:shadow-[0_18px_40px_rgba(47,36,27,0.06)]'
+      }`}
+    >
       <header className="flex items-center gap-3 px-4 py-3">
-        <Avatar name={post.authorName} />
+        <Avatar name={post.authorName} role={post.authorRole} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-zinc-800">{post.authorName}</p>
+          <AuthorName name={post.authorName} role={post.authorRole} />
           <p className="text-xs text-zinc-500">{timeAgo(post.createdAt)}</p>
         </div>
         {post.isMine && deleteRemaining > 0 ? (
@@ -621,6 +842,8 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
       </header>
       <ConfirmPopup request={confirmRequest} onClose={closeConfirm} />
 
+      {/* Post do noivo/noiva: faixas da moldura acima e abaixo da foto (CoupleFrame); dos convidados, passa direto. */}
+      <CoupleFrame role={post.authorRole}>
       <div
         className="safari-clip relative w-full cursor-pointer select-none overflow-hidden bg-[#f1e7d3] sm:rounded-none"
         style={{ aspectRatio: String(mediaAspect(post)) }}
@@ -682,6 +905,7 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
           ) : null}
         </AnimatePresence>
       </div>
+      </CoupleFrame>
 
       <div className="px-4 pt-3">
         <div className="flex items-center gap-3">
@@ -968,11 +1192,16 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
             </AnimatePresence>
           </div>
 
-          <div className="flex flex-1 flex-col sm:w-[min(400px,38%)] sm:flex-none sm:min-h-0">
+          {/* Lado das informações: mesmo fundo do card (rosado da noiva, marfim esverdeado do noivo, creme dos convidados). */}
+          <div
+            className={`flex flex-1 flex-col sm:w-[min(400px,38%)] sm:flex-none sm:min-h-0 ${
+              post.authorRole === 'noiva' ? 'bg-[#fcefec]' : post.authorRole === 'noivo' ? 'bg-[#f4f3e4]' : ''
+            }`}
+          >
             <div className="flex items-center gap-3 border-b border-zinc-800/10 px-4 py-3">
-              <Avatar name={post.authorName} />
+              <Avatar name={post.authorName} role={post.authorRole} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-zinc-800">{post.authorName}</p>
+                <AuthorName name={post.authorName} role={post.authorRole} />
                 <p className="text-xs text-zinc-500">{timeAgo(post.createdAt)}</p>
               </div>
             </div>
@@ -980,7 +1209,7 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
             <div className="flex-1 space-y-4 px-4 py-4 text-sm sm:min-h-0 sm:overflow-y-auto">
               {post.caption ? (
                 <div className="flex gap-3">
-                  <Avatar name={post.authorName} size="h-8 w-8" />
+                  <Avatar name={post.authorName} size="h-8 w-8" role={post.authorRole} />
                   <p className="min-w-0 flex-1 whitespace-pre-line break-words text-zinc-800">
                     <span className="font-semibold">{post.authorName}</span> {post.caption}
                   </p>
@@ -1191,7 +1420,7 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
           <div className="min-h-[8rem] flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm">
             {post.caption ? (
               <div className="flex gap-3 border-b border-zinc-800/10 pb-4">
-                <Avatar name={post.authorName} size="h-8 w-8" />
+                <Avatar name={post.authorName} size="h-8 w-8" role={post.authorRole} />
                 <p className="min-w-0 flex-1 break-words text-zinc-800">
                   <span className="font-semibold">{post.authorName}</span> {post.caption}
                 </p>
@@ -1254,16 +1483,18 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
 
 type Picked = { file: File; kind: 'image' | 'video'; previewUrl: string; duration: number | null; width: number | null; height: number | null };
 
-/** Janela de postar: escolher/tirar foto ou vídeo, legenda e envio com progresso. */
-function Composer({
+/** Janela de postar: escolher/tirar foto ou vídeo, legenda e envio com progresso. Também usada no painel (aba Mural). */
+export function Composer({
   viewerId,
   authorName,
+  viewerAdmin,
   onAuthorName,
   onClose,
   onPosted,
 }: {
   viewerId: string;
   authorName: string;
+  viewerAdmin: MuralAdminView | null;
   onAuthorName: (name: string) => void;
   onClose: () => void;
   onPosted: () => void;
@@ -1271,7 +1502,7 @@ function Composer({
   const [picked, setPicked] = useState<Picked | null>(null);
   const [caption, setCaption] = useState('');
   // Mural aberto: quem publica só informa o nome (vem preenchido com o último usado neste aparelho).
-  const [name, setName] = useState(authorName);
+  const [name, setName] = useState(viewerAdmin?.name ?? authorName);
   const [progress, setProgress] = useState<number | null>(null);
   const [stage, setStage] = useState('');
   const [error, setError] = useState('');
@@ -1499,22 +1730,34 @@ function Composer({
             </div>
           )}
 
-          <label htmlFor="composer-name" className={`${EYEBROW} mt-6 block`}>
-            Seu nome
-          </label>
-          <input
-            id="composer-name"
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value);
-              setError('');
-            }}
-            maxLength={60}
-            autoComplete="name"
-            disabled={isUploading}
-            placeholder="Como você quer aparecer no mural"
-            className="w-full rounded-2xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20 mt-2"
-          />
+          {viewerAdmin ? (
+            // Noivo/noiva logados no painel: o nome vem do login e o post sai em destaque.
+            <div className="mt-6 flex items-center gap-2 rounded-2xl border border-[#d6b46e] bg-[#fdf5e3] px-4 py-3 text-sm text-zinc-700">
+              <span>
+                Publicando como <strong className="text-zinc-800">{viewerAdmin.name}</strong>
+              </span>
+              <RoleBadge role={viewerAdmin.role} />
+            </div>
+          ) : (
+            <>
+              <label htmlFor="composer-name" className={`${EYEBROW} mt-6 block`}>
+                Seu nome
+              </label>
+              <input
+                id="composer-name"
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setError('');
+                }}
+                maxLength={60}
+                autoComplete="name"
+                disabled={isUploading}
+                placeholder="Como você quer aparecer no mural"
+                className="w-full rounded-2xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20 mt-2"
+              />
+            </>
+          )}
 
           <label htmlFor="composer-caption" className={`${EYEBROW} mt-5 block`}>
             Legenda <span className="normal-case tracking-normal text-zinc-500">(opcional)</span>

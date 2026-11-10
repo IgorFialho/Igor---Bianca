@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAdminRequestAuthorized } from '@/lib/admin-auth';
+import { getAdminSession, isAdminRequestAuthorized } from '@/lib/admin-auth';
 import { db } from '@/lib/db';
 import { destroyMedia, isCloudinaryConfigured, type MediaKind } from '@/lib/cloudinary';
 import { ensureMuralSchema, getMuralSettings, listPosts } from '@/lib/mural';
@@ -12,7 +12,8 @@ type AdminComment = { id: string; post_id: string; author_name: string; text: st
 
 // Painel do mural: situação, todos os posts (inclusive ocultos) e os comentários.
 export async function GET(request: NextRequest) {
-  if (!(await isAdminRequestAuthorized(request))) return unauthorized();
+  const admin = await getAdminSession(request);
+  if (!admin) return unauthorized();
   try {
     await ensureMuralSchema();
     const [settings, posts, comments] = await Promise.all([
@@ -23,6 +24,8 @@ export async function GET(request: NextRequest) {
       ),
     ]);
     return NextResponse.json({
+      // Quem está no painel (noivo ou noiva): publica pelo painel com o próprio nome e em destaque.
+      admin: { role: admin.role, name: admin.name },
       settings: { ...settings, uploadsReady: isCloudinaryConfigured() },
       posts,
       comments: comments.rows.map((row) => ({

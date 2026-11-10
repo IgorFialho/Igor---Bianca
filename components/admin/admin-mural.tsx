@@ -1,8 +1,10 @@
 "use client";
 
+import { AnimatePresence } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
-import { timeAgo, type MuralPostView, type MuralSettingsView } from '@/components/mural/mural-client';
+import { Composer } from '@/components/mural/mural-feed';
+import { getViewerId, timeAgo, type MuralAdminView, type MuralPostView, type MuralSettingsView } from '@/components/mural/mural-client';
 
 const CARD = 'rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8';
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
@@ -39,6 +41,9 @@ export function AdminMural() {
   const [message, setMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
   const closeConfirm = useCallback(() => setConfirmAction(null), []);
+  // Quem está no painel (noivo ou noiva) e a janela de publicar no mural.
+  const [admin, setAdmin] = useState<MuralAdminView | null>(null);
+  const [composerViewerId, setComposerViewerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +57,7 @@ export function AdminMural() {
       setSettings(data.settings);
       setPosts(data.posts);
       setComments(data.comments);
+      setAdmin(data.admin ?? null);
       setError('');
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar o mural.');
@@ -145,8 +151,19 @@ export function AdminMural() {
         <div>
           <h2 className="font-display text-4xl leading-none text-zinc-800">Mural do casamento</h2>
           <p className="mt-2 text-sm text-zinc-600">Fotos e vídeos que os convidados postam. Aparecem na hora; aqui vocês ocultam ou excluem.</p>
+          {admin ? (
+            <p className="mt-1 text-sm text-zinc-600">
+              Os posts que você publicar aqui saem em destaque, como {admin.role === 'noivo' ? 'noivo' : 'noiva'} ({admin.name}), mesmo com o mural
+              fechado para os convidados.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {admin && settings?.uploadsReady ? (
+            <button type="button" onClick={() => setComposerViewerId(getViewerId())} className={PRIMARY}>
+              Publicar foto ou vídeo
+            </button>
+          ) : null}
           <a href="/mural" target="_blank" rel="noopener noreferrer" className={SECONDARY}>
             Abrir o mural
           </a>
@@ -300,7 +317,14 @@ export function AdminMural() {
                       {post.mediaType === 'video' ? <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[0.6rem] text-white">vídeo</span> : null}
                     </a>
                     <div className="min-w-0 flex-1 text-sm">
-                      <p className="truncate font-medium text-zinc-800">{post.authorName}</p>
+                      <p className="truncate font-medium text-zinc-800">
+                        {post.authorName}
+                        {post.authorRole ? (
+                          <span className="ml-2 rounded-full bg-[#ecd59f] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4a3413]">
+                            {post.authorRole === 'noivo' ? 'Noivo' : 'Noiva'}
+                          </span>
+                        ) : null}
+                      </p>
                       {post.caption ? <p className="truncate text-xs text-zinc-600">{post.caption}</p> : null}
                       <p className="text-xs text-zinc-500">
                         {timeAgo(post.createdAt)} · {post.likes} {post.likes === 1 ? "curtida" : "curtidas"} · {post.comments} coment.{post.isHidden ? ' · oculto' : ''}
@@ -390,6 +414,25 @@ export function AdminMural() {
       ) : null}
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
+
+      {/* A mesma janela de postar do mural (câmera, galeria, legenda), já com o nome de quem está no painel. */}
+      <AnimatePresence>
+        {admin && composerViewerId ? (
+          <Composer
+            key="admin-composer"
+            viewerId={composerViewerId}
+            authorName={admin.name}
+            viewerAdmin={admin}
+            onAuthorName={() => undefined}
+            onClose={() => setComposerViewerId(null)}
+            onPosted={() => {
+              setComposerViewerId(null);
+              setMessage('Publicado no mural em destaque.');
+              load();
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
     </section>
   );
 }

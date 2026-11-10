@@ -65,6 +65,9 @@ export function ensureMuralSchema() {
 
         -- Horário agendado para o mural fechar sozinho.
         ALTER TABLE mural_settings ADD COLUMN IF NOT EXISTS closes_at TIMESTAMPTZ;
+
+        -- Post feito pelo noivo ou pela noiva (logados no painel): aparece em destaque.
+        ALTER TABLE mural_posts ADD COLUMN IF NOT EXISTS author_role VARCHAR(10);
       `
     )
     .then(() => undefined)
@@ -165,9 +168,13 @@ export async function resolveGuest(rawCode: unknown): Promise<MuralGuest | null>
   return { id: row.id, code: row.code, name: names.join(' e ') || 'Convidado' };
 }
 
+/** Post do noivo/noiva (em destaque) ou null para convidados. */
+export type MuralAuthorRole = 'noivo' | 'noiva' | null;
+
 export type MuralPost = {
   id: string;
   authorName: string;
+  authorRole: MuralAuthorRole;
   caption: string | null;
   mediaType: MediaKind;
   thumbUrl: string;
@@ -190,6 +197,7 @@ type PostRow = {
   id: string;
   invite_code: string;
   author_name: string;
+  author_role: string | null;
   caption: string | null;
   media_type: MediaKind;
   public_id: string;
@@ -209,7 +217,7 @@ export async function listPosts({ viewerCode, includeHidden = false, limit = 400
   await ensureMuralSchema();
   const result = await db.query<PostRow>(
     `
-      SELECT p.id::text, p.invite_code, p.author_name, p.caption, p.media_type, p.public_id, p.width, p.height,
+      SELECT p.id::text, p.invite_code, p.author_name, p.author_role, p.caption, p.media_type, p.public_id, p.width, p.height,
         p.duration::text, p.is_hidden, p.created_at,
         (SELECT COUNT(*)::int FROM mural_likes l WHERE l.post_id = p.id) AS likes,
         (SELECT COUNT(*)::int FROM mural_comments c WHERE c.post_id = p.id AND (c.is_hidden = FALSE OR $2)) AS comments,
@@ -228,6 +236,7 @@ export async function listPosts({ viewerCode, includeHidden = false, limit = 400
     return {
       id: row.id,
       authorName: row.author_name,
+      authorRole: row.author_role === 'noivo' || row.author_role === 'noiva' ? row.author_role : null,
       caption: row.caption,
       mediaType: row.media_type,
       thumbUrl: urls.thumb,

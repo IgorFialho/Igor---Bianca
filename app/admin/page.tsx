@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminGifts } from '@/components/admin/admin-gifts';
 import { AdminMural } from '@/components/admin/admin-mural';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
+import { AdminIdentity } from '@/components/admin/admin-identity';
 import { SearchField } from '@/components/admin/search-field';
 import { GuestReport } from '@/components/admin/guest-report';
 import { EditCodeDialog, type EditCodeTarget } from '@/components/admin/edit-code-dialog';
@@ -844,9 +845,12 @@ export default function AdminPage() {
         <div className="rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8">
           {/* Em telas médias, as abas descem para a linha de baixo quando não cabem ao lado do título. */}
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-6 sm:gap-y-5">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Painel administrativo</p>
-              <p className="mt-2 text-sm text-zinc-700">Gerencie convidados, acessos ao convite e a lista de presentes.</p>
+            <div className="space-y-4">
+              <AdminIdentity />
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70">Painel administrativo</p>
+                <p className="mt-2 text-sm text-zinc-700">Gerencie convidados, acessos ao convite e a lista de presentes.</p>
+              </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <nav

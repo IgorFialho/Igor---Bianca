@@ -8,9 +8,14 @@ export const MURAL_CODE_KEY = INVITE_REMEMBER_KEY;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
+/** Noivo/noiva logados no painel: os posts deles saem em destaque. */
+export type MuralAuthorRole = 'noivo' | 'noiva';
+export type MuralAdminView = { role: MuralAuthorRole; name: string };
+
 export type MuralPostView = {
   id: string;
   authorName: string;
+  authorRole: MuralAuthorRole | null;
   caption: string | null;
   mediaType: 'image' | 'video';
   thumbUrl: string;

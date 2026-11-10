@@ -6,6 +6,7 @@ import { Portal } from '@/components/home/portal';
 import { Reveal } from '@/components/home/reveal';
 import { SiteHeader } from '@/components/home/site-header';
 import { CameraCapture, isCameraSupported } from '@/components/mural/camera-capture';
+import { PhotoEditor, type PhotoEditResult, type PhotoEditState, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import {
   MAX_IMAGE_BYTES,
@@ -399,7 +400,8 @@ export function MuralFeed() {
 
   return (
     <main className="relative min-h-screen bg-cream px-4 pb-32 pt-8 text-zinc-800 sm:px-6 md:px-10">
-      <SiteHeader ctaLabel="Confirmar presença" ctaHref="/login#rsvp" links={NAV_LINKS} alwaysDark />
+      {/* No mural não há o botão "Confirmar presença" (ele fica só no início e na lista de presentes). */}
+      <SiteHeader links={NAV_LINKS} alwaysDark />
 
       <header className="mx-auto mt-16 max-w-3xl text-center md:mt-20">
         <Reveal>
@@ -670,6 +672,130 @@ function ConfirmPopup({ request, onClose }: { request: ConfirmRequestView | null
         ) : null}
       </AnimatePresence>
     </Portal>
+  );
+}
+
+// Emojis do seletor dos comentários: os mais usados em casamento primeiro.
+const COMMENT_EMOJIS = [
+  '❤️', '😍', '🥰', '😘', '🤗', '😭', '😂', '🤣',
+  '😊', '😁', '🤩', '😎', '👏', '🙌', '🙏', '👍',
+  '🎉', '🥳', '🥂', '🍾', '💃', '🕺', '🎶', '📸',
+  '💍', '💒', '👰', '🤵', '💐', '🌹', '🌸', '🌷',
+  '🤍', '💕', '💖', '💞', '✨', '🌟', '🔥', '💯',
+];
+
+/** Campo de comentário com botão de emojis: o emoji escolhido entra onde estiver o cursor. */
+function CommentInput({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Fecha o seletor ao tocar fora dele ou com Esc.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!boxRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [isOpen]);
+
+  const insert = (emoji: string) => {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? value.length;
+    const next = (value.slice(0, start) + emoji + value.slice(end)).slice(0, 300);
+    onChange(next);
+    // Devolve o cursor para logo depois do emoji (sem abrir o teclado do celular à toa).
+    requestAnimationFrame(() => {
+      if (!input) return;
+      const caret = Math.min(start + emoji.length, next.length);
+      input.setSelectionRange(caret, caret);
+    });
+  };
+
+  return (
+    <div ref={boxRef} className="relative min-w-0 flex-1">
+      <input
+        ref={inputRef}
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={300}
+        autoComplete="off"
+        placeholder="Adicione um comentário…"
+        className="w-full rounded-full border border-zinc-800/15 bg-cream py-2.5 pl-4 pr-11 text-sm focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
+      />
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-label="Inserir emoji"
+        aria-expanded={isOpen}
+        className={`absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors hover:bg-zinc-800/5 ${
+          isOpen ? 'text-champagne-700' : 'text-zinc-500'
+        }`}
+      >
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8.5 14.5c.9 1.3 2.1 2 3.5 2s2.6-.7 3.5-2" />
+          <circle cx="9" cy="10" r="0.6" fill="currentColor" />
+          <circle cx="15" cy="10" r="0.6" fill="currentColor" />
+        </svg>
+      </button>
+      <AnimatePresence>
+        {isOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            role="listbox"
+            aria-label="Emojis"
+            className="absolute bottom-full right-0 z-30 mb-2 grid w-[17.5rem] max-w-[calc(100vw-2rem)] grid-cols-8 gap-0.5 rounded-2xl border border-zinc-800/10 bg-[#fffaf1] p-2 shadow-[0_18px_40px_rgba(47,36,27,0.18)]"
+          >
+            {COMMENT_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={() => insert(emoji)}
+                className="flex h-8 items-center justify-center rounded-lg text-xl leading-none transition-transform hover:scale-110 hover:bg-zinc-800/5"
+              >
+                {emoji}
+              </button>
+            ))}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Texto de um comentário: nome (com selo e cor própria quando é o noivo ou a noiva) e o comentário. */
+function CommentText({ comment }: { comment: MuralCommentView }) {
+  // Cores das molduras: rosé escuro (noiva) e verde-oliva escuro (noivo).
+  const color = comment.authorRole === 'noiva' ? 'text-[#9e4f63]' : comment.authorRole === 'noivo' ? 'text-[#4b5b33]' : 'text-zinc-800';
+  return (
+    <p className={`break-words ${color}`}>
+      <span className="font-semibold">{comment.authorName}</span>
+      {comment.authorRole ? (
+        <span className="mx-1.5 inline-block align-[1px]">
+          <RoleBadge role={comment.authorRole} />
+        </span>
+      ) : null}{' '}
+      <span className={comment.authorRole ? 'font-medium' : ''}>{comment.text}</span>
+    </p>
   );
 }
 
@@ -1219,11 +1345,9 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
               {comments?.length === 0 && !post.caption ? <p className="py-6 text-center text-zinc-500">Nenhum comentário ainda.</p> : null}
               {comments?.map((comment) => (
                 <div key={comment.id} className="flex gap-3">
-                  <Avatar name={comment.authorName} size="h-8 w-8" />
+                  <Avatar name={comment.authorName} size="h-8 w-8" role={comment.authorRole} />
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-zinc-800">
-                      <span className="font-semibold">{comment.authorName}</span> {comment.text}
-                    </p>
+                    <CommentText comment={comment} />
                     <p className="mt-0.5 text-xs text-zinc-500">
                       {timeAgo(comment.createdAt)}
                       {comment.isMine ? <DeleteCommentLink secondsLeft={comment.deleteSecondsLeft} onClick={(remaining) => askDeleteComment(comment.id, remaining)} /> : null}
@@ -1265,15 +1389,7 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
                   <label htmlFor="mural-modal-comment" className="sr-only">
                     Comentário
                   </label>
-                  <input
-                    id="mural-modal-comment"
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                    maxLength={300}
-                    autoComplete="off"
-                    placeholder="Adicione um comentário…"
-                    className="min-w-0 flex-1 rounded-full border border-zinc-800/15 bg-cream px-4 py-2.5 text-sm focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-                  />
+                  <CommentInput id="mural-modal-comment" value={text} onChange={setText} />
                   <button type="submit" disabled={!text.trim() || isSending} className="px-1 text-sm font-semibold text-champagne-700 disabled:opacity-40">
                     {isSending ? '…' : 'Publicar'}
                   </button>
@@ -1430,11 +1546,9 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
             {comments?.length === 0 ? <p className="py-6 text-center text-zinc-500">Nenhum comentário ainda. Seja o primeiro!</p> : null}
             {comments?.map((comment) => (
               <div key={comment.id} className="flex gap-3">
-                <Avatar name={comment.authorName} size="h-8 w-8" />
+                <Avatar name={comment.authorName} size="h-8 w-8" role={comment.authorRole} />
                 <div className="min-w-0 flex-1">
-                  <p className="break-words text-zinc-800">
-                    <span className="font-semibold">{comment.authorName}</span> {comment.text}
-                  </p>
+                  <CommentText comment={comment} />
                   <p className="mt-0.5 text-xs text-zinc-500">
                     {timeAgo(comment.createdAt)}
                     {comment.isMine ? <DeleteCommentLink secondsLeft={comment.deleteSecondsLeft} onClick={(remaining) => askDeleteComment(comment.id, remaining)} /> : null}
@@ -1457,15 +1571,7 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
               <label htmlFor="mural-comment" className="sr-only">
                 Comentário
               </label>
-              <input
-                id="mural-comment"
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                maxLength={300}
-                autoComplete="off"
-                placeholder="Adicione um comentário…"
-                className="min-w-0 flex-1 rounded-full border border-zinc-800/15 bg-cream px-4 py-2.5 text-sm focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20"
-              />
+              <CommentInput id="mural-comment" value={text} onChange={setText} />
               <button type="submit" disabled={!text.trim() || isSending} className="px-1 text-sm font-semibold text-champagne-700 disabled:opacity-40">
                 {isSending ? '…' : 'Publicar'}
               </button>
@@ -1481,7 +1587,20 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
   );
 }
 
-type Picked = { file: File; kind: 'image' | 'video'; previewUrl: string; duration: number | null; width: number | null; height: number | null };
+type Picked = {
+  file: File;
+  kind: 'image' | 'video';
+  previewUrl: string;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  /** Foto como saiu da câmera/galeria (o editor sempre parte dela, para reeditar sem perder qualidade). */
+  original: File;
+  /** Último ajuste feito no editor (enquadramento e textos), para reabrir do ponto em que parou. */
+  edit: PhotoEditState | null;
+  /** Vídeo: recorte escolhido no editor (o Cloudinary aplica ao processar). */
+  crop: VideoCrop | null;
+};
 
 /** Janela de postar: escolher/tirar foto ou vídeo, legenda e envio com progresso. Também usada no painel (aba Mural). */
 export function Composer({
@@ -1509,6 +1628,8 @@ export function Composer({
   const inputRef = useRef<HTMLInputElement>(null);
   // Abre direto na câmera (como no Instagram), se o aparelho tiver; senão, escolher arquivo.
   const [showCamera, setShowCamera] = useState(() => isCameraSupported());
+  // Editor (como no Instagram): abre sozinho ao escolher a foto/vídeo e pode ser reaberto pelo botão "Editar".
+  const [isEditing, setIsEditing] = useState(false);
   const isUploading = progress !== null;
   useLockScroll(true);
 
@@ -1518,11 +1639,42 @@ export function Composer({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isUploading) onClose();
+      if (event.key === 'Escape' && !isUploading && !isEditing) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isUploading, onClose]);
+  }, [isUploading, isEditing, onClose]);
+
+  const closeEditor = useCallback(() => setIsEditing(false), []);
+  const editorUnsupported = useCallback(() => {
+    setIsEditing(false);
+    setError('Não deu para abrir o editor neste aparelho; o arquivo será publicado como está.');
+  }, []);
+
+  /** Foto editada: vira o arquivo a publicar (o original fica guardado para reeditar). */
+  const applyPhotoEdit = useCallback((result: PhotoEditResult) => {
+    setPicked((current) =>
+      current
+        ? {
+            ...current,
+            file: new File([result.blob], 'foto.jpg', { type: 'image/jpeg' }),
+            previewUrl: URL.createObjectURL(result.blob),
+            width: result.width,
+            height: result.height,
+            edit: result.state,
+          }
+        : current
+    );
+    setIsEditing(false);
+  }, []);
+
+  /** Vídeo recortado: guarda o recorte (o arquivo continua o mesmo; quem recorta é o Cloudinary). */
+  const applyVideoCrop = useCallback((result: VideoCropResult) => {
+    setPicked((current) =>
+      current ? { ...current, previewUrl: URL.createObjectURL(current.original), crop: result.crop, width: result.width, height: result.height, edit: result.state } : current
+    );
+    setIsEditing(false);
+  }, []);
 
   const pickFile = async (file: File | undefined) => {
     setError('');
@@ -1539,8 +1691,9 @@ export function Composer({
       return;
     }
     const meta = kind === 'video' ? await readVideoMeta(file) : { duration: null, width: null, height: null };
-    setPicked({ file, kind, previewUrl: URL.createObjectURL(file), ...meta });
+    setPicked({ file, kind, previewUrl: URL.createObjectURL(file), ...meta, original: file, edit: null, crop: null });
     setShowCamera(false);
+    setIsEditing(true);
   };
 
   const retake = () => {
@@ -1562,6 +1715,11 @@ export function Composer({
       return;
     }
     setError('');
+    // Noivo/noiva publicam direto, sem a confirmação (eles podem editar ou excluir o post no painel a qualquer hora).
+    if (viewerAdmin) {
+      void publish();
+      return;
+    }
     setConfirmRequest({
       title: picked.kind === 'video' ? 'Publicar este vídeo?' : 'Publicar esta foto?',
       message: 'Ele aparece na hora para todos os convidados. Você terá só 2 minutos para apagar, se precisar; depois disso, não será mais possível (só os noivos podem apagar).',
@@ -1598,7 +1756,7 @@ export function Composer({
       const signResponse = await fetch('/api/mural/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ viewerId, name: trimmedName, kind: picked.kind }),
+        body: JSON.stringify({ viewerId, name: trimmedName, kind: picked.kind, crop: picked.crop ?? undefined }),
       });
       const sign = await signResponse.json();
       if (!signResponse.ok) throw new Error(sign?.error || 'Não foi possível preparar o envio.');
@@ -1619,9 +1777,11 @@ export function Composer({
           version: result.version,
           signature: result.signature,
           resourceType: result.resource_type,
-          width: result.width ?? width,
-          height: result.height ?? height,
+          // Vídeo recortado: o tamanho que vale é o do recorte (o Cloudinary devolve o do arquivo original).
+          width: picked.crop ? width : (result.width ?? width),
+          height: picked.crop ? height : (result.height ?? height),
           duration: result.duration ?? picked.duration,
+          crop: picked.crop ?? undefined,
           caption,
         }),
       });
@@ -1694,14 +1854,46 @@ export function Composer({
           {picked ? (
             <div className="safari-clip relative mt-6 overflow-hidden rounded-2xl bg-black">
               {picked.kind === 'video' ? (
-                <video src={picked.previewUrl} controls playsInline className="max-h-[45svh] w-full" />
+                picked.crop ? (
+                  // Prévia do recorte: o vídeo inteiro ampliado e deslocado dentro de uma janela do tamanho do recorte.
+                  <div
+                    className="relative mx-auto overflow-hidden"
+                    style={{
+                      aspectRatio: `${picked.width ?? 1} / ${picked.height ?? 1}`,
+                      // Cabe na largura e em no máximo 45% da altura da tela, sem distorcer.
+                      width: `min(100%, calc(45svh * ${(picked.width ?? 1) / (picked.height ?? 1)}))`,
+                    }}
+                  >
+                    <video
+                      src={picked.previewUrl}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      className="absolute max-w-none object-fill"
+                      style={{
+                        width: `${100 / picked.crop.w}%`,
+                        height: `${100 / picked.crop.h}%`,
+                        left: `${(-picked.crop.x / picked.crop.w) * 100}%`,
+                        top: `${(-picked.crop.y / picked.crop.h) * 100}%`,
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <video src={picked.previewUrl} controls playsInline className="max-h-[45svh] w-full" />
+                )
               ) : (
                 <img src={picked.previewUrl} alt="Pré-visualização" className="max-h-[45svh] w-full object-contain" />
               )}
               {!isUploading ? (
-                <button type="button" onClick={retake} className="absolute bottom-3 right-3 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
-                  Refazer
-                </button>
+                <div className="absolute bottom-3 right-3 flex gap-2">
+                  <button type="button" onClick={() => setIsEditing(true)} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
+                    {picked.kind === 'video' ? 'Recortar' : 'Editar'}
+                  </button>
+                  <button type="button" onClick={retake} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
+                    Refazer
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : (
@@ -1801,6 +1993,18 @@ export function Composer({
         </motion.div>
       </motion.div>
       <ConfirmPopup request={confirmRequest} onClose={closeConfirm} />
+      {picked && isEditing ? (
+        <PhotoEditor
+          key={picked.original.name + picked.original.size}
+          file={picked.original}
+          kind={picked.kind}
+          initialState={picked.edit ?? undefined}
+          onCancel={closeEditor}
+          onDone={applyPhotoEdit}
+          onCropDone={applyVideoCrop}
+          onUnsupported={editorUnsupported}
+        />
+      ) : null}
     </Portal>
   );
 }

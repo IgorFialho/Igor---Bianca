@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getAdminSession } from '@/lib/admin-auth';
 import { COMMENT_DELETE_WINDOW_SECONDS, COMMENT_MAX_LENGTH, cleanText, ensureMuralSchema, getMuralSettings, listComments, readAuthorName, readViewerId } from '@/lib/mural';
 
 export const dynamic = 'force-dynamic';
@@ -22,14 +23,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const viewerId = readViewerId(body?.viewerId);
-    const name = readAuthorName(body?.name);
+    // Noivo/noiva logados no painel comentam com o próprio nome e o comentário sai em destaque.
+    const admin = await getAdminSession(request);
+    const name = admin ? admin.name : readAuthorName(body?.name);
     if (!viewerId) {
       return NextResponse.json({ error: 'Recarregue a página e tente de novo.' }, { status: 400 });
     }
     if (!name) {
       return NextResponse.json({ error: 'Informe o seu nome para comentar.' }, { status: 400 });
     }
-    if (!(await getMuralSettings()).isOpen) {
+    if (!admin && !(await getMuralSettings()).isOpen) {
       return NextResponse.json({ error: 'O mural está fechado.' }, { status: 403 });
     }
     const text = cleanText(body?.text, COMMENT_MAX_LENGTH);
@@ -42,7 +45,13 @@ export async function POST(request: NextRequest) {
     if (!post.rowCount) {
       return NextResponse.json({ error: 'Post não encontrado.' }, { status: 404 });
     }
-    await db.query(`INSERT INTO mural_comments (post_id, invite_code, author_name, text) VALUES ($1::bigint, $2, $3, $4)`, [postId, viewerId, name, text]);
+    await db.query(`INSERT INTO mural_comments (post_id, invite_code, author_name, author_role, text) VALUES ($1::bigint, $2, $3, $4, $5)`, [
+      postId,
+      viewerId,
+      name,
+      admin?.role ?? null,
+      text,
+    ]);
     const comments = await listComments(postId, { viewerCode: viewerId });
     return NextResponse.json({ comments });
   } catch (error) {

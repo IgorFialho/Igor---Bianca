@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, isAdminRequestAuthorized } from '@/lib/admin-auth';
 import { db } from '@/lib/db';
-import { destroyMedia, isCloudinaryConfigured, type MediaKind } from '@/lib/cloudinary';
-import { ensureMuralSchema, getMuralSettings, listPosts } from '@/lib/mural';
+import { destroyMedia, isCloudinaryConfigured, readVideoCrop, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
+import { CAPTION_MAX_LENGTH, cleanText, ensureMuralSchema, getMuralSettings, listPosts, readAuthorName } from '@/lib/mural';
 
 export const dynamic = 'force-dynamic';
 
 const unauthorized = () => NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
 
-type AdminComment = { id: string; post_id: string; author_name: string; text: string; is_hidden: boolean; created_at: string };
+type AdminComment = { id: string; post_id: string; author_name: string; author_role: string | null; text: string; is_hidden: boolean; created_at: string };
 
 // Painel do mural: situação, todos os posts (inclusive ocultos) e os comentários.
 export async function GET(request: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       getMuralSettings(),
       listPosts({ includeHidden: true, limit: 2000 }),
       db.query<AdminComment>(
-        `SELECT id::text, post_id::text, author_name, text, is_hidden, created_at FROM mural_comments ORDER BY created_at DESC LIMIT 2000`
+        `SELECT id::text, post_id::text, author_name, author_role, text, is_hidden, created_at FROM mural_comments ORDER BY created_at DESC LIMIT 2000`
       ),
     ]);
     return NextResponse.json({
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
         id: row.id,
         postId: row.post_id,
         authorName: row.author_name,
+        authorRole: row.author_role === 'noivo' || row.author_role === 'noiva' ? row.author_role : null,
         text: row.text,
         isHidden: row.is_hidden,
         createdAt: new Date(row.created_at).toISOString(),
@@ -76,6 +77,54 @@ export async function PATCH(request: NextRequest) {
         closesAt,
       ]);
       return NextResponse.json({ settings: { ...(await getMuralSettings()), uploadsReady: isCloudinaryConfigured() } });
+    }
+
+    // Editar um post: nome de quem postou e legenda (a foto/vídeo não muda).
+    if (body?.action === 'edit-post') {
+      const authorName = readAuthorName(body?.authorName);
+      if (!authorName) {
+        return NextResponse.json({ error: 'Informe um nome com pelo menos 2 letras.' }, { status: 400 });
+      }
+      const caption = cleanText(body?.caption, CAPTION_MAX_LENGTH) || null;
+      const postId = String(body?.id ?? '');
+      const current = await db.query<{ public_id: string; media_type: MediaKind }>('SELECT public_id, media_type FROM mural_posts WHERE id::text = $1', [postId]);
+      const old = current.rows[0];
+      if (!old) {
+        return NextResponse.json({ error: 'Post não encontrado.' }, { status: 404 });
+      }
+
+      // Foto/vídeo novo (editado ou trocado): já enviado ao Cloudinary pelo painel; confere a assinatura do envio.
+      const media = body?.media;
+      if (media) {
+        const kind: MediaKind = media?.resourceType === 'video' ? 'video' : 'image';
+        const publicId = typeof media?.publicId === 'string' ? media.publicId : '';
+        const version = typeof media?.version === 'string' || typeof media?.version === 'number' ? media.version : '';
+        const signature = typeof media?.signature === 'string' ? media.signature : '';
+        if (!publicId || !verifyUploadResponse(publicId, version, signature)) {
+          return NextResponse.json({ error: 'Envio inválido. Tente de novo.' }, { status: 400 });
+        }
+        const toInt = (value: unknown) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value)) : null);
+        await db.query(
+          `UPDATE mural_posts SET author_name = $2, caption = $3, public_id = $4, media_type = $5, media_crop = $6, width = $7, height = $8, duration = $9 WHERE id::text = $1`,
+          [
+            postId,
+            authorName,
+            caption,
+            publicId,
+            kind,
+            kind === 'video' ? readVideoCrop(media?.crop) : null,
+            toInt(media?.width),
+            toInt(media?.height),
+            kind === 'video' && Number.isFinite(Number(media?.duration)) ? Number(media.duration) : null,
+          ]
+        );
+        // O arquivo antigo sai do Cloudinary (curtidas e comentários continuam no post).
+        if (old.public_id !== publicId) await destroyMedia(old.media_type, old.public_id).catch(() => false);
+        return NextResponse.json({ ok: true });
+      }
+
+      await db.query('UPDATE mural_posts SET author_name = $2, caption = $3 WHERE id::text = $1', [postId, authorName, caption]);
+      return NextResponse.json({ ok: true });
     }
 
     if (body?.action === 'post' || body?.action === 'comment') {

@@ -38,6 +38,7 @@ export type MuralCommentView = {
   id: string;
   postId: string;
   authorName: string;
+  authorRole: MuralAuthorRole | null;
   text: string;
   createdAt: string;
   isMine: boolean;

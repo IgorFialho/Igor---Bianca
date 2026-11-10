@@ -1,10 +1,22 @@
 "use client";
 
 import { AnimatePresence } from 'framer-motion';
-import { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { Composer } from '@/components/mural/mural-feed';
-import { getViewerId, timeAgo, type MuralAdminView, type MuralPostView, type MuralSettingsView } from '@/components/mural/mural-client';
+import { PhotoEditor, type PhotoEditResult, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
+import {
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  compressImage,
+  getViewerId,
+  readVideoMeta,
+  timeAgo,
+  uploadToCloudinary,
+  type MuralAdminView,
+  type MuralPostView,
+  type MuralSettingsView,
+} from '@/components/mural/mural-client';
 
 const CARD = 'rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8';
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
@@ -18,7 +30,339 @@ const SECONDARY = `${BUTTON} border border-zinc-800/20 text-zinc-800 hover:bg-zi
 const DANGER = `${BUTTON} border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`;
 const SMALL = 'rounded-full border px-3 py-1 text-xs font-medium transition-colors';
 
-type AdminComment = { id: string; postId: string; authorName: string; text: string; isHidden: boolean; createdAt: string };
+type AdminComment = { id: string; postId: string; authorName: string; authorRole: 'noivo' | 'noiva' | null; text: string; isHidden: boolean; createdAt: string };
+type EditingPost = { id: string; authorName: string; caption: string; thumbUrl: string; fullUrl: string; mediaType: 'image' | 'video' };
+
+/** Foto/vídeo novo escolhido na edição (ainda não enviado). */
+type NewMedia = {
+  kind: 'image' | 'video';
+  /** O que vai ser enviado (foto já editada, ou o vídeo original). */
+  upload: Blob;
+  fileName: string;
+  previewUrl: string;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  crop: VideoCrop | null;
+};
+
+export type EditPostSave = { authorName: string; caption: string; media: Record<string, unknown> | null };
+
+const CAPTION_LIMIT = 300;
+
+/**
+ * Janela de editar um post do mural: nome, legenda e também a foto/vídeo. "Editar foto" abre a foto atual no
+ * editor (enquadrar e texto); "Trocar foto ou vídeo" escolhe outro arquivo (que também passa pelo editor).
+ * Ao salvar, o arquivo novo é enviado ao Cloudinary e substitui o antigo, mantendo curtidas e comentários.
+ */
+function EditPostDialog({
+  post,
+  adminName,
+  onClose,
+  onSave,
+}: {
+  post: EditingPost;
+  adminName: string;
+  onClose: () => void;
+  onSave: (data: EditPostSave) => Promise<void>;
+}) {
+  const [authorName, setAuthorName] = useState(post.authorName);
+  const [caption, setCaption] = useState(post.caption);
+  const [isSaving, setIsSaving] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [media, setMedia] = useState<NewMedia | null>(null);
+  // Arquivo aberto no editor agora (foto atual baixada, ou o arquivo novo escolhido).
+  const [editorFile, setEditorFile] = useState<{ file: File; kind: 'image' | 'video'; duration: number | null } | null>(null);
+  const [isLoadingPhoto, setIsLoadingPhoto] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSaving && !editorFile) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSaving, editorFile, onClose]);
+
+  useEffect(() => () => {
+    if (media) URL.revokeObjectURL(media.previewUrl);
+  }, [media]);
+
+  /** Baixa a foto atual (em JPG, até 1800 px) para abrir no editor. */
+  const editCurrentPhoto = async () => {
+    setError('');
+    setIsLoadingPhoto(true);
+    try {
+      const url = post.fullUrl.replace('/f_auto,', '/f_jpg,');
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error();
+      const blob = await response.blob();
+      setEditorFile({ file: new File([blob], 'foto.jpg', { type: 'image/jpeg' }), kind: 'image', duration: null });
+    } catch {
+      setError('Não foi possível abrir a foto atual. Tente "Trocar foto ou vídeo".');
+    } finally {
+      setIsLoadingPhoto(false);
+    }
+  };
+
+  const pickNewFile = async (file: File | undefined) => {
+    setError('');
+    if (!file) return;
+    const kind = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name) ? 'image' : null;
+    if (!kind) {
+      setError('Escolha uma foto ou um vídeo.');
+      return;
+    }
+    if (kind === 'video' && file.size > MAX_VIDEO_BYTES) {
+      setError('Vídeo muito grande (máximo 100 MB).');
+      return;
+    }
+    const duration = kind === 'video' ? (await readVideoMeta(file)).duration : null;
+    setEditorFile({ file, kind, duration });
+  };
+
+  const closeEditor = useCallback(() => setEditorFile(null), []);
+  const editorUnsupported = useCallback(() => {
+    // Não abriu no editor (ex.: HEIC no Chrome): usa o arquivo como está.
+    setEditorFile((current) => {
+      if (current) {
+        setMedia({
+          kind: current.kind,
+          upload: current.file,
+          fileName: current.file.name || 'arquivo',
+          previewUrl: URL.createObjectURL(current.file),
+          width: null,
+          height: null,
+          duration: current.duration,
+          crop: null,
+        });
+      }
+      return null;
+    });
+  }, []);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (authorName.trim().length < 2) {
+      setError('Informe um nome com pelo menos 2 letras.');
+      return;
+    }
+    setIsSaving(true);
+    setError('');
+    try {
+      let uploaded: Record<string, unknown> | null = null;
+      if (media) {
+        // Envia o arquivo novo ao Cloudinary (mesmo caminho das postagens; o painel pode enviar com o mural fechado).
+        setProgress(0);
+        let upload = media.upload;
+        let width = media.width;
+        let height = media.height;
+        if (media.kind === 'image') {
+          const compressed = await compressImage(upload instanceof File ? upload : new File([upload], 'foto.jpg', { type: 'image/jpeg' }));
+          upload = compressed.blob;
+          width = compressed.width ?? width;
+          height = compressed.height ?? height;
+          if (upload.size > MAX_IMAGE_BYTES) throw new Error('Foto muito grande (máximo 10 MB).');
+        }
+        const signResponse = await fetch('/api/mural/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ viewerId: getViewerId(), name: adminName, kind: media.kind, crop: media.crop ?? undefined }),
+        });
+        const sign = await signResponse.json();
+        if (!signResponse.ok) throw new Error(sign?.error || 'Não foi possível preparar o envio.');
+        const result = await uploadToCloudinary(upload, media.kind === 'image' ? 'foto.jpg' : media.fileName, sign, setProgress);
+        uploaded = {
+          publicId: result.public_id,
+          version: result.version,
+          signature: result.signature,
+          resourceType: result.resource_type,
+          width: media.crop ? width : (result.width ?? width),
+          height: media.crop ? height : (result.height ?? height),
+          duration: result.duration ?? media.duration,
+          crop: media.crop ?? undefined,
+        };
+      }
+      await onSave({ authorName: authorName.trim(), caption: caption.trim(), media: uploaded });
+      onClose();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Não foi possível salvar.');
+    } finally {
+      setIsSaving(false);
+      setProgress(null);
+    }
+  };
+
+  const previewIsVideo = media ? media.kind === 'video' : false;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-post-title"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm"
+      onClick={() => (isSaving || editorFile ? undefined : onClose())}
+    >
+      <form
+        onSubmit={save}
+        className="max-h-[92svh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className={EYEBROW}>Mural</p>
+        <h3 id="edit-post-title" className="mt-2 font-display text-4xl italic leading-none text-zinc-800">
+          Editar post
+        </h3>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={(event) => {
+            void pickNewFile(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+        <div className="mt-5 flex items-start gap-3">
+          <div className="safari-clip relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-black">
+            {media ? (
+              previewIsVideo ? (
+                <video
+                  src={media.previewUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="absolute max-w-none object-fill"
+                  style={
+                    media.crop
+                      ? {
+                          width: `${100 / media.crop.w}%`,
+                          height: `${100 / media.crop.h}%`,
+                          left: `${(-media.crop.x / media.crop.w) * 100}%`,
+                          top: `${(-media.crop.y / media.crop.h) * 100}%`,
+                        }
+                      : { inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
+                  }
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={media.previewUrl} alt="" className="h-full w-full object-cover" />
+              )
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={post.thumbUrl} alt="" className="h-full w-full object-cover" />
+            )}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
+            {media ? <p className="text-xs font-medium text-olive-800">Novo arquivo pronto: será publicado ao salvar.</p> : null}
+            {post.mediaType === 'image' && !media ? (
+              <button type="button" onClick={editCurrentPhoto} disabled={isSaving || isLoadingPhoto} className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}>
+                {isLoadingPhoto ? 'Abrindo…' : 'Editar foto'}
+              </button>
+            ) : null}
+            {media && media.kind === 'image' ? (
+              <button
+                type="button"
+                onClick={() => setEditorFile({ file: media.upload instanceof File ? media.upload : new File([media.upload], 'foto.jpg', { type: 'image/jpeg' }), kind: 'image', duration: null })}
+                disabled={isSaving}
+                className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
+              >
+                Editar de novo
+              </button>
+            ) : null}
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={isSaving} className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}>
+              Trocar foto ou vídeo
+            </button>
+            {media ? (
+              <button type="button" onClick={() => setMedia(null)} disabled={isSaving} className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-800">
+                Manter o arquivo atual
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <label htmlFor="edit-post-name" className={`${EYEBROW} mt-5 block`}>
+          Nome de quem postou
+        </label>
+        <input id="edit-post-name" value={authorName} onChange={(event) => setAuthorName(event.target.value)} maxLength={60} disabled={isSaving} className={`${FIELD} mt-2`} />
+        <label htmlFor="edit-post-caption" className={`${EYEBROW} mt-4 block`}>
+          Legenda
+        </label>
+        <textarea
+          id="edit-post-caption"
+          value={caption}
+          onChange={(event) => setCaption(event.target.value)}
+          maxLength={CAPTION_LIMIT}
+          rows={3}
+          disabled={isSaving}
+          placeholder="Sem legenda"
+          className={`${FIELD} mt-2 resize-none rounded-2xl`}
+        />
+        <p className="mt-1 text-right text-xs text-zinc-500">
+          {caption.length}/{CAPTION_LIMIT}
+        </p>
+        {progress !== null ? (
+          <div className="mt-2" aria-live="polite">
+            <div className="flex justify-between text-xs text-zinc-600">
+              <span>Enviando o arquivo…</span>
+              <span>{Math.round(progress * 100)}%</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-800/10">
+              <div className="h-full rounded-full bg-champagne-600 transition-[width] duration-200" style={{ width: `${Math.round(progress * 100)}%` }} />
+            </div>
+          </div>
+        ) : null}
+        {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isSaving} className={SECONDARY}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={isSaving} className={PRIMARY}>
+            {isSaving ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </form>
+
+      {editorFile ? (
+        <PhotoEditor
+          file={editorFile.file}
+          kind={editorFile.kind}
+          onCancel={closeEditor}
+          onDone={(result: PhotoEditResult) => {
+            setMedia({
+              kind: 'image',
+              upload: new File([result.blob], 'foto.jpg', { type: 'image/jpeg' }),
+              fileName: 'foto.jpg',
+              previewUrl: URL.createObjectURL(result.blob),
+              width: result.width,
+              height: result.height,
+              duration: null,
+              crop: null,
+            });
+            setEditorFile(null);
+          }}
+          onCropDone={(result: VideoCropResult) => {
+            const current = editorFile;
+            setMedia({
+              kind: 'video',
+              upload: current.file,
+              fileName: current.file.name || 'video.mp4',
+              previewUrl: URL.createObjectURL(current.file),
+              width: result.width,
+              height: result.height,
+              duration: current.duration,
+              crop: result.crop,
+            });
+            setEditorFile(null);
+          }}
+          onUnsupported={editorUnsupported}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 /** ISO → valor do campo datetime-local (horário do aparelho). */
 function toLocalInput(iso: string | null) {
@@ -44,6 +388,8 @@ export function AdminMural() {
   // Quem está no painel (noivo ou noiva) e a janela de publicar no mural.
   const [admin, setAdmin] = useState<MuralAdminView | null>(null);
   const [composerViewerId, setComposerViewerId] = useState<string | null>(null);
+  // Post sendo editado (nome de quem postou e legenda).
+  const [editingPost, setEditingPost] = useState<EditingPost | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -333,6 +679,13 @@ export function AdminMural() {
                     <div className="flex flex-col items-end gap-1.5">
                       <button
                         type="button"
+                        onClick={() => setEditingPost({ id: post.id, authorName: post.authorName, caption: post.caption ?? '', thumbUrl: post.thumbUrl, fullUrl: post.fullUrl, mediaType: post.mediaType })}
+                        className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => run(() => request('PATCH', { action: 'post', id: post.id, hidden: !post.isHidden }), post.isHidden ? 'Post visível de novo.' : 'Post ocultado.')}
                         className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
                       >
@@ -372,7 +725,13 @@ export function AdminMural() {
                       ) : null}
                       <div className="min-w-0 flex-1 text-sm">
                         <p className="break-words text-zinc-800">
-                          <span className="font-medium">{comment.authorName}</span> {comment.text}
+                          <span className="font-medium">{comment.authorName}</span>
+                          {comment.authorRole ? (
+                            <span className="mx-1.5 rounded-full bg-[#ecd59f] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4a3413]">
+                              {comment.authorRole === 'noivo' ? 'Noivo' : 'Noiva'}
+                            </span>
+                          ) : null}{' '}
+                          {comment.text}
                         </p>
                         <p className="text-xs text-zinc-500">
                           {timeAgo(comment.createdAt)}
@@ -414,6 +773,19 @@ export function AdminMural() {
       ) : null}
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
+
+      {editingPost ? (
+        <EditPostDialog
+          post={editingPost}
+          adminName={admin?.name ?? 'Noivos'}
+          onClose={() => setEditingPost(null)}
+          onSave={async ({ authorName, caption, media }) => {
+            await request('PATCH', { action: 'edit-post', id: editingPost.id, authorName, caption, media: media ?? undefined });
+            setMessage(media ? 'Post atualizado com o novo arquivo.' : 'Post atualizado.');
+            await load();
+          }}
+        />
+      ) : null}
 
       {/* A mesma janela de postar do mural (câmera, galeria, legenda), já com o nome de quem está no painel. */}
       <AnimatePresence>

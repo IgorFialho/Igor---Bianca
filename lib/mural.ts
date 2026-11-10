@@ -68,6 +68,12 @@ export function ensureMuralSchema() {
 
         -- Post feito pelo noivo ou pela noiva (logados no painel): aparece em destaque.
         ALTER TABLE mural_posts ADD COLUMN IF NOT EXISTS author_role VARCHAR(10);
+
+        -- Recorte do vídeo feito no editor ("x,y,w,h" em frações), aplicado pelo Cloudinary.
+        ALTER TABLE mural_posts ADD COLUMN IF NOT EXISTS media_crop VARCHAR(40);
+
+        -- Comentário feito pelo noivo ou pela noiva (logados no painel): aparece em destaque.
+        ALTER TABLE mural_comments ADD COLUMN IF NOT EXISTS author_role VARCHAR(10);
       `
     )
     .then(() => undefined)
@@ -198,6 +204,7 @@ type PostRow = {
   invite_code: string;
   author_name: string;
   author_role: string | null;
+  media_crop: string | null;
   caption: string | null;
   media_type: MediaKind;
   public_id: string;
@@ -217,7 +224,7 @@ export async function listPosts({ viewerCode, includeHidden = false, limit = 400
   await ensureMuralSchema();
   const result = await db.query<PostRow>(
     `
-      SELECT p.id::text, p.invite_code, p.author_name, p.author_role, p.caption, p.media_type, p.public_id, p.width, p.height,
+      SELECT p.id::text, p.invite_code, p.author_name, p.author_role, p.media_crop, p.caption, p.media_type, p.public_id, p.width, p.height,
         p.duration::text, p.is_hidden, p.created_at,
         (SELECT COUNT(*)::int FROM mural_likes l WHERE l.post_id = p.id) AS likes,
         (SELECT COUNT(*)::int FROM mural_comments c WHERE c.post_id = p.id AND (c.is_hidden = FALSE OR $2)) AS comments,
@@ -231,7 +238,7 @@ export async function listPosts({ viewerCode, includeHidden = false, limit = 400
     [viewerCode ?? null, includeHidden, limit]
   );
   return result.rows.map((row: PostRow): MuralPost => {
-    const urls = mediaUrls(row.media_type, row.public_id);
+    const urls = mediaUrls(row.media_type, row.public_id, row.media_crop);
     const isMine = Boolean(viewerCode) && row.invite_code.toUpperCase() === String(viewerCode).toUpperCase();
     return {
       id: row.id,
@@ -260,6 +267,8 @@ export type MuralComment = {
   id: string;
   postId: string;
   authorName: string;
+  /** Comentário do noivo/noiva (em destaque) ou null para convidados. */
+  authorRole: MuralAuthorRole;
   text: string;
   createdAt: string;
   isMine: boolean;
@@ -270,9 +279,9 @@ export type MuralComment = {
 
 export async function listComments(postId: string, { viewerCode, includeHidden = false }: { viewerCode?: string | null; includeHidden?: boolean }) {
   await ensureMuralSchema();
-  const result = await db.query<{ id: string; post_id: string; invite_code: string; author_name: string; text: string; is_hidden: boolean; created_at: string; seconds_since: number }>(
+  const result = await db.query<{ id: string; post_id: string; invite_code: string; author_name: string; author_role: string | null; text: string; is_hidden: boolean; created_at: string; seconds_since: number }>(
     `
-      SELECT id::text, post_id::text, invite_code, author_name, text, is_hidden, created_at,
+      SELECT id::text, post_id::text, invite_code, author_name, author_role, text, is_hidden, created_at,
         EXTRACT(EPOCH FROM (NOW() - created_at))::int AS seconds_since
       FROM mural_comments
       WHERE post_id::text = $1 AND (is_hidden = FALSE OR $2)
@@ -287,6 +296,7 @@ export async function listComments(postId: string, { viewerCode, includeHidden =
       id: row.id,
       postId: row.post_id,
       authorName: row.author_name,
+      authorRole: row.author_role === 'noivo' || row.author_role === 'noiva' ? row.author_role : null,
       text: row.text,
       createdAt: new Date(row.created_at).toISOString(),
       isMine,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth';
-import { destroyMedia, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
+import { destroyMedia, readVideoCrop, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
 import {
   CAPTION_MAX_LENGTH,
   MAX_POSTS_PER_DAY,
@@ -68,12 +68,26 @@ export async function POST(request: NextRequest) {
     const duration = Number.isFinite(Number(body?.duration)) ? Number(body.duration) : null;
     const result = await db.query<{ id: string }>(
       `
-        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, caption, media_type, public_id, width, height, duration, ip)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, media_crop, caption, media_type, public_id, width, height, duration, ip)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (public_id) DO NOTHING
         RETURNING id::text
       `,
-      [guest?.id ?? null, viewerId, name, admin?.role ?? null, caption, kind, publicId, toInt(body?.width), toInt(body?.height), duration, ip]
+      [
+        guest?.id ?? null,
+        viewerId,
+        name,
+        admin?.role ?? null,
+        // Vídeo recortado no editor: o mural mostra a versão recortada pelo Cloudinary.
+        kind === 'video' ? readVideoCrop(body?.crop) : null,
+        caption,
+        kind,
+        publicId,
+        toInt(body?.width),
+        toInt(body?.height),
+        duration,
+        ip,
+      ]
     );
     return NextResponse.json({ ok: true, id: result.rows[0]?.id ?? null });
   } catch (error) {

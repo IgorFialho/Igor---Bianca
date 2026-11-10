@@ -14,6 +14,29 @@ const VIDEO_EAGER = `${VIDEO_PLAYBACK}/mp4|${VIDEO_POSTER}/jpg`;
 
 export type MediaKind = 'image' | 'video';
 
+/**
+ * Recorte de vídeo feito no editor do mural, em frações do quadro original ("x,y,w,h", de 0 a 1). Vira a
+ * transformação c_crop do Cloudinary com valores relativos (decimais = proporção do vídeo).
+ */
+export function readVideoCrop(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const { x, y, w, h } = value as Record<string, unknown>;
+  const numbers = [x, y, w, h].map(Number);
+  if (numbers.some((n) => !Number.isFinite(n))) return null;
+  const [cx, cy, cw, ch] = numbers;
+  if (cw < 0.05 || ch < 0.05 || cw > 1 || ch > 1 || cx < 0 || cy < 0 || cx + cw > 1.0001 || cy + ch > 1.0001) return null;
+  if (cw > 0.999 && ch > 0.999) return null;
+  const f = (n: number) => Math.min(1, Math.max(0, n)).toFixed(4);
+  return `${f(cx)},${f(cy)},${f(cw)},${f(ch)}`;
+}
+
+/** "x,y,w,h" → "c_crop,x_…,y_…,w_…,h_…/" (ou vazio, sem recorte). */
+function cropTransform(crop: string | null | undefined) {
+  if (!crop) return '';
+  const [x, y, w, h] = crop.split(',');
+  return `c_crop,x_${x},y_${y},w_${w},h_${h}/`;
+}
+
 function getConfig() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME ?? '';
   const apiKey = process.env.CLOUDINARY_API_KEY ?? '';
@@ -37,7 +60,7 @@ function sign(params: Record<string, string | number>) {
 }
 
 /** Dados para o celular enviar um arquivo direto ao Cloudinary (válidos por ~1 hora). */
-export function createUploadSignature(kind: MediaKind) {
+export function createUploadSignature(kind: MediaKind, videoCrop: string | null = null) {
   const { cloudName, apiKey } = getConfig();
   const params: Record<string, string | number> = {
     folder: MURAL_FOLDER,
@@ -45,7 +68,9 @@ export function createUploadSignature(kind: MediaKind) {
     timestamp: Math.floor(Date.now() / 1000),
   };
   if (kind === 'video') {
-    params.eager = VIDEO_EAGER;
+    // Com recorte, as versões preparadas no envio já saem recortadas (as mesmas URLs que o mural usa).
+    const crop = cropTransform(videoCrop);
+    params.eager = crop ? `${crop}${VIDEO_PLAYBACK}/mp4|${crop}${VIDEO_POSTER}/jpg` : VIDEO_EAGER;
     params.eager_async = 'true';
   }
   return {
@@ -65,14 +90,15 @@ export function verifyUploadResponse(publicId: string, version: string | number,
 }
 
 /** URLs de exibição de um arquivo do mural. */
-export function mediaUrls(kind: MediaKind, publicId: string) {
+export function mediaUrls(kind: MediaKind, publicId: string, videoCrop: string | null = null) {
   const { cloudName } = getConfig();
   const base = `https://res.cloudinary.com/${cloudName}/${kind}/upload`;
   if (kind === 'video') {
+    const crop = cropTransform(videoCrop);
     return {
-      thumb: `${base}/${VIDEO_POSTER}/${publicId}.jpg`,
-      full: `${base}/${VIDEO_PLAYBACK}/${publicId}.mp4`,
-      poster: `${base}/so_0,c_limit,w_1600,q_auto/${publicId}.jpg`,
+      thumb: `${base}/${crop}${VIDEO_POSTER}/${publicId}.jpg`,
+      full: `${base}/${crop}${VIDEO_PLAYBACK}/${publicId}.mp4`,
+      poster: `${base}/${crop}so_0,c_limit,w_1600,q_auto/${publicId}.jpg`,
     };
   }
   return {

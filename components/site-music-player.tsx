@@ -12,6 +12,10 @@ export const MEDIA_RECORDING_EVENT = 'igor-bianca:recording';
 // Música original do site: usada enquanto a configuração do painel não chega (e se ela falhar).
 const DEFAULT_MUSIC_URL = '/sons/musica-fundo.mp3';
 
+// Transição entre páginas: a música que sai baixa aos poucos e a que entra sobe aos poucos.
+const FADE_OUT_MS = 700;
+const FADE_IN_MS = 1200;
+
 /** start: segundo em que a música começa (definido no painel) e para onde volta ao repetir. */
 type PageTrack = { id: string; title: string; artist?: string | null; url: string; start?: number } | null;
 type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
@@ -34,9 +38,11 @@ export function SiteMusicPlayer() {
   const pausedForPageRef = useRef(false);
   const [config, setConfig] = useState<MusicConfig | null>(null);
   const currentSrcRef = useRef<string | null>(null);
+  const volumeRef = useRef(0.25);
   const restoredRef = useRef(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
   const [volume, setVolume] = useState(0.25);
+  volumeRef.current = volume;
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
   const [isVolumeInteracting, setIsVolumeInteracting] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -90,20 +96,57 @@ export function SiteMusicPlayer() {
     };
   }, [isAdminRoute]);
 
+  // Volume subindo/descendo aos poucos; um fade novo (ou mexer no volume) cancela o anterior.
+  const fadeRef = useRef<{ cancel: () => void } | null>(null);
+  const fadeTo = useCallback((audioElement: HTMLAudioElement, target: number, duration: number) => {
+    fadeRef.current?.cancel();
+    return new Promise<void>((resolve) => {
+      const from = audioElement.volume;
+      const startedAt = performance.now();
+      let frame = 0;
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        window.cancelAnimationFrame(frame);
+        if (fadeRef.current === handle) fadeRef.current = null;
+        resolve();
+      };
+      const handle = { cancel: finish };
+      fadeRef.current = handle;
+      const step = (now: number) => {
+        if (done) return;
+        const progress = Math.min(1, (now - startedAt) / duration);
+        // Curva suave (começa e termina devagar).
+        const eased = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2;
+        try {
+          audioElement.volume = Math.min(1, Math.max(0, from + (target - from) * eased));
+        } catch {
+          // volume fixo (ex.: iPhone): só segue
+        }
+        if (progress < 1) frame = window.requestAnimationFrame(step);
+        else finish();
+      };
+      frame = window.requestAnimationFrame(step);
+    });
+  }, []);
+
   const startPlayback = useCallback(
-    async (allowMutedFallback: boolean) => {
+    async (allowMutedFallback: boolean, fadeIn = false) => {
       const audioElement = audioRef.current;
 
       if (!audioElement) {
         return false;
       }
 
-      audioElement.volume = volume;
+      fadeRef.current?.cancel();
+      audioElement.volume = fadeIn ? 0 : volume;
       audioElement.muted = false;
 
       try {
         await audioElement.play();
         setIsMusicPlaying(true);
+        if (fadeIn) void fadeTo(audioElement, volume, FADE_IN_MS);
         return true;
       } catch {
         if (!allowMutedFallback) {
@@ -114,9 +157,10 @@ export function SiteMusicPlayer() {
         try {
           audioElement.muted = true;
           await audioElement.play();
-          audioElement.volume = volume;
+          audioElement.volume = fadeIn ? 0 : volume;
           audioElement.muted = false;
           setIsMusicPlaying(true);
+          if (fadeIn) void fadeTo(audioElement, volume, FADE_IN_MS);
           return true;
         } catch {
           setIsMusicPlaying(false);
@@ -124,7 +168,7 @@ export function SiteMusicPlayer() {
         }
       }
     },
-    [volume]
+    [volume, fadeTo]
   );
 
   useEffect(() => {
@@ -134,6 +178,7 @@ export function SiteMusicPlayer() {
       return;
     }
 
+    fadeRef.current?.cancel();
     audioElement.volume = volume;
   }, [volume]);
 
@@ -272,16 +317,25 @@ export function SiteMusicPlayer() {
       if (!audioElement.paused || pausedForMediaRef.current) {
         pausedForPageRef.current = true;
         pausedForMediaRef.current = false;
-        audioElement.pause();
+        // Página sem música: a música baixa aos poucos e só então pausa.
+        if (audioElement.paused) return;
+        void fadeTo(audioElement, 0, FADE_OUT_MS).then(() => {
+          if (pausedForPageRef.current) audioElement.pause();
+        });
       }
       return;
     }
 
     if (currentSrcRef.current !== pageTrackUrl) {
       const wasOn = currentSrcRef.current !== null && (!audioElement.paused || pausedForPageRef.current || pausedForMediaRef.current);
+      const isPlaying = currentSrcRef.current !== null && !audioElement.paused;
       currentSrcRef.current = pageTrackUrl;
       pausedForPageRef.current = false;
       pausedForMediaRef.current = false;
+      const nextUrl = pageTrackUrl;
+      const swap = () => {
+      // Outra página foi aberta durante o fade: quem manda agora é a troca nova.
+      if (currentSrcRef.current !== nextUrl) return;
       audioElement.src = pageTrackUrl;
       audioElement.load();
       trackStartRef.current = pageTrackStart;
@@ -309,8 +363,13 @@ export function SiteMusicPlayer() {
         restoredRef.current = true;
         restoreSavedState(audioElement, pageTrackUrl, pageTrackStart);
       } else if (wasOn) {
-        void startPlayback(true);
+        // A música nova entra subindo o volume aos poucos.
+        void startPlayback(true, true);
       }
+      };
+      // Tocando: a música atual baixa aos poucos antes da troca; parada: troca na hora.
+      if (isPlaying && nextUrl) void fadeTo(audioElement, 0, FADE_OUT_MS).then(swap);
+      else swap();
       return;
     }
 
@@ -318,9 +377,11 @@ export function SiteMusicPlayer() {
     trackStartRef.current = pageTrackStart;
     if (pausedForPageRef.current) {
       pausedForPageRef.current = false;
-      void startPlayback(true);
+      // Voltou de uma página sem música: se ainda estava baixando, sobe de novo; se já pausou, recomeça subindo.
+      if (!audioElement.paused) void fadeTo(audioElement, volumeRef.current, FADE_IN_MS);
+      else void startPlayback(true, true);
     }
-  }, [pageTrackUrl, pageTrackStart, isAdminRoute, startPlayback, restoreSavedState]);
+  }, [pageTrackUrl, pageTrackStart, isAdminRoute, startPlayback, restoreSavedState, fadeTo]);
 
   // Ao repetir, a música volta ao ponto de início definido no painel (e não ao 0:00).
   useEffect(() => {
@@ -704,11 +765,6 @@ export function SiteMusicPlayer() {
           loop
           playsInline
           preload="auto"
-          onLoadedMetadata={() => {
-            if (audioRef.current) {
-              audioRef.current.volume = volume;
-            }
-          }}
           onPlay={() => setIsMusicPlaying(true)}
           onPause={() => setIsMusicPlaying(false)}
           onEnded={() => setIsMusicPlaying(false)}

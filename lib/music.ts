@@ -10,6 +10,15 @@ export const DEFAULT_TRACK_ID = 'padrao';
 export const DEFAULT_TRACK = { id: DEFAULT_TRACK_ID, title: 'Música original do site', url: '/sons/musica-fundo.mp3', builtIn: true };
 /** Autoria (artista/intérprete, compositor, licença…): aparece no player, por cuidado com o direito de uso. */
 export const TRACK_ARTIST_MAX_LENGTH = 120;
+/** Maior ponto de início aceito (segundos). */
+export const TRACK_START_MAX = 3600;
+
+/** Ponto de início válido em segundos (0 quando vazio ou inválido). */
+export function readTrackStart(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(TRACK_START_MAX, Math.round(number * 10) / 10);
+}
 
 /** Páginas que podem ter música própria (o /rsvp faz parte do convite). */
 export const MUSIC_PAGES = [
@@ -22,7 +31,8 @@ export type MusicPageKey = (typeof MUSIC_PAGES)[number]['key'];
 export const MUSIC_PAGE_KEYS = MUSIC_PAGES.map((page) => page.key) as MusicPageKey[];
 
 export type MusicMode = 'single' | 'per_page';
-export type MusicTrack = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null };
+/** start: segundo em que a música começa (e para onde volta ao repetir). */
+export type MusicTrack = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null; start: number };
 /** Por página: id da música ou null ("sem música"). */
 export type MusicSettings = { mode: MusicMode; singleTrack: string; pageTracks: Record<MusicPageKey, string | null> };
 
@@ -55,6 +65,10 @@ export function ensureMusicSchema() {
         ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS artist VARCHAR(${TRACK_ARTIST_MAX_LENGTH});
         ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_title VARCHAR(${TRACK_TITLE_MAX_LENGTH});
         ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_artist VARCHAR(${TRACK_ARTIST_MAX_LENGTH});
+
+        -- A partir de que segundo cada música toca (e para onde volta ao repetir).
+        ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS start_at NUMERIC(7, 1) NOT NULL DEFAULT 0;
+        ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_start NUMERIC(7, 1) NOT NULL DEFAULT 0;
       `
     )
     .then(() => undefined)
@@ -68,14 +82,16 @@ export function ensureMusicSchema() {
 export async function listTracks(): Promise<MusicTrack[]> {
   await ensureMusicSchema();
   const [result, defaults] = await Promise.all([
-    db.query<{ id: string; title: string; artist: string | null; public_id: string; duration: string | null }>(
-      'SELECT id::text, title, artist, public_id, duration::text FROM music_tracks ORDER BY created_at ASC'
+    db.query<{ id: string; title: string; artist: string | null; public_id: string; duration: string | null; start_at: string | null }>(
+      'SELECT id::text, title, artist, public_id, duration::text, start_at::text FROM music_tracks ORDER BY created_at ASC'
     ),
-    db.query<{ default_title: string | null; default_artist: string | null }>('SELECT default_title, default_artist FROM music_settings WHERE id = 1'),
+    db.query<{ default_title: string | null; default_artist: string | null; default_start: string | null }>(
+      'SELECT default_title, default_artist, default_start::text FROM music_settings WHERE id = 1'
+    ),
   ]);
   const original = defaults.rows[0];
   return [
-    { ...DEFAULT_TRACK, title: original?.default_title || DEFAULT_TRACK.title, artist: original?.default_artist || null, duration: null },
+    { ...DEFAULT_TRACK, title: original?.default_title || DEFAULT_TRACK.title, artist: original?.default_artist || null, duration: null, start: readTrackStart(original?.default_start) },
     ...result.rows.map((row) => ({
       id: row.id,
       title: row.title,
@@ -83,6 +99,7 @@ export async function listTracks(): Promise<MusicTrack[]> {
       url: musicUrl(row.public_id),
       builtIn: false,
       duration: row.duration ? Number(row.duration) : null,
+      start: readTrackStart(row.start_at),
     })),
   ];
 }
@@ -111,10 +128,10 @@ export async function getPublicMusic() {
   const resolve = (id: string | null) => {
     if (id === null) return null;
     const track = byId.get(id) ?? byId.get(DEFAULT_TRACK_ID)!;
-    return { id: track.id, title: track.title, artist: track.artist, url: track.url };
+    return { id: track.id, title: track.title, artist: track.artist, url: track.url, start: track.start };
   };
   const pages = Object.fromEntries(
     MUSIC_PAGE_KEYS.map((key) => [key, resolve(settings.mode === 'single' ? settings.singleTrack : settings.pageTracks[key])])
-  ) as Record<MusicPageKey, { id: string; title: string; artist: string | null; url: string } | null>;
+  ) as Record<MusicPageKey, { id: string; title: string; artist: string | null; url: string; start: number } | null>;
   return { mode: settings.mode, pages };
 }

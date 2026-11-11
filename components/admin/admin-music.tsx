@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { uploadToCloudinary } from '@/components/mural/mural-client';
 
@@ -16,7 +17,7 @@ const SMALL = 'rounded-full border px-3 py-1 text-xs font-medium transition-colo
 const MAX_MUSIC_BYTES = 40 * 1024 * 1024;
 const NO_MUSIC = '__sem__';
 
-type Track = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null };
+type Track = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null; start: number };
 type Page = { key: string; label: string; path: string };
 type Settings = { mode: 'single' | 'per_page'; singleTrack: string; pageTracks: Record<string, string | null> };
 
@@ -25,6 +26,28 @@ const formatDuration = (seconds: number | null) => {
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
 };
+
+/** Lê um tempo digitado ("1:23", "83" ou "1:23.5") em segundos; null quando não dá para entender. */
+function parseTime(text: string) {
+  const value = text.trim().replace(',', '.');
+  if (!value) return 0;
+  const match = value.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const minutes = match[1] ? Number(match[1]) : 0;
+  const seconds = Number(match[2]);
+  if (match[1] && seconds >= 60) return null;
+  return Math.round((minutes * 60 + seconds) * 10) / 10;
+}
+
+/** Tempo em m:ss (com décimo quando houver). */
+const formatTime = (seconds: number) => {
+  const whole = Math.floor(seconds);
+  const tenth = Math.round((seconds - whole) * 10);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}${tenth ? `.${tenth}` : ''}`;
+};
+
+/** Player de cada música na lista (para ouvir a partir do início escolhido e pegar o ponto atual). */
+const trackAudio = (id: string) => document.getElementById(`music-audio-${id}`) as HTMLAudioElement | null;
 
 /** Duração do áudio escolhido (para mostrar na lista). */
 function readAudioDuration(file: File) {
@@ -55,7 +78,7 @@ export function AdminMusic() {
   const [message, setMessage] = useState('');
   const [upload, setUpload] = useState<{ file: File; title: string; artist: string; duration: number | null } | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; title: string; artist: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; title: string; artist: string; start: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
   const closeConfirm = useCallback(() => setConfirmAction(null), []);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -168,8 +191,19 @@ export function AdminMusic() {
 
   const saveRename = async () => {
     if (!renaming) return;
+    const start = parseTime(renaming.start);
+    const duration = tracks.find((track) => track.id === renaming.id)?.duration ?? null;
+    if (start === null) {
+      setError('Tempo de início inválido. Use minutos:segundos, por exemplo 0:45 ou 1:30.');
+      return;
+    }
+    if (duration && start >= duration - 1) {
+      setError(`O início precisa ser antes do fim da música (${formatDuration(duration)}).`);
+      return;
+    }
+    setError('');
     try {
-      await request('PATCH', { action: 'edit', id: renaming.id, title: renaming.title, artist: renaming.artist });
+      await request('PATCH', { action: 'edit', id: renaming.id, title: renaming.title, artist: renaming.artist, start });
       setRenaming(null);
       setMessage('Música atualizada.');
       await load();
@@ -211,16 +245,6 @@ export function AdminMusic() {
   };
 
   const isDirty = JSON.stringify(draft) !== JSON.stringify(settings);
-  const trackOptions = (allowNone: boolean) => (
-    <>
-      {tracks.map((track) => (
-        <option key={track.id} value={track.id}>
-          {track.title}
-        </option>
-      ))}
-      {allowNone ? <option value={NO_MUSIC}>Sem música</option> : null}
-    </>
-  );
 
   return (
     <section className={CARD}>
@@ -265,30 +289,30 @@ export function AdminMusic() {
 
             {draft.mode === 'single' ? (
               <div className="space-y-1.5">
-                <label htmlFor="music-single" className="text-xs text-zinc-600">
+                <p id="music-single-label" className="text-xs text-zinc-600">
                   Música de todas as páginas
-                </label>
-                <select id="music-single" value={draft.singleTrack} onChange={(event) => setDraft({ ...draft, singleTrack: event.target.value })} className={FIELD}>
-                  {trackOptions(false)}
-                </select>
+                </p>
+                <TrackSelect
+                  labelId="music-single-label"
+                  tracks={tracks}
+                  value={draft.singleTrack}
+                  onChange={(value) => setDraft({ ...draft, singleTrack: value ?? draft.singleTrack })}
+                />
               </div>
             ) : (
               <div className="space-y-3">
                 {pages.map((page) => (
                   <div key={page.key} className="space-y-1.5">
-                    <label htmlFor={`music-${page.key}`} className="text-xs text-zinc-600">
+                    <p id={`music-${page.key}-label`} className="text-xs text-zinc-600">
                       {page.label} <span className="text-zinc-400">({page.path})</span>
-                    </label>
-                    <select
-                      id={`music-${page.key}`}
-                      value={draft.pageTracks[page.key] ?? NO_MUSIC}
-                      onChange={(event) =>
-                        setDraft({ ...draft, pageTracks: { ...draft.pageTracks, [page.key]: event.target.value === NO_MUSIC ? null : event.target.value } })
-                      }
-                      className={FIELD}
-                    >
-                      {trackOptions(true)}
-                    </select>
+                    </p>
+                    <TrackSelect
+                      labelId={`music-${page.key}-label`}
+                      tracks={tracks}
+                      allowNone
+                      value={draft.pageTracks[page.key] ?? null}
+                      onChange={(value) => setDraft({ ...draft, pageTracks: { ...draft.pageTracks, [page.key]: value } })}
+                    />
                   </div>
                 ))}
                 <p className="text-xs text-zinc-600">
@@ -406,6 +430,7 @@ export function AdminMusic() {
                           placeholder="Autoria (artista/intérprete; compositor, licença)"
                           className={FIELD}
                         />
+                        <StartTimeField trackId={track.id} value={renaming.start} onChange={(start) => setRenaming({ ...renaming, start })} />
                         <div className="flex gap-1.5">
                           <button type="button" onClick={saveRename} className={`${SMALL} border-champagne-600 bg-champagne-600 text-[#fff9f1]`}>
                             Salvar
@@ -427,13 +452,21 @@ export function AdminMusic() {
                         ) : (
                           <p className="text-xs font-medium text-rose-700">Sem autoria informada: clique em Editar para incluir</p>
                         )}
+                        {track.start > 0 ? (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-champagne-600/10 px-2 py-0.5 text-[0.7rem] font-medium text-champagne-700">
+                            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden="true">
+                              <path d="M8 5.5v13l10-6.5z" />
+                            </svg>
+                            Começa em {formatTime(track.start)}
+                          </p>
+                        ) : null}
                       </div>
                     )}
                     {renaming?.id !== track.id ? (
                       <div className="flex gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setRenaming({ id: track.id, title: track.title, artist: track.artist ?? '' })}
+                          onClick={() => setRenaming({ id: track.id, title: track.title, artist: track.artist ?? '', start: track.start ? formatTime(track.start) : '0:00' })}
                           className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
                         >
                           Editar
@@ -446,7 +479,7 @@ export function AdminMusic() {
                       </div>
                     ) : null}
                   </div>
-                  <audio src={track.url} controls preload="none" className="h-9 w-full" />
+                  <audio id={`music-audio-${track.id}`} src={track.url} controls preload="none" className="h-9 w-full" />
                 </div>
               ))}
             </div>
@@ -456,5 +489,254 @@ export function AdminMusic() {
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />
     </section>
+  );
+}
+
+/** Ícone de disco (música) ou de som desligado ("Sem música"). */
+function TrackIcon({ none = false, active = false }: { none?: boolean; active?: boolean }) {
+  return (
+    <span
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+        none ? 'bg-zinc-800/5 text-zinc-500' : active ? 'bg-champagne-600 text-[#fff9f1]' : 'bg-champagne-600/15 text-champagne-700'
+      }`}
+      aria-hidden="true"
+    >
+      {none ? (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" strokeLinejoin="round" />
+          <path d="m16 9.5 5 5m0-5-5 5" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="8.5" />
+          <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+          <path d="M12 5.5a6.5 6.5 0 0 1 6.5 6.5" strokeLinecap="round" opacity="0.55" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+type TrackChoice = { id: string | null; title: string; artist: string | null; duration: number | null };
+
+/** Seletor de música estilizado (no lugar do <select>): nome, autoria e duração; abre uma lista animada. */
+function TrackSelect({
+  labelId,
+  tracks,
+  value,
+  allowNone = false,
+  onChange,
+}: {
+  labelId: string;
+  tracks: Track[];
+  value: string | null;
+  allowNone?: boolean;
+  onChange: (value: string | null) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const choices: TrackChoice[] = [
+    ...tracks.map((track) => ({ id: track.id, title: track.title, artist: track.artist, duration: track.duration })),
+    ...(allowNone ? [{ id: null, title: 'Sem música', artist: 'O player some nesta página', duration: null }] : []),
+  ];
+  const selectedIndex = Math.max(0, choices.findIndex((choice) => choice.id === value));
+  const selected = choices[selectedIndex];
+  const describe = (choice: TrackChoice) =>
+    `${choice.id ? choice.artist || 'Sem autoria informada' : choice.artist ?? ''}${choice.duration ? ` · ${formatDuration(choice.duration)}` : ''}`;
+
+  // Fecha ao tocar fora.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!boxRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, [isOpen]);
+
+  // Ao abrir perto do fim da tela, rola a página até a lista aparecer inteira.
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => listRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 200);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  // Mantém a opção destacada visível ao navegar pelo teclado.
+  useEffect(() => {
+    if (!isOpen) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${highlight}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, isOpen]);
+
+  const open = () => {
+    setHighlight(selectedIndex);
+    setIsOpen(true);
+  };
+  const choose = (index: number) => {
+    const choice = choices[index];
+    if (choice) onChange(choice.id);
+    setIsOpen(false);
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent) => {
+    if (!isOpen) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        open();
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlight((index) => Math.min(choices.length - 1, index + 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlight((index) => Math.max(0, index - 1));
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choose(highlight);
+    } else if (event.key === 'Tab') setIsOpen(false);
+  };
+
+  return (
+    <div ref={boxRef} className={`relative ${isOpen ? 'z-30' : ''}`} onKeyDown={onKeyDown}>
+      <button
+        type="button"
+        onClick={() => (isOpen ? setIsOpen(false) : open())}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-labelledby={labelId}
+        className={`flex w-full items-center gap-3 rounded-2xl border bg-[#fffaf1] px-3 py-2.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-champagne-600/25 ${
+          isOpen ? 'border-champagne-600 shadow-[0_10px_30px_rgba(47,36,27,0.10)] ring-2 ring-champagne-600/15' : 'border-zinc-800/15 hover:border-champagne-600/50'
+        }`}
+      >
+        <TrackIcon none={!selected?.id} active={Boolean(selected?.id)} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-zinc-800">{selected?.title ?? 'Escolha uma música'}</span>
+          {selected ? <span className="block truncate text-xs text-zinc-500">{describe(selected)}</span> : null}
+        </span>
+        <svg
+          viewBox="0 0 24 24"
+          className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {isOpen ? (
+          <motion.ul
+            ref={listRef}
+            role="listbox"
+            aria-labelledby={labelId}
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="absolute inset-x-0 top-full z-30 mt-2 max-h-72 origin-top space-y-1 overflow-y-auto rounded-2xl border border-zinc-800/10 bg-[#fffaf1] p-1.5 shadow-[0_24px_50px_rgba(47,36,27,0.18)]"
+          >
+            {choices.map((choice, index) => {
+              const isSelected = index === selectedIndex;
+              return (
+                <li
+                  key={choice.id ?? NO_MUSIC}
+                  data-index={index}
+                  role="option"
+                  aria-selected={isSelected}
+                  onPointerEnter={() => setHighlight(index)}
+                  onClick={() => choose(index)}
+                  className={`flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 transition-colors ${index === highlight ? 'bg-champagne-600/10' : ''} ${
+                    !choice.id && index > 0 ? 'border-t border-zinc-800/10' : ''
+                  }`}
+                >
+                  <TrackIcon none={!choice.id} active={isSelected && Boolean(choice.id)} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm ${isSelected ? 'font-semibold text-zinc-900' : 'font-medium text-zinc-800'}`}>{choice.title}</span>
+                    <span className="block truncate text-xs text-zinc-500">{describe(choice)}</span>
+                  </span>
+                  {isSelected ? (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-champagne-700" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                      <path d="m5 12.5 4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : null}
+                </li>
+              );
+            })}
+          </motion.ul>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** "Começar em": tempo digitado, pegar o ponto atual do player da música e ouvir a partir dali. */
+function StartTimeField({ trackId, value, onChange }: { trackId: string; value: string; onChange: (value: string) => void }) {
+  const parsed = parseTime(value);
+  const nudge = (delta: number) => onChange(formatTime(Math.max(0, (parsed ?? 0) + delta)));
+  const useCurrent = () => {
+    const audio = trackAudio(trackId);
+    if (audio) onChange(formatTime(Math.round(audio.currentTime * 10) / 10));
+  };
+  const listen = () => {
+    const audio = trackAudio(trackId);
+    if (!audio || parsed === null) return;
+    const play = () => {
+      audio.currentTime = parsed;
+      void audio.play().catch(() => undefined);
+    };
+    if (audio.readyState >= 1) play();
+    else {
+      audio.preload = 'auto';
+      audio.addEventListener('loadedmetadata', play, { once: true });
+      audio.load();
+    }
+  };
+  const small = 'rounded-full border border-zinc-800/15 bg-[#fffaf1] px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-800/5';
+  return (
+    <div className="space-y-2 rounded-xl border border-zinc-800/10 bg-[#fffaf1]/70 p-3">
+      <label htmlFor={`music-start-${trackId}`} className="flex items-center gap-1.5 text-xs font-medium text-zinc-700">
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-champagne-700" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.5v13l10-6.5z" />
+        </svg>
+        Começar em <span className="font-normal text-zinc-500">(minutos:segundos)</span>
+      </label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" onClick={() => nudge(-5)} className={small} aria-label="Voltar 5 segundos">
+          −5s
+        </button>
+        <input
+          id={`music-start-${trackId}`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          inputMode="decimal"
+          placeholder="0:00"
+          className={`w-20 rounded-full border bg-cream px-3 py-1.5 text-center text-sm tabular-nums text-zinc-800 focus:outline-none focus:ring-2 focus:ring-champagne-600/20 ${
+            parsed === null ? 'border-rose-400' : 'border-zinc-800/15 focus:border-champagne-600'
+          }`}
+        />
+        <button type="button" onClick={() => nudge(5)} className={small} aria-label="Avançar 5 segundos">
+          +5s
+        </button>
+        <button type="button" onClick={useCurrent} className={small}>
+          Usar ponto do player
+        </button>
+        <button type="button" onClick={listen} disabled={parsed === null} className={`${small} border-champagne-600/40 text-champagne-700 disabled:opacity-50`}>
+          ▶ Ouvir daqui
+        </button>
+      </div>
+      <p className="text-[0.7rem] text-zinc-500">
+        No site, a música começa nesse ponto e, ao terminar, recomeça dele. Dica: toque a música no player abaixo, pause no momento certo e use
+        &quot;Usar ponto do player&quot;.
+      </p>
+    </div>
   );
 }

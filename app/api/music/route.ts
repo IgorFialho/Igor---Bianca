@@ -10,7 +10,7 @@ export async function GET() {
   } catch (error) {
     console.error('Falha ao carregar as músicas', error);
     // Sem banco: o site segue com a música original em todas as páginas (como sempre foi).
-    const fallback = { id: DEFAULT_TRACK.id, title: DEFAULT_TRACK.title, artist: null, url: DEFAULT_TRACK.url };
+    const fallback = { id: DEFAULT_TRACK.id, title: DEFAULT_TRACK.title, artist: null, url: DEFAULT_TRACK.url, start: 0 };
     return NextResponse.json({ mode: 'single', pages: Object.fromEntries(MUSIC_PAGE_KEYS.map((key) => [key, fallback])) });
   }
 }

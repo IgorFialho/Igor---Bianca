@@ -12,7 +12,8 @@ export const MEDIA_RECORDING_EVENT = 'igor-bianca:recording';
 // Música original do site: usada enquanto a configuração do painel não chega (e se ela falhar).
 const DEFAULT_MUSIC_URL = '/sons/musica-fundo.mp3';
 
-type PageTrack = { id: string; title: string; artist?: string | null; url: string } | null;
+/** start: segundo em que a música começa (definido no painel) e para onde volta ao repetir. */
+type PageTrack = { id: string; title: string; artist?: string | null; url: string; start?: number } | null;
 type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
 
 /** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite). */
@@ -60,6 +61,10 @@ export function SiteMusicPlayer() {
   else pageTrackUrl = lastTrackRef.current;
   if (pageTrackUrl !== undefined) lastTrackRef.current = pageTrackUrl;
   const hasMusic = pageTrackUrl !== null;
+  // Ponto de início da música desta página (0 = do começo).
+  const pageTrackStart =
+    (config && pageTrackUrl ? Object.values(config.pages).find((page) => page?.url === pageTrackUrl)?.start : 0) || 0;
+  const trackStartRef = useRef(0);
 
   // Configuração do painel (de novo ao voltar para a aba, para pegar mudanças feitas no painel).
   useEffect(() => {
@@ -208,7 +213,7 @@ export function SiteMusicPlayer() {
 
   /** Ao abrir o site: se a música estava tocando, continua (no mesmo ponto, se for a mesma música). */
   const restoreSavedState = useCallback(
-    (audioElement: HTMLAudioElement, src: string) => {
+    (audioElement: HTMLAudioElement, src: string, start: number) => {
       let saved: { on?: boolean; t?: number; src?: string | null } | null = null;
       try {
         saved = JSON.parse(window.localStorage.getItem(MUSIC_STATE_KEY) || 'null');
@@ -217,12 +222,13 @@ export function SiteMusicPlayer() {
       }
       if (!saved?.on || !audioElement.paused) return;
       const sameTrack = (saved.src ?? DEFAULT_MUSIC_URL) === src;
-      const resumeAt = sameTrack && typeof saved.t === 'number' && saved.t > 0 ? saved.t : 0;
+      // Mesma música: continua de onde parou (nunca antes do ponto de início); outra música: começa no início dela.
+      const resumeAt = sameTrack && typeof saved.t === 'number' && saved.t > start ? saved.t : start;
       if (resumeAt) {
         // A música acabou de ser carregada: o ponto só pode ser aplicado depois que o navegador lê a duração.
         const seek = () => {
           try {
-            if (audioElement.getAttribute('src') === src && audioElement.currentTime < 1) audioElement.currentTime = resumeAt;
+            if (audioElement.getAttribute('src') === src) audioElement.currentTime = resumeAt;
           } catch {
             // Sem como pular: começa do início.
           }
@@ -278,24 +284,71 @@ export function SiteMusicPlayer() {
       pausedForMediaRef.current = false;
       audioElement.src = pageTrackUrl;
       audioElement.load();
+      trackStartRef.current = pageTrackStart;
+      // Começa no ponto definido no painel (aplicado assim que o navegador lê a duração).
+      if (pageTrackStart > 0) {
+        const src = pageTrackUrl;
+        const start = pageTrackStart;
+        audioElement.addEventListener(
+          'loadedmetadata',
+          () => {
+            try {
+              if (audioElement.getAttribute('src') === src && audioElement.currentTime < start) audioElement.currentTime = start;
+            } catch {
+              // Sem como pular: começa do início.
+            }
+          },
+          { once: true }
+        );
+      }
       if (pendingStartRef.current) {
         pendingStartRef.current = false;
         restoredRef.current = true;
         void startPlayback(true);
       } else if (!restoredRef.current) {
         restoredRef.current = true;
-        restoreSavedState(audioElement, pageTrackUrl);
+        restoreSavedState(audioElement, pageTrackUrl, pageTrackStart);
       } else if (wasOn) {
         void startPlayback(true);
       }
       return;
     }
 
+    // Mesma música: só atualiza o ponto para onde ela volta ao repetir (se mudou no painel).
+    trackStartRef.current = pageTrackStart;
     if (pausedForPageRef.current) {
       pausedForPageRef.current = false;
       void startPlayback(true);
     }
-  }, [pageTrackUrl, isAdminRoute, startPlayback, restoreSavedState]);
+  }, [pageTrackUrl, pageTrackStart, isAdminRoute, startPlayback, restoreSavedState]);
+
+  // Ao repetir, a música volta ao ponto de início definido no painel (e não ao 0:00).
+  useEffect(() => {
+    if (isAdminRoute) return;
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+    let lastTime = 0;
+    const onTime = () => {
+      const start = trackStartRef.current;
+      const time = audioElement.currentTime;
+      if (start > 0 && !audioElement.paused) {
+        const nearEnd = Number.isFinite(audioElement.duration) && audioElement.duration - time < 0.35;
+        const wrapped = lastTime > time + 1 && time < start;
+        if (nearEnd || wrapped) {
+          try {
+            audioElement.currentTime = start;
+          } catch {
+            // segue do ponto atual
+          }
+          lastTime = start;
+          return;
+        }
+      }
+      lastTime = time;
+    };
+    audioElement.addEventListener('timeupdate', onTime);
+    return () => audioElement.removeEventListener('timeupdate', onTime);
+  }, [isAdminRoute]);
 
   // Vídeo com som (ex.: post do mural) ou gravação pela câmera: a música pausa e volta sozinha ao terminar.
   useEffect(() => {

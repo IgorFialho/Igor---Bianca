@@ -6,7 +6,8 @@ import { Portal } from '@/components/home/portal';
 
 // Editor de fotos do mural, no estilo do Instagram:
 // - enquadrar: formato (original, 1:1, 4:5, 16:9), arrastar a foto para posicionar e zoom (pinça, rolagem ou barra);
-// - texto por cima da foto: escrever, arrastar para qualquer lugar, cor, estilo, fundo e tamanho.
+// - texto por cima da foto: escrever (com emojis), arrastar, estilo, tamanho, ângulo e cores do texto, do fundo e da borda;
+// - figurinhas de emoji: arrastar, tamanho e ângulo.
 // O resultado é desenhado num canvas e vira a própria foto enviada (tudo no aparelho, antes do envio).
 // Posições e tamanhos ficam guardados em frações do quadro, então o mesmo ajuste vale em qualquer tamanho de tela.
 
@@ -22,6 +23,19 @@ export type PhotoTextLayer = {
   color: string;
   style: 'classic' | 'simple';
   background: boolean;
+  /** Cor do fundo (com `background`). Sem ela (edições antigas), o fundo usa `color` e o texto o contraste. */
+  backgroundColor?: string;
+  /** Ângulo em graus (-180 a 180). */
+  rotation?: number;
+  /** Cor da borda (contorno) das letras; ausente ou null = sem borda. */
+  outlineColor?: string | null;
+  /** Grossura da borda das letras, em fração do tamanho da letra. */
+  outlineWidth?: number;
+  /** Cor e grossura da borda do fundo (moldura da caixa do texto); null = sem borda. */
+  boxBorderColor?: string | null;
+  boxBorderWidth?: number;
+  /** 'emoji': figurinha (só o emoji, sem cor, fundo nem sombra). */
+  kind?: 'text' | 'emoji';
 };
 export type PhotoEditState = {
   aspect: PhotoAspect;
@@ -44,15 +58,91 @@ const ASPECTS: { key: PhotoAspect; label: string; ratio: number | null }[] = [
   { key: '4:5', label: '4:5', ratio: 4 / 5 },
   { key: '16:9', label: '16:9', ratio: 16 / 9 },
 ];
-// Cores do site: branco, preto, rosé, champanhe, oliva e dourado.
-const TEXT_COLORS = ['#ffffff', '#1f1b16', '#c97a8a', '#8a5a2b', '#617541', '#e2b85f'];
+// Paleta do texto e do fundo: as cores do site (creme, champanhe, dourado, rosé, oliva) e outras para variar.
+const TEXT_COLORS = [
+  '#ffffff', '#1f1b16', '#fffaf1', '#f6edd7', '#e2b85f', '#8a5a2b',
+  '#f2c4ce', '#c97a8a', '#9e4f63', '#b3261e', '#ff7a59', '#ffd84d',
+  '#a8b892', '#617541', '#7fb3e0', '#1e3a5f', '#b39ddb', '#6b4f9e',
+];
+// Figurinhas e emojis do texto: só emojis antigos o bastante para aparecerem em qualquer aparelho.
+const PHOTO_EMOJIS = [
+  '❤️', '🤍', '💕', '💖', '💞', '💘', '💍', '💒',
+  '👰', '🤵', '💐', '🌹', '🌸', '🌷', '🌼', '🕊️',
+  '✨', '🌟', '🎉', '🥳', '🥂', '🍾', '🎶', '📸',
+  '💃', '🕺', '😍', '🥰', '😘', '🤗', '😂', '😭',
+  '😊', '🤩', '😎', '👏', '🙌', '🙏', '💯',
+  '☀️', '🌙', '🍰', '🎂', '🦋', '👑', '💋', '🌺', '🎁',
+];
 const MAX_ZOOM = 4;
 const MAX_OUTPUT = 2048;
 const LINE_HEIGHT = 1.15;
 const DEFAULT_TEXT_SIZE = 0.075;
+const DEFAULT_EMOJI_SIZE = 0.18;
+const TEXT_MAX_LENGTH = 120;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const newId = () => Math.random().toString(36).slice(2, 10);
+
+/** Ângulo com "ímã": perto de 0°, ±45°, ±90° e ±180° ele encaixa no valor exato. */
+function snapAngle(value: number) {
+  for (const target of [-180, -90, -45, 0, 45, 90, 180]) {
+    if (Math.abs(value - target) <= 3) return target;
+  }
+  return Math.round(value);
+}
+
+/** Grossuras das bordas, em fração do tamanho da letra: padrão e limites da barra "Grossura". */
+const OUTLINE_WIDTH = 0.08;
+const BOX_BORDER_WIDTH = 0.08;
+const BORDER_WIDTH_RANGE = { min: 0.02, max: 0.2 };
+const BOX_RADIUS = 0.4;
+
+type LayerPaint = {
+  fg: string;
+  bg: string | null;
+  stroke: string | null;
+  strokeWidth: number;
+  box: string | null;
+  boxWidth: number;
+  shadow: boolean;
+};
+
+/** Cores efetivas de uma camada: texto, fundo, bordas (ou null) e se leva sombra (só texto solto, sem fundo nem bordas). */
+function layerPaint(layer: PhotoTextLayer): LayerPaint {
+  const strokeWidth = layer.outlineWidth ?? OUTLINE_WIDTH;
+  const boxWidth = layer.boxBorderWidth ?? BOX_BORDER_WIDTH;
+  if (layer.kind === 'emoji') return { fg: '#000000', bg: null, stroke: null, strokeWidth, box: null, boxWidth, shadow: false };
+  const stroke = layer.outlineColor || null;
+  const box = layer.boxBorderColor || null;
+  let fg = layer.color;
+  let bg: string | null = null;
+  if (layer.background) {
+    if (layer.backgroundColor) bg = layer.backgroundColor;
+    else {
+      bg = layer.color;
+      fg = contrastOn(layer.color);
+    }
+  }
+  return { fg, bg, stroke, strokeWidth, box, boxWidth, shadow: !bg && !stroke && !box };
+}
+
+/** Estilo CSS da camada (pré-visualização): mesmas cores, fundo, bordas e sombra do desenho final. */
+function layerTextStyle(paint: LayerPaint) {
+  const hasBox = Boolean(paint.bg || paint.box);
+  return {
+    color: paint.fg,
+    backgroundColor: paint.bg ?? 'transparent',
+    // O fundo fica por dentro da borda da caixa (igual ao desenho final).
+    backgroundClip: 'padding-box',
+    padding: hasBox ? '0.35em 0.6em' : 0,
+    border: paint.box ? `${paint.boxWidth}em solid ${paint.box}` : undefined,
+    borderRadius: hasBox ? `${BOX_RADIUS}em` : 0,
+    textShadow: paint.shadow ? '0 0.03em 0.12em rgba(0,0,0,0.5)' : 'none',
+    // Borda por fora da letra: traço com o dobro da espessura, desenhado antes do preenchimento.
+    WebkitTextStroke: paint.stroke ? `${paint.strokeWidth * 2}em ${paint.stroke}` : undefined,
+    paintOrder: paint.stroke ? 'stroke fill' : undefined,
+  } as const;
+}
 
 /** Cor do texto quando ele tem fundo colorido: escuro em fundos claros, branco nos escuros. */
 function contrastOn(hex: string) {
@@ -132,6 +222,10 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Quadro de emojis aberto: 'add' (nova figurinha) ou 'insert' (emoji dentro do texto em edição).
+  const [emojiTray, setEmojiTray] = useState<'add' | 'insert' | null>(null);
+  // Na edição do texto, a paleta pinta o texto ou o fundo.
+  const [colorTarget, setColorTarget] = useState<ColorTarget>('text');
 
   const [stage, setStage] = useState({ width: 0, height: 0 });
 
@@ -178,12 +272,13 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopImmediatePropagation();
-      if (editingId) setEditingId(null);
+      if (emojiTray) setEmojiTray(null);
+      else if (editingId) setEditingId(null);
       else if (!isSaving) onCancel();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [editingId, isSaving, onCancel]);
+  }, [emojiTray, editingId, isSaving, onCancel]);
 
   const ratio = ASPECTS.find((item) => item.key === state.aspect)?.ratio ?? (decoded ? decoded.width / decoded.height : 1);
   const frameWidth = stage.width && stage.height ? Math.min(stage.width, stage.height * ratio) : 0;
@@ -284,10 +379,73 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
     setState((value) => ({ ...value, texts: value.texts.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
 
   const addText = () => {
-    const layer: PhotoTextLayer = { id: newId(), text: '', x: 0.5, y: 0.5, size: DEFAULT_TEXT_SIZE, color: '#ffffff', style: 'classic', background: false };
+    const layer: PhotoTextLayer = {
+      id: newId(),
+      text: '',
+      x: 0.5,
+      y: 0.5,
+      size: DEFAULT_TEXT_SIZE,
+      color: '#ffffff',
+      style: 'classic',
+      background: false,
+      backgroundColor: '#1f1b16',
+      rotation: 0,
+      kind: 'text',
+    };
     setState((value) => ({ ...value, texts: [...value.texts, layer] }));
     setSelectedId(layer.id);
-    setEditingId(layer.id);
+    openEditing(layer.id);
+  };
+
+  // Figurinha: o emoji entra no meio da foto, já selecionado (arrastar move; tocar abre tamanho e ângulo).
+  const addEmoji = (emoji: string) => {
+    const layer: PhotoTextLayer = {
+      id: newId(),
+      text: emoji,
+      x: 0.5,
+      y: 0.5,
+      size: DEFAULT_EMOJI_SIZE,
+      color: '#000000',
+      style: 'simple',
+      background: false,
+      rotation: 0,
+      kind: 'emoji',
+    };
+    setState((value) => ({ ...value, texts: [...value.texts, layer] }));
+    setSelectedId(layer.id);
+    setEmojiTray(null);
+  };
+
+  // Escolher a cor do fundo (null = sem fundo). Se o texto ficaria da mesma cor do fundo, troca pelo contraste.
+  const setLayerBackground = (layer: PhotoTextLayer, color: string | null) => {
+    if (!color) {
+      updateText(layer.id, { background: false });
+      return;
+    }
+    const current = layerPaint(layer).fg;
+    updateText(layer.id, {
+      background: true,
+      backgroundColor: color,
+      color: current.toLowerCase() === color.toLowerCase() ? contrastOn(color) : current,
+    });
+  };
+
+  // Emoji dentro do texto: entra onde está o cursor.
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const insertEmojiInText = (emoji: string) => {
+    if (!editing) return;
+    const field = textAreaRef.current;
+    const start = field?.selectionStart ?? editing.text.length;
+    const end = field?.selectionEnd ?? editing.text.length;
+    const next = editing.text.slice(0, start) + emoji + editing.text.slice(end);
+    if (next.length > TEXT_MAX_LENGTH) return;
+    updateText(editing.id, { text: next });
+    window.requestAnimationFrame(() => {
+      if (!field) return;
+      const caret = start + emoji.length;
+      field.focus();
+      field.setSelectionRange(caret, caret);
+    });
   };
 
   const removeText = (id: string) => {
@@ -296,7 +454,14 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
     setEditingId(null);
   };
 
+  const openEditing = (id: string) => {
+    setEditingId(id);
+    setColorTarget('text');
+    setEmojiTray(null);
+  };
+
   const finishEditing = () => {
+    setEmojiTray(null);
     if (editing && !editing.text.trim()) removeText(editing.id);
     else setEditingId(null);
   };
@@ -323,7 +488,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
     if (!drag || drag.pointerId !== event.pointerId) return;
     textDrag.current = null;
     // Toque sem arrastar: abre a edição do texto.
-    if (!drag.moved) setEditingId(drag.id);
+    if (!drag.moved) openEditing(drag.id);
   };
 
   // ---------- Gerar a foto final ----------
@@ -377,7 +542,13 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
       for (const layer of texts) {
         if (!layer.text.trim()) continue;
         const fontSize = layer.size * frameWidth * k;
-        const font = layer.style === 'classic' ? `italic 400 ${fontSize}px ${classicFamily}` : `600 ${fontSize}px ${simpleFamily}`;
+        const paint = layerPaint(layer);
+        const font =
+          layer.kind === 'emoji'
+            ? `400 ${fontSize}px ${simpleFamily}`
+            : layer.style === 'classic'
+              ? `italic 400 ${fontSize}px ${classicFamily}`
+              : `600 ${fontSize}px ${simpleFamily}`;
         try {
           await document.fonts?.load(font, layer.text);
         } catch {
@@ -389,36 +560,58 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
         const lines = layer.text.split('\n');
         const lineHeight = fontSize * LINE_HEIGHT;
         const blockHeight = lineHeight * lines.length;
-        const centerX = layer.x * outWidth;
-        const centerY = layer.y * outHeight;
-        if (layer.background) {
+        // Desenha a partir do centro do texto, girado no ângulo escolhido (igual à pré-visualização).
+        context.save();
+        context.translate(layer.x * outWidth, layer.y * outHeight);
+        context.rotate(((layer.rotation ?? 0) * Math.PI) / 180);
+        if (paint.bg || paint.box) {
           const width = Math.max(...lines.map((line) => context.measureText(line).width));
           const padX = fontSize * 0.6;
           const padY = fontSize * 0.35;
-          context.fillStyle = layer.color;
-          context.beginPath();
-          const x = centerX - width / 2 - padX;
-          const y = centerY - blockHeight / 2 - padY;
-          const w = width + padX * 2;
-          const h = blockHeight + padY * 2;
-          const radius = fontSize * 0.4;
-          if (typeof context.roundRect === 'function') context.roundRect(x, y, w, h, radius);
-          else context.rect(x, y, w, h);
-          context.fill();
-          context.fillStyle = contrastOn(layer.color);
-          context.shadowColor = 'transparent';
-        } else {
-          context.fillStyle = layer.color;
+          const border = paint.box ? fontSize * paint.boxWidth : 0;
+          const outerRadius = fontSize * BOX_RADIUS;
+          const roundedRect = (inset: number, radius: number) => {
+            const x = -width / 2 - padX - border + inset;
+            const y = -blockHeight / 2 - padY - border + inset;
+            const w = width + (padX + border - inset) * 2;
+            const h = blockHeight + (padY + border - inset) * 2;
+            context.beginPath();
+            if (typeof context.roundRect === 'function') context.roundRect(x, y, w, h, Math.max(0, radius));
+            else context.rect(x, y, w, h);
+          };
+          // Fundo por dentro da borda; a borda por fora dele (como no CSS da pré-visualização).
+          if (paint.bg) {
+            roundedRect(border, outerRadius - border);
+            context.fillStyle = paint.bg;
+            context.fill();
+          }
+          if (paint.box) {
+            roundedRect(border / 2, outerRadius - border / 2);
+            context.strokeStyle = paint.box;
+            context.lineWidth = border;
+            context.stroke();
+          }
+        }
+        if (paint.stroke) {
+          // Borda: traço largo e arredondado embaixo; o preenchimento por cima esconde a metade de dentro.
+          context.strokeStyle = paint.stroke;
+          context.lineWidth = fontSize * paint.strokeWidth * 2;
+          context.lineJoin = 'round';
+          context.miterLimit = 2;
+          lines.forEach((line, index) => {
+            context.strokeText(line, 0, -blockHeight / 2 + lineHeight * (index + 0.5));
+          });
+        }
+        context.fillStyle = paint.fg;
+        if (paint.shadow) {
           context.shadowColor = 'rgba(0,0,0,0.5)';
           context.shadowBlur = fontSize * 0.12;
           context.shadowOffsetY = fontSize * 0.03;
         }
         lines.forEach((line, index) => {
-          context.fillText(line, centerX, centerY - blockHeight / 2 + lineHeight * (index + 0.5));
+          context.fillText(line, 0, -blockHeight / 2 + lineHeight * (index + 0.5));
         });
-        context.shadowColor = 'transparent';
-        context.shadowBlur = 0;
-        context.shadowOffsetY = 0;
+        context.restore();
       }
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
@@ -501,24 +694,22 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                 <span className="absolute inset-x-0 top-2/3 h-px bg-white/50" />
               </div>
 
-              {texts.map((layer) =>
-                layer.id === editingId ? null : (
+              {texts.map((layer) => {
+                if (layer.id === editingId) return null;
+                const paint = layerPaint(layer);
+                return (
                   <div
                     key={layer.id}
-                    className={`absolute cursor-move touch-none whitespace-pre text-center ${layer.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'} ${
-                      layer.id === selectedId ? 'outline outline-1 outline-offset-4 outline-white/70' : ''
-                    }`}
+                    className={`absolute cursor-move touch-none whitespace-pre text-center ${
+                      layer.kind === 'emoji' ? 'font-sans' : layer.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'
+                    } ${layer.id === selectedId ? 'outline outline-1 outline-offset-4 outline-white/70' : ''}`}
                     style={{
                       left: layer.x * frameWidth,
                       top: layer.y * frameHeight,
-                      transform: 'translate(-50%, -50%)',
+                      transform: `translate(-50%, -50%) rotate(${layer.rotation ?? 0}deg)`,
                       fontSize: layer.size * frameWidth,
                       lineHeight: LINE_HEIGHT,
-                      color: layer.background ? contrastOn(layer.color) : layer.color,
-                      backgroundColor: layer.background ? layer.color : 'transparent',
-                      padding: layer.background ? '0.35em 0.6em' : 0,
-                      borderRadius: layer.background ? '0.4em' : 0,
-                      textShadow: layer.background ? 'none' : '0 0.03em 0.12em rgba(0,0,0,0.5)',
+                      ...layerTextStyle(paint),
                     }}
                     onPointerDown={(event) => onTextPointerDown(event, layer)}
                     onPointerMove={onTextPointerMove}
@@ -527,21 +718,21 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                   >
                     {layer.text}
                   </div>
-                )
-              )}
+                );
+              })}
             </div>
           ) : null}
         </div>
 
         {/* Ferramentas */}
-        <div className="space-y-3 px-4 pb-4 pt-3">
+        <div className="relative space-y-3 px-4 pb-4 pt-3">
           {selected && !editing ? (
             <div className="flex items-center justify-center gap-2 text-xs">
-              <button type="button" onClick={() => setEditingId(selected.id)} className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20">
-                Editar texto
+              <button type="button" onClick={() => openEditing(selected.id)} className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20">
+                {selected.kind === 'emoji' ? 'Tamanho e ângulo' : 'Editar texto'}
               </button>
               <button type="button" onClick={() => removeText(selected.id)} className="rounded-full bg-rose-500/20 px-3 py-1.5 text-rose-100 hover:bg-rose-500/30">
-                Remover texto
+                {selected.kind === 'emoji' ? 'Remover emoji' : 'Remover texto'}
               </button>
             </div>
           ) : null}
@@ -581,11 +772,21 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
             </svg>
           </div>
           <div className="flex items-center justify-center gap-2">
-            {/* Texto por cima: só nas fotos (no vídeo, o editor só recorta). */}
+            {/* Texto e emojis por cima: só nas fotos (no vídeo, o editor só recorta). */}
             {!isVideo ? (
-              <button type="button" onClick={addText} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/20">
-                <span className="font-display text-lg italic leading-none">Aa</span> Texto
-              </button>
+              <>
+                <button type="button" onClick={addText} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/20">
+                  <span className="font-display text-lg italic leading-none">Aa</span> Texto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmojiTray((tray) => (tray === 'add' ? null : 'add'))}
+                  aria-expanded={emojiTray === 'add'}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm ${emojiTray === 'add' ? 'bg-white text-zinc-900' : 'bg-white/10 hover:bg-white/20'}`}
+                >
+                  <span className="text-lg leading-none" aria-hidden="true">😊</span> Emoji
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -596,9 +797,25 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
               Centralizar
             </button>
           </div>
+
+          {/* Quadro de figurinhas: o emoji escolhido entra no meio da foto. */}
+          <AnimatePresence>
+            {emojiTray === 'add' ? (
+              <motion.div
+                key="emoji-add"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="absolute inset-x-3 bottom-full z-10 mb-2"
+              >
+                <EmojiGrid onSelect={addEmoji} onClose={() => setEmojiTray(null)} label="Escolha uma figurinha" />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
 
-        {/* Escrevendo um texto */}
+        {/* Editando um texto ou uma figurinha */}
         <AnimatePresence>
           {editing ? (
             <motion.div
@@ -609,93 +826,341 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
               className="absolute inset-0 z-10 flex flex-col bg-black/70 backdrop-blur-sm"
               style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             >
-              <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center justify-between gap-2 px-4 py-3">
                 <button type="button" onClick={() => removeText(editing.id)} className="rounded-full px-3 py-2 text-sm text-rose-200 hover:bg-white/10">
                   Remover
                 </button>
-                <div className="flex gap-1.5">
-                  {(['classic', 'simple'] as const).map((style) => (
-                    <button
-                      key={style}
-                      type="button"
-                      onClick={() => updateText(editing.id, { style })}
-                      aria-pressed={editing.style === style}
-                      className={`rounded-full px-3 py-1.5 text-xs ${editing.style === style ? 'bg-white text-zinc-900' : 'bg-white/10 text-white/80'} ${
-                        style === 'classic' ? 'font-display text-sm italic' : 'font-semibold'
-                      }`}
-                    >
-                      {style === 'classic' ? 'Clássico' : 'Simples'}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => updateText(editing.id, { background: !editing.background })}
-                    aria-pressed={editing.background}
-                    aria-label="Fundo no texto"
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${editing.background ? 'bg-white text-zinc-900' : 'bg-white/10 text-white'}`}
-                  >
-                    A
-                  </button>
-                </div>
+                {editing.kind !== 'emoji' ? (
+                  <div className="flex gap-1.5">
+                    {(['classic', 'simple'] as const).map((style) => (
+                      <button
+                        key={style}
+                        type="button"
+                        onClick={() => updateText(editing.id, { style })}
+                        aria-pressed={editing.style === style}
+                        className={`rounded-full px-3 py-1.5 text-xs ${editing.style === style ? 'bg-white text-zinc-900' : 'bg-white/10 text-white/80'} ${
+                          style === 'classic' ? 'font-display text-sm italic' : 'font-semibold'
+                        }`}
+                      >
+                        {style === 'classic' ? 'Clássico' : 'Simples'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/80">Figurinha</p>
+                )}
                 <button type="button" onClick={finishEditing} className="rounded-full bg-champagne-600 px-4 py-2 text-sm font-medium text-[#fff9f1]">
                   Pronto
                 </button>
               </div>
 
-              <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-                <textarea
-                  autoFocus
-                  value={editing.text}
-                  onChange={(event) => updateText(editing.id, { text: event.target.value.slice(0, 120) })}
-                  rows={3}
-                  placeholder="Escreva algo…"
-                  className={`w-full max-w-md resize-none bg-transparent text-center placeholder:text-white/40 focus:outline-none ${
-                    editing.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'
-                  }`}
-                  style={{
-                    fontSize: clamp(editing.size * 420, 18, 44),
-                    lineHeight: LINE_HEIGHT,
-                    color: editing.background ? contrastOn(editing.color) : editing.color,
-                    backgroundColor: editing.background ? editing.color : 'transparent',
-                    borderRadius: '0.4em',
-                    textShadow: editing.background ? 'none' : '0 0.03em 0.12em rgba(0,0,0,0.5)',
-                  }}
-                />
+              <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6">
+                {editing.kind === 'emoji' ? (
+                  <span
+                    className="select-none font-sans"
+                    style={{ fontSize: clamp(editing.size * 520, 48, 150), lineHeight: 1, transform: `rotate(${editing.rotation ?? 0}deg)` }}
+                    aria-hidden="true"
+                  >
+                    {editing.text}
+                  </span>
+                ) : (
+                  // O campo cresce com o texto (cópia invisível ao lado define o tamanho), então o fundo abraça as letras.
+                  <div
+                    className={`inline-grid max-w-full text-center ${editing.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'}`}
+                    style={{
+                      fontSize: clamp(editing.size * 420, 18, 44),
+                      lineHeight: LINE_HEIGHT,
+                      ...layerTextStyle(layerPaint(editing)),
+                      transform: `rotate(${editing.rotation ?? 0}deg)`,
+                    }}
+                  >
+                    <span aria-hidden="true" className="invisible whitespace-pre-wrap break-words [grid-area:1/1]">
+                      {(editing.text || 'Escreva algo…') + ' '}
+                    </span>
+                    <textarea
+                      ref={textAreaRef}
+                      autoFocus
+                      value={editing.text}
+                      onChange={(event) => updateText(editing.id, { text: event.target.value.slice(0, TEXT_MAX_LENGTH) })}
+                      rows={1}
+                      cols={1}
+                      placeholder="Escreva algo…"
+                      className="min-w-0 resize-none overflow-hidden bg-transparent p-0 text-center [font:inherit] [grid-area:1/1] placeholder:text-white/40 focus:outline-none"
+                      style={{ color: 'inherit', WebkitTextStroke: 'inherit', paintOrder: 'inherit', textShadow: 'inherit', lineHeight: 'inherit' }}
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-4 px-4 pb-5">
-                <div className="mx-auto flex max-w-md items-center gap-3">
-                  <span className="text-xs text-white/60">A</span>
+              <div className="relative mx-auto w-full max-w-md space-y-3.5 px-4 pb-5">
+                {/* Emojis: na figurinha, trocar o emoji; no texto, inserir no cursor. */}
+                <AnimatePresence>
+                  {emojiTray === 'insert' ? (
+                    <motion.div
+                      key="emoji-insert"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 12 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="absolute inset-x-3 bottom-full z-10 mb-2"
+                    >
+                      <EmojiGrid
+                        label={editing.kind === 'emoji' ? 'Trocar a figurinha' : 'Inserir emoji no texto'}
+                        onClose={() => setEmojiTray(null)}
+                        onSelect={(emoji) => {
+                          if (editing.kind === 'emoji') {
+                            updateText(editing.id, { text: emoji });
+                            setEmojiTray(null);
+                          } else insertEmojiInText(emoji);
+                        }}
+                      />
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+
+                <div className="flex items-center gap-3">
+                  <span className="w-12 shrink-0 text-xs text-white/60">Tamanho</span>
                   <input
                     type="range"
-                    min={0.04}
-                    max={0.16}
+                    min={editing.kind === 'emoji' ? 0.06 : 0.04}
+                    max={editing.kind === 'emoji' ? 0.4 : 0.16}
                     step={0.005}
                     value={editing.size}
                     onChange={(event) => updateText(editing.id, { size: Number(event.target.value) })}
-                    aria-label="Tamanho do texto"
+                    aria-label="Tamanho"
                     className="h-1 flex-1 cursor-pointer accent-[#e7c88a]"
                   />
-                  <span className="text-lg text-white/60">A</span>
+                  <button
+                    type="button"
+                    onClick={() => setEmojiTray((tray) => (tray === 'insert' ? null : 'insert'))}
+                    aria-expanded={emojiTray === 'insert'}
+                    aria-label={editing.kind === 'emoji' ? 'Trocar emoji' : 'Inserir emoji'}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${emojiTray === 'insert' ? 'bg-white' : 'bg-white/10 hover:bg-white/20'}`}
+                  >
+                    <span aria-hidden="true">😊</span>
+                  </button>
                 </div>
-                <div className="flex items-center justify-center gap-3">
-                  {TEXT_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => updateText(editing.id, { color })}
-                      aria-label={`Cor ${color}`}
-                      aria-pressed={editing.color === color}
-                      className={`h-8 w-8 rounded-full border-2 transition-transform ${editing.color === color ? 'scale-110 border-white' : 'border-white/40'}`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
+
+                <div className="flex items-center gap-3">
+                  <span className="w-12 shrink-0 text-xs text-white/60">Ângulo</span>
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={1}
+                    value={editing.rotation ?? 0}
+                    onChange={(event) => updateText(editing.id, { rotation: snapAngle(Number(event.target.value)) })}
+                    aria-label="Ângulo"
+                    className="h-1 flex-1 cursor-pointer accent-[#e7c88a]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateText(editing.id, { rotation: 0 })}
+                    disabled={!editing.rotation}
+                    aria-label="Voltar o ângulo para 0°"
+                    className="w-12 shrink-0 rounded-full bg-white/10 py-1.5 text-center text-xs tabular-nums hover:bg-white/20 disabled:opacity-60"
+                  >
+                    {editing.rotation ?? 0}°
+                  </button>
                 </div>
+
+                {editing.kind !== 'emoji' ? (
+                  <ColorPicker
+                    target={colorTarget}
+                    onTarget={setColorTarget}
+                    paint={layerPaint(editing)}
+                    onPick={(color) => {
+                      if (colorTarget === 'text') updateText(editing.id, { color: color ?? '#ffffff' });
+                      else if (colorTarget === 'background') setLayerBackground(editing, color);
+                      else if (colorTarget === 'outline') updateText(editing.id, { outlineColor: color });
+                      else updateText(editing.id, { boxBorderColor: color });
+                    }}
+                    onWidth={(width) =>
+                      updateText(editing.id, colorTarget === 'outline' ? { outlineWidth: width } : { boxBorderWidth: width })
+                    }
+                  />
+                ) : null}
               </div>
             </motion.div>
           ) : null}
         </AnimatePresence>
       </div>
     </Portal>
+  );
+}
+
+/** Quadro de emojis (escuro, no padrão do editor). */
+function EmojiGrid({ onSelect, onClose, label }: { onSelect: (emoji: string) => void; onClose: () => void; label: string }) {
+  return (
+    <div role="dialog" aria-label={label} className="mx-auto max-w-md rounded-2xl border border-white/10 bg-zinc-900/95 p-2.5 shadow-2xl backdrop-blur">
+      <div className="mb-1.5 flex items-center justify-between px-1">
+        <p className="text-xs text-white/70">{label}</p>
+        <button type="button" onClick={onClose} aria-label="Fechar emojis" className="rounded-full px-2 py-0.5 text-sm text-white/70 hover:bg-white/10">
+          ✕
+        </button>
+      </div>
+      <div className="grid max-h-[11.5rem] grid-cols-8 gap-1 overflow-y-auto">
+        {PHOTO_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => onSelect(emoji)}
+            aria-label={emoji}
+            className="flex aspect-square items-center justify-center rounded-lg text-2xl transition-colors hover:bg-white/10 focus:outline-none focus-visible:bg-white/15"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type ColorTarget = 'text' | 'background' | 'outline' | 'boxBorder';
+
+const COLOR_TARGETS: { key: ColorTarget; label: string }[] = [
+  { key: 'text', label: 'Texto' },
+  { key: 'background', label: 'Fundo' },
+  { key: 'outline', label: 'Borda' },
+  { key: 'boxBorder', label: 'Borda do fundo' },
+];
+
+/** Cores do texto, do fundo e da borda: abas, paleta e uma cor livre (seletor do aparelho). */
+function ColorPicker({
+  target,
+  onTarget,
+  paint,
+  onPick,
+  onWidth,
+}: {
+  target: ColorTarget;
+  onTarget: (target: ColorTarget) => void;
+  paint: LayerPaint;
+  onPick: (color: string | null) => void;
+  onWidth: (width: number) => void;
+}) {
+  const current =
+    target === 'text' ? paint.fg : target === 'background' ? paint.bg : target === 'outline' ? paint.stroke : paint.box;
+  const width = target === 'outline' ? paint.strokeWidth : paint.boxWidth;
+  const isPreset = current ? TEXT_COLORS.includes(current.toLowerCase()) : true;
+
+  // Carrossel de cores: setas nas pontas (somem quando não há mais para onde rolar) e bordas esmaecidas.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    setEdges({ left: row.scrollLeft > 4, right: row.scrollLeft + row.clientWidth < row.scrollWidth - 4 });
+  }, []);
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    updateEdges();
+    const observer = new ResizeObserver(updateEdges);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [updateEdges]);
+  // Ao trocar de aba (texto, fundo, bordas), mostra a cor escolhida dela.
+  useEffect(() => {
+    const row = rowRef.current;
+    const active = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (row && active) row.scrollTo({ left: active.offsetLeft - row.clientWidth / 2 + active.clientWidth / 2, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  const scrollColors = (direction: 1 | -1) => {
+    const row = rowRef.current;
+    if (row) row.scrollBy({ left: direction * row.clientWidth * 0.75, behavior: 'smooth' });
+  };
+  const fade = `linear-gradient(to right, ${edges.left ? 'transparent' : '#000'}, #000 ${edges.left ? '28px' : '0px'}, #000 calc(100% - ${edges.right ? '28px' : '0px'}), ${edges.right ? 'transparent' : '#000'})`;
+  const arrowClass =
+    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-opacity hover:bg-white/20 disabled:pointer-events-none disabled:opacity-25';
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {COLOR_TARGETS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onTarget(item.key)}
+            aria-pressed={target === item.key}
+            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${target === item.key ? 'bg-white text-zinc-900' : 'bg-white/10 text-white/80 hover:bg-white/20'}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5">
+      <button type="button" onClick={() => scrollColors(-1)} disabled={!edges.left} aria-label="Cores anteriores" className={arrowClass}>
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      <div
+        ref={rowRef}
+        onScroll={updateEdges}
+        className="flex min-w-0 flex-1 snap-x snap-mandatory scroll-px-1.5 items-center gap-2.5 overflow-x-auto px-1.5 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ WebkitMaskImage: fade, maskImage: fade }}
+      >
+        {target !== 'text' ? (
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            aria-label={target === 'background' ? 'Sem fundo' : target === 'outline' ? 'Sem borda' : 'Sem borda do fundo'}
+            aria-pressed={!current}
+            className={`relative h-8 w-8 shrink-0 snap-start overflow-hidden rounded-full border-2 bg-white/5 transition-transform ${!current ? 'scale-110 border-white' : 'border-white/40'}`}
+          >
+            <span className="absolute left-1/2 top-1/2 h-[2px] w-9 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-rose-300" aria-hidden="true" />
+          </button>
+        ) : null}
+        {TEXT_COLORS.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => onPick(color)}
+            aria-label={`Cor ${color}`}
+            aria-pressed={current?.toLowerCase() === color}
+            className={`h-8 w-8 shrink-0 snap-start rounded-full border-2 transition-transform ${current?.toLowerCase() === color ? 'scale-110 border-white' : 'border-white/40'}`}
+            style={{ backgroundColor: color }}
+          />
+        ))}
+        {/* Cor livre: abre o seletor de cores do aparelho. */}
+        <label
+          className={`relative h-8 w-8 shrink-0 snap-start cursor-pointer rounded-full border-2 transition-transform ${current && !isPreset ? 'scale-110 border-white' : 'border-white/40'}`}
+          style={{ background: current && !isPreset ? current : 'conic-gradient(#ff5f5f, #ffd84d, #7ed957, #4dc9ff, #8a6bff, #ff5fd2, #ff5f5f)' }}
+          title="Outra cor"
+        >
+          <span className="sr-only">Outra cor</span>
+          <input
+            type="color"
+            value={current && /^#[0-9a-f]{6}$/i.test(current) ? current : '#ffffff'}
+            onChange={(event) => onPick(event.target.value)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
+      <button type="button" onClick={() => scrollColors(1)} disabled={!edges.right} aria-label="Mais cores" className={arrowClass}>
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      </div>
+      {(target === 'outline' || target === 'boxBorder') && current ? (
+        <div className="flex items-center gap-3">
+          <span className="w-16 shrink-0 text-xs text-white/60">Grossura</span>
+          <input
+            type="range"
+            min={BORDER_WIDTH_RANGE.min}
+            max={BORDER_WIDTH_RANGE.max}
+            step={0.005}
+            value={width}
+            onChange={(event) => onWidth(Number(event.target.value))}
+            aria-label="Grossura da borda"
+            className="h-1 flex-1 cursor-pointer accent-[#e7c88a]"
+          />
+          <span
+            className="h-5 w-10 shrink-0 rounded-full"
+            style={{ backgroundColor: current, transform: `scaleY(${0.15 + (width / BORDER_WIDTH_RANGE.max) * 0.85})` }}
+            aria-hidden="true"
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }

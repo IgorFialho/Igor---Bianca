@@ -159,6 +159,8 @@ export async function GET(request: NextRequest) {
         submitted: false,
         requiresChildrenDetails: Boolean(inviteCodeResult.rows[0]?.requires_children_details),
         expectedResponderCount: getExpectedResponderCount(inviteCodeResult.rows[0]?.guest_name || null),
+        // Nome(s) cadastrado(s) na criação do código: título do convite antes de a pessoa digitar o nome.
+        guestNames: splitLinkedNames(inviteCodeResult.rows[0]?.guest_name || null),
       });
     }
 

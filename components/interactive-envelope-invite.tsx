@@ -76,11 +76,15 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   const [attendance, setAttendance] = useState<AttendanceChoice>('');
   const [expectedResponderCount, setExpectedResponderCount] = useState(1);
   const [responderFullNames, setResponderFullNames] = useState<string[]>(['']);
+  // Nome(s) cadastrado(s) no código do convite: aparecem no título até a pessoa digitar o nome completo.
+  const [inviteGuestNames, setInviteGuestNames] = useState<string[]>([]);
   const [children, setChildren] = useState(0);
   const [requiresChildrenDetails, setRequiresChildrenDetails] = useState(false);
   const [childrenDetails, setChildrenDetails] = useState<ChildDetail[]>([]);
   // Convite que pede os dados dos filhos: o casal diz se os filhos vão ("yes") ou não ("no").
   const [childrenGoing, setChildrenGoing] = useState<'yes' | 'no' | null>(null);
+  // Filho maior de idade informado: índice do filho para o aviso (ele confirma pelo próprio convite).
+  const [adultChildNotice, setAdultChildNotice] = useState<number | null>(null);
   const [dietaryNeeds, setDietaryNeeds] = useState('');
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
@@ -192,6 +196,9 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           }
         } else {
           setIsLocked(false);
+          setInviteGuestNames(
+            Array.isArray(data?.guestNames) ? data.guestNames.filter((item: unknown) => typeof item === 'string' && item.trim()).slice(0, 2) : []
+          );
           setRequiresChildrenDetails(Boolean(data?.requiresChildrenDetails));
           setExpectedResponderCount(
             typeof data?.expectedResponderCount === 'number'
@@ -275,6 +282,33 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     });
   };
 
+  // Filho com 18 anos ou mais: limpa a idade e mostra o aviso do convite nominal.
+  const openAdultChildNotice = (index: number) => {
+    setChildrenDetails((previous) => previous.map((item, itemIndex) => (itemIndex === index ? { ...item, age: '' } : item)));
+    setAdultChildNotice(index);
+  };
+
+  const closeAdultChildNotice = () => {
+    const index = adultChildNotice;
+    setAdultChildNotice(null);
+    if (index !== null) {
+      window.requestAnimationFrame(() => document.getElementById(`child-age-${index}`)?.focus());
+    }
+  };
+
+  useEffect(() => {
+    if (adultChildNotice === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || event.key === 'Enter') {
+        event.preventDefault();
+        closeAdultChildNotice();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adultChildNotice]);
+
   const sendRsvp = async () => {
     if (!attendance || !inviteCode || isLocked || isSubmitting) {
       return;
@@ -326,6 +360,12 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     }
 
     if (requiresChildrenDetails && attendance === 'yes' && normalizedChildrenCount > 0) {
+      const adultIndex = normalizedChildrenDetails.findIndex((item) => Number.isFinite(item.age) && item.age >= 18);
+      if (adultIndex >= 0) {
+        openAdultChildNotice(adultIndex);
+        setIsSubmitting(false);
+        return;
+      }
       const hasInvalidName = normalizedChildrenDetails.some((item) => item.fullName.length === 0);
       const hasInvalidAge = normalizedChildrenDetails.some(
         (item) => !Number.isInteger(item.age) || item.age < 0 || item.age > 17
@@ -405,7 +445,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
     .join(' e ');
-  const headingDisplayName = responderHeading || 'Convidado';
+  const headingDisplayName = responderHeading || inviteGuestNames.join(' e ') || 'Convidado';
 
   // Textura de papel sutil (ruído em SVG) usada nas partes do envelope.
   const paperTextureClass =
@@ -416,7 +456,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
   const fieldClass =
     'w-full rounded-full border border-zinc-800/15 bg-[#fffaf1] px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20 disabled:opacity-60';
   const choiceClass =
-    'flex items-center justify-center rounded-full border border-zinc-800/15 bg-[#fffaf1] px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] text-zinc-800 transition-colors duration-200 hover:border-zinc-800/30 peer-checked:border-champagne-600 peer-checked:bg-champagne-600 peer-checked:text-[#fff9f1] peer-focus-visible:ring-2 peer-focus-visible:ring-champagne-600/30';
+    'flex min-h-[48px] items-center justify-center whitespace-nowrap rounded-full border border-zinc-800/15 bg-[#fffaf1] px-3 py-3 text-center text-[0.7rem] font-medium uppercase leading-none tracking-[0.14em] text-zinc-800 sm:px-4 sm:text-xs sm:tracking-[0.2em] transition-colors duration-200 hover:border-zinc-800/30 peer-checked:border-champagne-600 peer-checked:bg-champagne-600 peer-checked:text-[#fff9f1] peer-focus-visible:ring-2 peer-focus-visible:ring-champagne-600/30';
   const primaryButtonClass =
     'inline-flex items-center justify-center rounded-full bg-champagne-600 px-10 py-4 text-xs font-medium uppercase tracking-[0.2em] text-[#fff9f1] transition-transform duration-500 ease-[cubic-bezier(0.22,0.72,0.36,1)] hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100';
   const secondaryButtonClass =
@@ -439,6 +479,14 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           <p className="text-base text-zinc-800">{weddingDetails.venue}</p>
           <p className="text-sm text-zinc-600">{weddingDetails.address}</p>
         </div>
+        {/* Aviso de convite nominal: desencoraja repassar o código (a entrada é conferida pela lista). */}
+        <p className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-full border border-champagne-600/25 bg-champagne-600/[0.06] px-4 py-2 text-[0.7rem] font-medium uppercase leading-snug tracking-[0.14em] text-champagne-700">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" className="shrink-0">
+            <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+            <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+          </svg>
+          Convite pessoal e intransferível
+        </p>
       </header>
 
       {isLocked ? (
@@ -551,7 +599,10 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                           setSubmitError('');
                         }}
                       />
-                      <span className={choiceClass}>Sim, vão conosco</span>
+                      <span className={choiceClass}>
+                        <span className="sm:hidden">Sim, vão</span>
+                        <span className="hidden sm:inline">Sim, vão conosco</span>
+                      </span>
                     </label>
                     <label className="cursor-pointer">
                       <input
@@ -577,8 +628,8 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
               {requiresChildrenDetails && childrenGoing === 'yes' ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-4">
-                    <p className={eyebrowClass}>Quantidade de crianças</p>
-                    <div className="flex items-center gap-3">
+                    <p className={`${eyebrowClass} whitespace-nowrap max-sm:text-[0.68rem] max-sm:tracking-[0.12em]`}>Quantidade de crianças</p>
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={() => updateChildrenCount('decrement')}
@@ -601,10 +652,10 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
 
                   {children > 0 ? (
                     <div className="space-y-3 rounded-3xl border border-zinc-800/10 bg-cream p-4">
-                      <p className="text-sm text-zinc-600">Informe nome completo e idade de cada filho</p>
+                      <p className="text-center text-sm text-zinc-600 sm:text-left">Informe nome completo e idade de cada filho</p>
 
                       {childrenDetails.map((child, index) => (
-                        <div key={`child-${index}`} className="grid gap-2 sm:grid-cols-[1fr_110px]">
+                        <div key={`child-${index}`} className="grid grid-cols-[minmax(0,1fr)_80px] gap-2 sm:grid-cols-[1fr_110px]">
                           <input
                             value={child.fullName}
                             onChange={(event) => {
@@ -616,7 +667,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                               );
                             }}
                             disabled={isCheckingStatus || isSubmitting}
-                            placeholder={`Nome completo do filho ${index + 1}`}
+                            placeholder={childrenDetails.length > 1 ? `Nome completo (filho ${index + 1})` : "Nome completo"}
                             aria-label={`Nome completo do filho ${index + 1}`}
                             className={fieldClass}
                           />
@@ -625,8 +676,13 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                             min={0}
                             max={17}
                             value={child.age}
+                            id={`child-age-${index}`}
                             onChange={(event) => {
                               const value = event.target.value;
+                              if (value !== '' && Number(value) >= 18) {
+                                openAdultChildNotice(index);
+                                return;
+                              }
                               setChildrenDetails((previous) =>
                                 previous.map((item, itemIndex) =>
                                   itemIndex === index ? { ...item, age: value } : item
@@ -636,7 +692,7 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                             disabled={isCheckingStatus || isSubmitting}
                             placeholder="Idade"
                             aria-label={`Idade do filho ${index + 1}`}
-                            className={fieldClass}
+                            className={`${fieldClass} px-2 text-center [appearance:textfield] sm:px-5 sm:text-left [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                           />
                         </div>
                       ))}
@@ -888,6 +944,11 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
                 ? 'Deseja confirmar sua presença no evento?'
                 : 'Deseja confirmar que não poderá comparecer?'}
             </p>
+            {confirmationChoice === 'yes' ? (
+              <p className="mt-4 rounded-2xl border border-champagne-600/25 bg-champagne-600/[0.06] px-4 py-3 text-sm leading-relaxed text-champagne-700">
+                Este convite é pessoal e intransferível. A entrada será conferida pelo nome na lista de convidados.
+              </p>
+            ) : null}
 
             <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
               <button type="button" onClick={() => setConfirmationChoice(null)} className={secondaryButtonClass}>
@@ -900,6 +961,52 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           </div>
         </div>
       ) : null}
+
+      {/* Aviso: filho maior de idade confirma pelo próprio convite nominal. */}
+      <AnimatePresence>
+        {adultChildNotice !== null ? (
+          <motion.div
+            key="adult-child-notice"
+            className="fixed inset-0 z-[85] flex items-center justify-center bg-zinc-950/40 px-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            onClick={closeAdultChildNotice}
+          >
+            <motion.div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="adult-child-title"
+              aria-describedby="adult-child-text"
+              className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-champagne-600/25 bg-[#fffaf1] p-6 text-center shadow-2xl sm:p-8"
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.35, ease: [0.22, 0.72, 0.36, 1] }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-champagne-600/15 text-champagne-700">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <rect x="3" y="5.5" width="18" height="13" rx="2" />
+                  <path d="m3.5 7 8.5 6 8.5-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className={`${eyebrowClass} mt-5`}>Convite nominal</p>
+              <h3 id="adult-child-title" className="mt-3 font-display text-4xl italic leading-none text-zinc-800">
+                Maior de idade
+              </h3>
+              <div className="mx-auto mt-5 h-px w-16 bg-champagne-600/30" />
+              <p id="adult-child-text" className="mt-5 text-base leading-relaxed text-zinc-600">
+                Filhos maiores de idade devem confirmar presença através de seu próprio convite nominal.
+              </p>
+              <button type="button" autoFocus onClick={closeAdultChildNotice} className={`${primaryButtonClass} mt-8 w-full sm:w-auto`}>
+                Entendi
+              </button>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </main>
   );
 }

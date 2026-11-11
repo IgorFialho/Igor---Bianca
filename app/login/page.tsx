@@ -113,8 +113,8 @@ const NAV_LINKS = [
   { label: 'Nossa história', href: '#nossa-historia' },
   { label: 'Cerimônia', href: '#cerimonia' },
   { label: 'Confirmar presença', href: '#rsvp' },
-  { label: 'Mensagens', href: '#mensagens' },
   { label: 'Lista de presentes', href: '/presentes' },
+  { label: 'Mensagens', href: '#mensagens' },
   // Aqui vai até a seção do mural (centralizada); nas outras páginas, o mesmo item abre a página /mural.
   { label: 'Mural', href: '#mural' },
   { label: 'Perguntas', href: '#perguntas' },
@@ -432,15 +432,6 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <DetailsSection
-        id="mensagens"
-        title="Mensagens de quem vai celebrar com a gente..."
-        subtitle="Os recados carinhosos que os convidados deixaram ao confirmar presença."
-        messages={rsvpMessages}
-        isLoading={isLoadingMessages}
-        emptyMessage="Ainda não há mensagens. Seja o primeiro!"
-      />
-
       <section id="presentes" className={`${SECTION} scroll-mt-24 text-center`}>
         <div className="mx-auto flex max-w-3xl flex-col items-center">
           <Reveal>
@@ -463,6 +454,15 @@ export default function LoginPage() {
           </Reveal>
         </div>
       </section>
+
+      <DetailsSection
+        id="mensagens"
+        title="Mensagens de quem vai celebrar com a gente..."
+        subtitle="Os recados carinhosos que os convidados deixaram ao confirmar presença."
+        messages={rsvpMessages}
+        isLoading={isLoadingMessages}
+        emptyMessage="Ainda não há mensagens. Seja o primeiro!"
+      />
 
       <MuralSection
         id="mural"

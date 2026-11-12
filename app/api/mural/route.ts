@@ -11,9 +11,13 @@ export async function GET(request: NextRequest) {
   try {
     const viewerId = readViewerId(request.nextUrl.searchParams.get('viewerId'));
     const code = request.nextUrl.searchParams.get('code');
+    // Páginas (rolagem infinita): ?limit= e ?before=<id do último post já carregado>. Sem limit: lista completa (telão).
+    const limitParam = Number(request.nextUrl.searchParams.get('limit'));
+    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(50, Math.round(limitParam)) : 400;
+    const beforeId = request.nextUrl.searchParams.get('before');
     const [settings, posts, guest, admin] = await Promise.all([
       getMuralSettings(),
-      listPosts({ viewerCode: viewerId }),
+      listPosts({ viewerCode: viewerId, limit, beforeId }),
       code ? resolveGuest(code) : Promise.resolve(null),
       getAdminSession(request),
     ]);
@@ -24,6 +28,8 @@ export async function GET(request: NextRequest) {
         viewerAdmin: admin ? { role: admin.role, name: admin.name } : null,
         settings: { ...settings, uploadsReady: isCloudinaryConfigured() },
         posts,
+        // Ainda há posts mais antigos para carregar ao rolar.
+        hasMore: posts.length === limit,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

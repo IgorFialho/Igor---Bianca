@@ -6,11 +6,13 @@ import { Portal } from '@/components/home/portal';
 import { Reveal } from '@/components/home/reveal';
 import { SiteHeader } from '@/components/home/site-header';
 import { CameraCapture, isCameraSupported } from '@/components/mural/camera-capture';
-import { PhotoEditor, type PhotoEditResult, type PhotoEditState, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
+import { EmojiPicker } from '@/components/emoji-picker';
+import { PhotoEditor, muralCardRatio, muralObjectPosition, type PhotoEditResult, type PhotoEditState, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
+  MAX_MEDIA_PER_POST,
   compressImage,
   initials,
   getViewerId,
@@ -23,6 +25,7 @@ import {
   type MuralAdminView,
   type MuralAuthorRole,
   type MuralCommentView,
+  type MuralMediaItemView,
   type MuralPostView,
   type MuralSettingsView,
 } from '@/components/mural/mural-client';
@@ -43,7 +46,13 @@ const SECONDARY =
   'inline-flex items-center justify-center rounded-full border border-zinc-800/20 px-6 py-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-800 transition-colors hover:bg-zinc-800/5 disabled:opacity-60';
 const FIELD =
   'w-full rounded-2xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
-const REFRESH_MS = 20_000;
+// Atualização quase em tempo real: posts, curtidas e comentários (só enquanto a página está na tela).
+const REFRESH_MS = 5_000;
+/** Posts por página (o resto carrega ao rolar, como no Instagram). */
+const PAGE_SIZE = 12;
+/** Intervalo mínimo entre dois downloads de novidades (no pico da festa, várias mudanças viram um download só). */
+const UPDATES_MIN_GAP_MS = 8_000;
+const COMMENTS_REFRESH_MS = 4_000;
 
 // Cores do buquê (as mesmas do site): rosas em rosé, folhas oliva, papel champagne e laço caramelo.
 const ROSE = '#c97a8a';
@@ -334,6 +343,23 @@ export function MuralFeed() {
   const viewerAdminRef = useRef<MuralAdminView | null>(null);
   const [settings, setSettings] = useState<MuralSettingsView | null>(null);
   const [posts, setPosts] = useState<MuralPostView[]>([]);
+  const postsRef = useRef<MuralPostView[]>([]);
+  postsRef.current = posts;
+  // Publicações novas que chegaram enquanto a pessoa lia lá embaixo (aparecem ao tocar no aviso).
+  const [pendingPosts, setPendingPosts] = useState<MuralPostView[]>([]);
+  const pendingRef = useRef<MuralPostView[]>([]);
+  pendingRef.current = pendingPosts;
+  const pendingCount = pendingPosts.length;
+  const showPending = () => {
+    setPosts((current) => mergeNewPosts(pendingRef.current, current));
+    setPendingPosts([]);
+    window.scrollTo({ top: Math.max(0, (document.querySelector('[aria-label="Posts do mural"]') as HTMLElement | null)?.offsetTop ?? 0) - 80, behavior: 'smooth' });
+  };
+  // Rolagem infinita: há mais posts antigos para buscar?
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
@@ -351,19 +377,23 @@ export function MuralFeed() {
     if (!viewerAdminRef.current) storeAuthorName(name);
   }, []);
 
+  // 1ª página do mural (os mais recentes); o resto vem ao rolar.
   const loadFeed = useCallback(
     async (silent = false) => {
       if (!viewerId) return;
       if (!silent) setIsLoading(true);
       try {
         const inviteCode = readStoredCode();
-        const query = new URLSearchParams({ viewerId });
+        const query = new URLSearchParams({ viewerId, limit: String(PAGE_SIZE) });
         if (inviteCode) query.set('code', inviteCode);
         const response = await fetch(`/api/mural?${query.toString()}`, { cache: 'no-store' });
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || 'Erro ao carregar o mural.');
         setSettings(data.settings);
-        setPosts(data.posts);
+        const serverPosts: MuralPostView[] = Array.isArray(data.posts) ? data.posts : [];
+        setPosts(serverPosts);
+        setPendingPosts([]);
+        setHasMore(Boolean(data.hasMore));
         const admin: MuralAdminView | null = data.viewerAdmin ?? null;
         viewerAdminRef.current = admin;
         setViewerAdmin(admin);
@@ -380,14 +410,107 @@ export function MuralFeed() {
     [viewerId]
   );
 
+  // Mais posts antigos ao chegar perto do fim da lista.
+  const loadMore = useCallback(async () => {
+    if (!viewerId || loadingMoreRef.current) return;
+    const last = postsRef.current[postsRef.current.length - 1];
+    if (!last) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const query = new URLSearchParams({ viewerId, limit: String(PAGE_SIZE), before: last.id });
+      const response = await fetch(`/api/mural?${query.toString()}`, { cache: 'no-store' });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(data?.posts)) throw new Error();
+      const page: MuralPostView[] = data.posts;
+      setPosts((current) => {
+        const known = new Set(current.map((post) => post.id));
+        return [...current, ...page.filter((post) => !known.has(post.id))];
+      });
+      setHasMore(Boolean(data.hasMore));
+    } catch {
+      // Tenta de novo na próxima vez que a pessoa chegar ao fim.
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [viewerId]);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(([entry]) => entry.isIntersecting && void loadMore(), { rootMargin: '1200px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, posts.length]);
+
+  // Novidades (posts novos e curtidas/comentários dos posts na tela), sem baixar o mural inteiro de novo.
+  const lastUpdateAt = useRef(0);
+  const updatingRef = useRef(false);
+  const fetchUpdates = useCallback(async () => {
+    if (!viewerId || updatingRef.current) return false;
+    updatingRef.current = true;
+    lastUpdateAt.current = Date.now();
+    try {
+      const loaded = postsRef.current;
+      const newest = [...pendingRef.current, ...loaded].reduce((max, post) => (Number(post.id) > max ? Number(post.id) : max), 0);
+      const response = await fetch('/api/mural/updates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewerId, after: String(newest), ids: idsNearScreen(loaded) }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) return false;
+      if (data.settings) setSettings(data.settings);
+      const updated = new Map<string, MuralPostView>((data.updated ?? []).map((post: MuralPostView) => [post.id, post]));
+      const removed = new Set<string>(data.removed ?? []);
+      const fresh: MuralPostView[] = Array.isArray(data.posts) ? data.posts : [];
+      setPosts((current) => {
+        const next = current.filter((post) => !removed.has(post.id)).map((post) => updated.get(post.id) ?? post);
+        // No topo: as novas entram direto; lendo lá embaixo: esperam o aviso (a lista não pula).
+        return fresh.length && window.scrollY <= 400 ? mergeNewPosts(fresh, next) : next;
+      });
+      if (fresh.length && window.scrollY > 400) setPendingPosts((current) => mergeNewPosts(fresh, current));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      updatingRef.current = false;
+    }
+  }, [viewerId]);
+
   useEffect(() => {
     if (!viewerId) return;
-    loadFeed();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') loadFeed(true);
-    }, REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [viewerId, loadFeed]);
+    void loadFeed();
+    let version: string | null = null;
+    let waiting = false;
+    // Pulso: pergunta "mudou algo?" (resposta de poucos bytes); só baixa novidades quando mudou.
+    const tick = async () => {
+      if (document.visibilityState !== 'visible' || waiting) return;
+      waiting = true;
+      try {
+        const response = await fetch('/api/mural/pulse', { cache: 'no-store' });
+        const data = await response.json().catch(() => null);
+        const next = typeof data?.version === 'string' ? data.version : null;
+        if (!next) return;
+        if (version === null) version = next;
+        else if (next !== version && Date.now() - lastUpdateAt.current >= UPDATES_MIN_GAP_MS) {
+          if (await fetchUpdates()) version = next;
+        }
+      } catch {
+        // Sem conexão momentânea: tenta no próximo pulso.
+      } finally {
+        waiting = false;
+      }
+    };
+    const timer = window.setInterval(() => void tick(), REFRESH_MS);
+    // Voltou para a aba: confere na hora.
+    const onVisible = () => document.visibilityState === 'visible' && void tick();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [viewerId, loadFeed, fetchUpdates]);
 
   const commentsPost = posts.find((post) => post.id === commentsPostId) ?? null;
   const viewerIndex = posts.findIndex((post) => post.id === viewerPostId);
@@ -402,6 +525,27 @@ export function MuralFeed() {
     <main className="relative min-h-screen bg-cream px-4 pb-32 pt-8 text-zinc-800 sm:px-6 md:px-10">
       {/* No mural não há o botão "Confirmar presença" (ele fica só no início e na lista de presentes). */}
       <SiteHeader links={NAV_LINKS} alwaysDark />
+
+      {/* Publicações novas chegaram enquanto a pessoa lia lá embaixo (como no Instagram). */}
+      <AnimatePresence>
+        {pendingCount > 0 ? (
+          <motion.button
+            key="novas"
+            type="button"
+            onClick={showPending}
+            initial={{ opacity: 0, y: -16, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -16, x: '-50%' }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed left-1/2 top-20 z-[60] inline-flex items-center gap-2 rounded-full bg-champagne-600 px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] text-[#fff9f1] shadow-[0_12px_30px_rgba(47,36,27,0.28)]"
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden="true">
+              <path d="M12 19V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {pendingCount === 1 ? '1 nova publicação' : `${pendingCount} novas publicações`}
+          </motion.button>
+        ) : null}
+      </AnimatePresence>
 
       <header className="mx-auto mt-16 max-w-3xl text-center md:mt-20">
         <Reveal>
@@ -448,6 +592,10 @@ export function MuralFeed() {
                 onDeleted={() => setPosts((current) => current.filter((item) => item.id !== post.id))}
               />
             ))}
+            {/* Fim da lista: perto daqui, carrega os próximos posts. */}
+            <div ref={sentinelRef} aria-hidden="true" />
+            {isLoadingMore ? <p className="py-6 text-center text-sm text-zinc-500">Carregando mais posts…</p> : null}
+            {!hasMore && posts.length > PAGE_SIZE ? <p className="py-6 text-center text-xs uppercase tracking-[0.2em] text-zinc-400">Você viu todos os posts</p> : null}
           </div>
         ) : null}
       </section>
@@ -783,6 +931,61 @@ function CommentInput({ id, value, onChange }: { id: string; value: string; onCh
 }
 
 /** Texto de um comentário: nome (com selo e cor própria quando é o noivo ou a noiva) e o comentário. */
+/** Posts na tela ou perto dela (até 40): só eles precisam de curtidas/comentários atualizados agora. */
+function idsNearScreen(loaded: MuralPostView[]) {
+  const margin = 1500;
+  const near = Array.from(document.querySelectorAll<HTMLElement>("article[data-post-id]"))
+    .filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > -margin && rect.top < window.innerHeight + margin;
+    })
+    .map((element) => element.dataset.postId as string)
+    .slice(0, 40);
+  return near.length ? near : loaded.slice(0, 20).map((post) => post.id);
+}
+
+/** Junta posts novos aos que já estão na lista (sem repetir), mais novos primeiro. */
+function mergeNewPosts(fresh: MuralPostView[], current: MuralPostView[]) {
+  const known = new Set(current.map((post) => post.id));
+  const extra = fresh.filter((post) => !known.has(post.id));
+  return [...extra, ...current].sort((a, b) => Number(b.id) - Number(a.id));
+}
+
+/** Mais curtidos primeiro; empate: na ordem em que foram escritos (igual ao servidor). */
+function sortComments(list: MuralCommentView[]) {
+  return [...list].sort((a, b) => (b.likes ?? 0) - (a.likes ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+/** Curtir comentário: buquê pequeno ao lado do comentário, com o número de curtidas embaixo. */
+function CommentLikeButton({ comment, disabled, onToggle }: { comment: MuralCommentView; disabled: boolean; onToggle: () => void }) {
+  const [pop, setPop] = useState(0);
+  const likes = comment.likes ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!comment.likedByMe) setPop((count) => count + 1);
+        onToggle();
+      }}
+      disabled={disabled}
+      aria-pressed={Boolean(comment.likedByMe)}
+      aria-label={`${comment.likedByMe ? 'Descurtir' : 'Curtir'} o comentário de ${comment.authorName}${likes ? ` (${likes} curtida${likes === 1 ? '' : 's'})` : ''}`}
+      className="-mr-1 flex w-8 shrink-0 flex-col items-center gap-0.5 self-start pt-0.5 text-zinc-500 transition-colors hover:text-[#9e4f63] disabled:opacity-50"
+    >
+      <motion.span
+        key={pop}
+        className="block"
+        initial={false}
+        animate={pop > 0 ? { scale: [1, 0.7, 1.35, 0.9, 1] } : { scale: 1 }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+      >
+        <BouquetIcon filled={Boolean(comment.likedByMe)} className="h-5 w-5" />
+      </motion.span>
+      {likes > 0 ? <span className="text-[0.65rem] font-medium leading-none tabular-nums">{likes}</span> : null}
+    </button>
+  );
+}
+
 function CommentText({ comment }: { comment: MuralCommentView }) {
   // Cores das molduras: rosé escuro (noiva) e verde-oliva escuro (noivo).
   const color = comment.authorRole === 'noiva' ? 'text-[#9e4f63]' : comment.authorRole === 'noivo' ? 'text-[#4b5b33]' : 'text-zinc-800';
@@ -830,10 +1033,182 @@ type PostCardProps = {
   onDeleted: () => void;
 };
 
-/** Formato da mídia no card, como o Instagram: entre retrato 4:5 e paisagem 1,91:1. */
+/** Formato da mídia no card, como o Instagram: entre retrato 4:5 e paisagem 1,91:1 (a mesma regra do editor). */
 function mediaAspect(post: MuralPostView) {
   if (!post.width || !post.height) return 4 / 5;
-  return Math.min(1.91, Math.max(0.8, post.width / post.height));
+  return muralCardRatio(post.width, post.height);
+}
+
+/** Posição de cada foto do carrossel no card: a parte escolhida no editor, no sentido em que o card corta. */
+function slidePosition(item: MuralMediaItemView) {
+  const focus = Math.round(Math.min(1, Math.max(0, item.cardFocus ?? 0.5)) * 1000) / 10;
+  return `${focus}% ${focus}%`;
+}
+
+/** Bolinhas do carrossel (como no Instagram): a atual em destaque; com muitas fotos, as das pontas diminuem. */
+function CarouselDots({ count, index, tone = 'dark' }: { count: number; index: number; tone?: 'dark' | 'light' }) {
+  if (count < 2) return null;
+  return (
+    <div className="flex items-center justify-center gap-1" aria-hidden="true">
+      {Array.from({ length: count }, (_, dot) => {
+        const distance = Math.abs(dot - index);
+        const size = distance === 0 ? 'h-1.5 w-1.5' : distance <= 2 ? 'h-1.5 w-1.5' : 'h-1 w-1';
+        return (
+          <span
+            key={dot}
+            className={`rounded-full transition-all duration-300 ${size} ${
+              dot === index ? (tone === 'dark' ? 'bg-champagne-600' : 'bg-white') : tone === 'dark' ? 'bg-zinc-800/20' : 'bg-white/45'
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Foto do carrossel que estava na tela no card quando o post foi aberto (o post grande abre nela). */
+const openSlideHint: { postId: string | null; index: number } = { postId: null, index: 0 };
+
+/** Fotos/vídeos de um post com várias mídias, no card: arrastar para os lados (ou setas no computador). */
+function CardCarousel({
+  items,
+  index,
+  onIndex,
+  isMuted,
+  onToggleMute,
+  alt,
+}: {
+  items: MuralMediaItemView[];
+  index: number;
+  onIndex: (index: number) => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
+  alt: string;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const [inView, setInView] = useState(false);
+
+  // Só o vídeo da foto atual toca (sem som), e só enquanto o card está na tela.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting && entry.intersectionRatio >= 0.6), { threshold: [0, 0.6, 1] });
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    videoRefs.current.forEach((video, videoIndex) => {
+      if (!video) return;
+      if (videoIndex === index && inView) void video.play().catch(() => undefined);
+      else video.pause();
+    });
+  }, [index, inView]);
+
+  const goTo = (next: number) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const target = Math.max(0, Math.min(items.length - 1, next));
+    track.scrollTo({ left: target * track.clientWidth, behavior: 'smooth' });
+  };
+
+  const arrow =
+    'absolute top-1/2 z-10 hidden h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-zinc-700 opacity-80 shadow-[0_1px_4px_rgba(0,0,0,0.18)] backdrop-blur-sm transition-opacity hover:opacity-100 sm:flex';
+  const active = items[index];
+
+  return (
+    <>
+      <div
+        ref={trackRef}
+        onScroll={(event) => {
+          const track = event.currentTarget;
+          const next = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+          if (next !== index) onIndex(next);
+        }}
+        className="absolute inset-0 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {items.map((item, itemIndex) => (
+          <div key={itemIndex} className="relative h-full w-full shrink-0 snap-center snap-always">
+            {item.mediaType === 'video' ? (
+              <video
+                ref={(element) => {
+                  videoRefs.current[itemIndex] = element;
+                }}
+                src={item.fullUrl}
+                poster={item.posterUrl ?? undefined}
+                muted={isMuted}
+                loop
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ objectPosition: slidePosition(item) }}
+              />
+            ) : (
+              <img
+                src={item.fullUrl}
+                alt={`${alt} (${itemIndex + 1} de ${items.length})`}
+                loading={itemIndex === 0 ? 'eager' : 'lazy'}
+                draggable={false}
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ objectPosition: slidePosition(item) }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Contador "2/5" no canto, como no Instagram. */}
+      <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium tabular-nums text-white">
+        {index + 1}/{items.length}
+      </span>
+      {index > 0 ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            goTo(index - 1);
+          }}
+          aria-label="Foto anterior"
+          className={`${arrow} left-3`}
+        >
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : null}
+      {index < items.length - 1 ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            goTo(index + 1);
+          }}
+          aria-label="Próxima foto"
+          className={`${arrow} right-3`}
+        >
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+            <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : null}
+      {active?.mediaType === 'video' ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleMute();
+          }}
+          aria-label={isMuted ? 'Ativar som' : 'Desativar som'}
+          className="absolute bottom-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" fill="currentColor" />
+            {isMuted ? <path d="m16 9 5 6m0-6-5 6" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" />}
+          </svg>
+        </button>
+      ) : null}
+    </>
+  );
 }
 
 /** Um post da linha do tempo: cabeçalho, foto/vídeo, curtir (buquê), comentários e legenda. */
@@ -851,6 +1226,9 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
   const singleTapTimer = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLElement>(null);
+  // Post com várias fotos/vídeos: carrossel (e qual delas está na tela).
+  const carouselItems = post.media && post.media.length > 1 ? post.media : null;
+  const [slide, setSlide] = useState(0);
 
   // Vídeo toca sozinho (sem som) só enquanto está na tela, como no Instagram.
   useEffect(() => {
@@ -898,6 +1276,8 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
       if (!canInteract) {
         // Mural fechado (sem curtidas): o toque duplo só abre o post.
         videoRef.current?.pause();
+        openSlideHint.postId = post.id;
+        openSlideHint.index = slide;
         onOpen();
         return;
       }
@@ -910,6 +1290,8 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
     singleTapTimer.current = window.setTimeout(() => {
       lastTap.current = 0;
       videoRef.current?.pause();
+      openSlideHint.postId = post.id;
+      openSlideHint.index = slide;
       onOpen();
     }, 330);
   };
@@ -927,7 +1309,7 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
 
   const askDeletePost = () =>
     setConfirmRequest({
-      title: post.mediaType === 'video' ? 'Apagar vídeo?' : 'Apagar foto?',
+      title: carouselItems ? 'Apagar post?' : post.mediaType === 'video' ? 'Apagar vídeo?' : 'Apagar foto?',
       message: `O post sai do mural junto com as curtidas e os comentários. Você ainda tem ${formatCountdown(deleteRemaining)} para apagar; depois, só os noivos.`,
       confirmLabel: 'Apagar',
       onConfirm: deletePost,
@@ -939,6 +1321,7 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
   return (
     <article
       ref={cardRef}
+      data-post-id={post.id}
       className={`-mx-4 overflow-hidden border-b pb-6 sm:mx-0 sm:rounded-[1.5rem] sm:border sm:pb-4 safari-clip ${
         // Fundo do card: rosado no post da noiva, marfim esverdeado no do noivo, creme nos dos convidados.
         post.authorRole === 'noiva'
@@ -975,7 +1358,16 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
         style={{ aspectRatio: String(mediaAspect(post)) }}
         onClick={handleMediaTap}
       >
-        {post.mediaType === 'video' ? (
+        {carouselItems ? (
+          <CardCarousel
+            items={carouselItems}
+            index={slide}
+            onIndex={setSlide}
+            isMuted={isMuted}
+            onToggleMute={() => setIsMuted((muted) => !muted)}
+            alt={caption || `Foto de ${post.authorName}`}
+          />
+        ) : post.mediaType === 'video' ? (
           <>
             <video
               ref={videoRef}
@@ -986,6 +1378,7 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
               playsInline
               preload="metadata"
               className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition: muralObjectPosition(post.width, post.height, post.cardFocus) }}
             />
             {isPaused ? (
               <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1012,7 +1405,15 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
             </button>
           </>
         ) : (
-          <img src={post.fullUrl} alt={caption || `Foto de ${post.authorName}`} loading="lazy" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+          <img
+            src={post.fullUrl}
+            alt={caption || `Foto de ${post.authorName}`}
+            loading="lazy"
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover"
+            // Parte da foto escolhida no editor (o card corta fotos muito altas ou muito largas).
+            style={{ objectPosition: muralObjectPosition(post.width, post.height, post.cardFocus) }}
+          />
         )}
 
         {/* Buquê grande do toque duplo. */}
@@ -1034,7 +1435,12 @@ function PostCard({ post, viewerId, canInteract, onChange, onOpenComments, onOpe
       </CoupleFrame>
 
       <div className="px-4 pt-3">
-        <div className="flex items-center gap-3">
+        <div className="relative flex items-center gap-3">
+          {carouselItems ? (
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2">
+              <CarouselDots count={carouselItems.length} index={slide} />
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={toggleLike}
@@ -1117,22 +1523,78 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
   const [likePop, setLikePop] = useState(0);
   const [burst, setBurst] = useState(0);
   const lastTap = useRef(0);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const listEnd = useRef<HTMLDivElement>(null);
+  const likeBusy = useRef(0);
   useLockScroll(true);
+  // Carrossel: qual foto/vídeo do post está aberta (volta para a 1ª ao trocar de post).
+  const slides = post.media && post.media.length > 1 ? post.media : null;
+  const startSlide = () => {
+    const index = openSlideHint.postId === post.id ? openSlideHint.index : 0;
+    openSlideHint.postId = null;
+    return Math.max(0, Math.min(index, (post.media?.length ?? 1) - 1));
+  };
+  const [slide, setSlide] = useState(startSlide);
+  const firstPositioned = useRef(false);
+  // Trocou de post: a foto inicial é definida já nesta renderização (antes de o trilho novo aparecer).
+  const [slideFor, setSlideFor] = useState(post.id);
+  if (slideFor !== post.id) {
+    setSlideFor(post.id);
+    setSlide(startSlide());
+    firstPositioned.current = false;
+  }
+  const canSlideBack = Boolean(slides) && slide > 0;
+  const canSlideForward = Boolean(slides) && slide < (slides?.length ?? 1) - 1;
+  // Trilho do carrossel (acompanha o dedo, com encaixe em cada foto).
+  const trackRef = useRef<HTMLDivElement>(null);
+  const slideVideos = useRef<(HTMLVideoElement | null)[]>([]);
+  // Setas/teclado mudam a foto: o trilho desliza até ela (o arrastar já move o trilho sozinho).
+  useEffect(() => {
+    // A janela abre num portal: o trilho pode ainda não ter largura no 1º instante; tenta nos quadros seguintes.
+    let frame = 0;
+    let tries = 0;
+    const place = () => {
+      const track = trackRef.current;
+      if (!track || !track.clientWidth) {
+        if (tries++ < 60) frame = window.requestAnimationFrame(place);
+        return;
+      }
+      // Ao abrir, já aparece na foto certa (sem animação); depois, desliza.
+      const behavior = firstPositioned.current ? 'smooth' : 'auto';
+      firstPositioned.current = true;
+      if (Math.round(track.scrollLeft / track.clientWidth) !== slide) track.scrollTo({ left: slide * track.clientWidth, behavior });
+    };
+    place();
+    return () => window.cancelAnimationFrame(frame);
+  }, [slide, post.id]);
+  // Só o vídeo da foto atual toca.
+  useEffect(() => {
+    slideVideos.current.forEach((video, index) => {
+      if (!video) return;
+      if (index === slide) void video.play().catch(() => undefined);
+      else video.pause();
+    });
+  }, [slide, post.id]);
+  // No celular, a área da foto tem a altura da 1ª foto (como no Instagram), sem passar de 70% da tela.
+  const firstSlide = slides?.[0];
+  const slideRatio = firstSlide?.width && firstSlide?.height ? firstSlide.width / firstSlide.height : 4 / 5;
 
   useEffect(() => {
     let cancelled = false;
     setComments(null);
     setError('');
-    fetch(`/api/mural/comments?postId=${post.id}&viewerId=${encodeURIComponent(viewerId)}`, { cache: 'no-store' })
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) setComments(Array.isArray(data?.comments) ? data.comments : []);
-      })
-      .catch(() => !cancelled && setComments([]));
+    // Comentários (e curtidas deles) ao vivo enquanto o post está aberto.
+    const load = (first: boolean) =>
+      fetch(`/api/mural/comments?postId=${post.id}&viewerId=${encodeURIComponent(viewerId)}`, { cache: 'no-store' })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data) => {
+          if (!cancelled && Array.isArray(data?.comments) && likeBusy.current === 0) setComments(data.comments);
+        })
+        .catch(() => !cancelled && first && setComments([]));
+    void load(true);
+    const timer = window.setInterval(() => document.visibilityState === 'visible' && void load(false), COMMENTS_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [post.id, viewerId]);
 
@@ -1140,12 +1602,20 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
     const onKey = (event: KeyboardEvent) => {
       const typing = event.target instanceof HTMLInputElement;
       if (event.key === 'Escape') onClose();
-      if (event.key === 'ArrowLeft' && hasPrevious && !typing) onPrevious();
-      if (event.key === 'ArrowRight' && hasNext && !typing) onNext();
+      if (typing) return;
+      // Setas: primeiro passam as fotos do carrossel; nas pontas, passam de post.
+      if (event.key === 'ArrowLeft') {
+        if (canSlideBack) setSlide((value) => value - 1);
+        else if (hasPrevious) onPrevious();
+      }
+      if (event.key === 'ArrowRight') {
+        if (canSlideForward) setSlide((value) => value + 1);
+        else if (hasNext) onNext();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hasNext, hasPrevious, onClose, onNext, onPrevious]);
+  }, [hasNext, hasPrevious, onClose, onNext, onPrevious, canSlideBack, canSlideForward]);
 
   const toggleLike = async () => {
     if (!canInteract) return;
@@ -1210,6 +1680,30 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
     }
   };
 
+  // Curtir comentário: atualiza na hora (e já reordena); o servidor devolve a lista oficial.
+  const likeComment = async (comment: MuralCommentView) => {
+    if (!canInteract) return;
+    likeBusy.current += 1;
+    const next = !comment.likedByMe;
+    setComments((list) =>
+      list ? sortComments(list.map((item) => (item.id === comment.id ? { ...item, likedByMe: next, likes: Math.max(0, (item.likes ?? 0) + (next ? 1 : -1)) } : item))) : list
+    );
+    try {
+      const response = await fetch('/api/mural/comments/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewerId, commentId: comment.id, like: next }),
+      });
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data?.comments)) throw new Error(data?.error);
+      setComments(data.comments);
+    } catch {
+      setComments((list) => (list ? sortComments(list.map((item) => (item.id === comment.id ? comment : item))) : list));
+    } finally {
+      likeBusy.current -= 1;
+    }
+  };
+
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequestView | null>(null);
   const closeConfirm = useCallback(() => setConfirmRequest(null), []);
   const askDeleteComment = (commentId: string, remaining: number) =>
@@ -1234,7 +1728,7 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
     return response.ok ? true : data?.error || false;
   };
 
-  const arrowClass = 'absolute top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-2xl leading-none text-zinc-800 shadow-lg transition-transform hover:scale-105 sm:flex';
+  const arrowClass = 'absolute top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-2xl leading-none text-zinc-800 shadow-lg transition-transform hover:scale-105 sm:flex [@media(hover:none)]:!hidden';
 
   return (
     <Portal>
@@ -1275,22 +1769,81 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
             className="relative flex shrink-0 select-none items-center justify-center overscroll-x-contain bg-black sm:h-full sm:flex-1"
             // O arrastar horizontal fica com o mural (e não vira o gesto de "voltar página" do navegador).
             style={{ touchAction: 'pan-y pinch-zoom' }}
-            // Celular: arrastar para os lados passa para o post anterior/próximo.
-            onTouchStart={(event) => {
-              touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-            }}
-            onTouchEnd={(event) => {
-              const start = touchStart.current;
-              touchStart.current = null;
-              if (!start) return;
-              const dx = event.changedTouches[0].clientX - start.x;
-              const dy = event.changedTouches[0].clientY - start.y;
-              if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-              if (dx < 0 && hasNext) onNext();
-              if (dx > 0 && hasPrevious) onPrevious();
-            }}
+            // Celular: arrastar para os lados só passa as fotos do carrossel (não troca de post).
           >
-            {post.mediaType === 'video' ? (
+            {slides ? (
+              <>
+                <div
+                  key={post.id}
+                  ref={trackRef}
+                  onScroll={(event) => {
+                    const track = event.currentTarget;
+                    const next = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+                    if (next !== slide) setSlide(next);
+                  }}
+                  className="flex w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] sm:!h-full [&::-webkit-scrollbar]:hidden"
+                  // O trilho é quem rola para os lados (acompanha o dedo); a página continua rolando para cima/baixo.
+                  style={{ height: `min(70svh, calc(100vw / ${slideRatio}))`, touchAction: 'pan-x pan-y pinch-zoom' }}
+                >
+                  {slides.map((item, index) => (
+                    <div key={index} className="flex h-full w-full shrink-0 snap-center snap-always items-center justify-center">
+                      {item.mediaType === 'video' ? (
+                        <video
+                          ref={(element) => {
+                            slideVideos.current[index] = element;
+                          }}
+                          src={item.fullUrl}
+                          poster={item.posterUrl ?? undefined}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <img
+                          src={item.fullUrl}
+                          alt={`${post.caption ?? `Foto de ${post.authorName}`} (${index + 1} de ${slides.length})`}
+                          onClick={handlePhotoTap}
+                          loading={index <= 1 ? 'eager' : 'lazy'}
+                          draggable={false}
+                          className="h-full w-full object-contain"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium tabular-nums text-white">
+                  {slide + 1}/{slides.length}
+                </span>
+                {canSlideBack ? (
+                  <button
+                    type="button"
+                    onClick={() => setSlide((value) => value - 1)}
+                    aria-label="Foto anterior"
+                    className="absolute left-3 top-1/2 z-10 hidden h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-zinc-700 opacity-80 shadow-[0_1px_4px_rgba(0,0,0,0.18)] backdrop-blur-sm transition-opacity hover:opacity-100 sm:flex"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+                      <path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                ) : null}
+                {canSlideForward ? (
+                  <button
+                    type="button"
+                    onClick={() => setSlide((value) => value + 1)}
+                    aria-label="Próxima foto"
+                    className="absolute right-3 top-1/2 z-10 hidden h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-white/70 text-zinc-700 opacity-80 shadow-[0_1px_4px_rgba(0,0,0,0.18)] backdrop-blur-sm transition-opacity hover:opacity-100 sm:flex"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                ) : null}
+                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10">
+                  <CarouselDots count={slides.length} index={slide} tone="light" />
+                </div>
+              </>
+            ) : post.mediaType === 'video' ? (
               <video key={post.id} src={post.fullUrl} poster={post.posterUrl ?? undefined} controls playsInline autoPlay className="max-h-[70svh] w-full sm:h-full sm:max-h-none sm:object-contain" />
             ) : (
               <img
@@ -1344,7 +1897,8 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
               {comments === null ? <p className="text-zinc-500">Carregando comentários…</p> : null}
               {comments?.length === 0 && !post.caption ? <p className="py-6 text-center text-zinc-500">Nenhum comentário ainda.</p> : null}
               {comments?.map((comment) => (
-                <div key={comment.id} className="flex gap-3">
+                // layout: ao mudar a ordem (mais curtidos em cima), o comentário desliza até o novo lugar.
+                <motion.div key={comment.id} layout transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="flex gap-3">
                   <Avatar name={comment.authorName} size="h-8 w-8" role={comment.authorRole} />
                   <div className="min-w-0 flex-1">
                     <CommentText comment={comment} />
@@ -1353,12 +1907,19 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
                       {comment.isMine ? <DeleteCommentLink secondsLeft={comment.deleteSecondsLeft} onClick={(remaining) => askDeleteComment(comment.id, remaining)} /> : null}
                     </p>
                   </div>
-                </div>
+                  <CommentLikeButton comment={comment} disabled={!canInteract} onToggle={() => likeComment(comment)} />
+                </motion.div>
               ))}
               <div ref={listEnd} />
             </div>
 
-            <div className="border-t border-zinc-800/10 px-4 pt-3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+            {/* Curtir e comentar: no celular fica preso no rodapé da tela (não precisa rolar até o fim para comentar). */}
+            <div
+              className={`sticky bottom-0 z-10 border-t border-zinc-800/10 px-4 pt-3 shadow-[0_-8px_20px_rgba(47,36,27,0.06)] sm:static sm:shadow-none ${
+                post.authorRole === 'noiva' ? 'bg-[#fcefec]' : post.authorRole === 'noivo' ? 'bg-[#f4f3e4]' : 'bg-[#fffaf1]'
+              }`}
+              style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+            >
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -1425,18 +1986,24 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
   const listEnd = useRef<HTMLDivElement>(null);
+  const likeBusy = useRef(0);
   useLockScroll(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/mural/comments?postId=${post.id}&viewerId=${encodeURIComponent(viewerId)}`, { cache: 'no-store' })
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) setComments(Array.isArray(data?.comments) ? data.comments : []);
-      })
-      .catch(() => !cancelled && setComments([]));
+    // Comentários (e curtidas deles) ao vivo enquanto a janela está aberta.
+    const load = (first: boolean) =>
+      fetch(`/api/mural/comments?postId=${post.id}&viewerId=${encodeURIComponent(viewerId)}`, { cache: 'no-store' })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data) => {
+          if (!cancelled && Array.isArray(data?.comments) && likeBusy.current === 0) setComments(data.comments);
+        })
+        .catch(() => !cancelled && first && setComments([]));
+    void load(true);
+    const timer = window.setInterval(() => document.visibilityState === 'visible' && void load(false), COMMENTS_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [post.id, viewerId]);
 
@@ -1475,6 +2042,30 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
       setError(sendError instanceof Error ? sendError.message : 'Não foi possível comentar.');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Curtir comentário: atualiza na hora (e já reordena); o servidor devolve a lista oficial.
+  const likeComment = async (comment: MuralCommentView) => {
+    if (!canInteract) return;
+    likeBusy.current += 1;
+    const next = !comment.likedByMe;
+    setComments((list) =>
+      list ? sortComments(list.map((item) => (item.id === comment.id ? { ...item, likedByMe: next, likes: Math.max(0, (item.likes ?? 0) + (next ? 1 : -1)) } : item))) : list
+    );
+    try {
+      const response = await fetch('/api/mural/comments/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewerId, commentId: comment.id, like: next }),
+      });
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data?.comments)) throw new Error(data?.error);
+      setComments(data.comments);
+    } catch {
+      setComments((list) => (list ? sortComments(list.map((item) => (item.id === comment.id ? comment : item))) : list));
+    } finally {
+      likeBusy.current -= 1;
     }
   };
 
@@ -1533,7 +2124,7 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
             </button>
           </div>
 
-          <div className="min-h-[8rem] flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm">
+          <div className="min-h-[8rem] flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 text-sm">
             {post.caption ? (
               <div className="flex gap-3 border-b border-zinc-800/10 pb-4">
                 <Avatar name={post.authorName} size="h-8 w-8" role={post.authorRole} />
@@ -1545,7 +2136,8 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
             {comments === null ? <p className="text-zinc-500">Carregando comentários…</p> : null}
             {comments?.length === 0 ? <p className="py-6 text-center text-zinc-500">Nenhum comentário ainda. Seja o primeiro!</p> : null}
             {comments?.map((comment) => (
-              <div key={comment.id} className="flex gap-3">
+              // layout: ao mudar a ordem (mais curtidos em cima), o comentário desliza até o novo lugar.
+              <motion.div key={comment.id} layout transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="flex gap-3">
                 <Avatar name={comment.authorName} size="h-8 w-8" role={comment.authorRole} />
                 <div className="min-w-0 flex-1">
                   <CommentText comment={comment} />
@@ -1554,7 +2146,8 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
                     {comment.isMine ? <DeleteCommentLink secondsLeft={comment.deleteSecondsLeft} onClick={(remaining) => askDeleteComment(comment.id, remaining)} /> : null}
                   </p>
                 </div>
-              </div>
+                <CommentLikeButton comment={comment} disabled={!canInteract} onToggle={() => likeComment(comment)} />
+              </motion.div>
             ))}
             <div ref={listEnd} />
           </div>
@@ -1618,8 +2211,35 @@ export function Composer({
   onClose: () => void;
   onPosted: () => void;
 }) {
-  const [picked, setPicked] = useState<Picked | null>(null);
+  // Fotos/vídeos do post (carrossel, até MAX_MEDIA_PER_POST) e qual delas está na prévia/edição.
+  const [items, setItems] = useState<Picked[]>([]);
+  const [current, setCurrent] = useState(0);
+  const picked = items[current] ?? null;
+  const itemsRef = useRef<Picked[]>([]);
+  itemsRef.current = items;
+  const currentRef = useRef(0);
+  currentRef.current = current;
+  /** Atualiza a mídia que está na tela (edição/recorte). */
+  const setPicked = useCallback((update: (item: Picked | null) => Picked | null) => {
+    setItems((list) => list.map((item, index) => (index === currentRef.current ? (update(item) ?? item) : item)));
+  }, []);
   const [caption, setCaption] = useState('');
+  const captionRef = useRef<HTMLTextAreaElement>(null);
+  /** Emoji na legenda: entra onde está o cursor (sem passar do limite de 300 caracteres). */
+  const insertCaptionEmoji = (emoji: string) => {
+    const field = captionRef.current;
+    const start = field?.selectionStart ?? caption.length;
+    const end = field?.selectionEnd ?? caption.length;
+    const next = caption.slice(0, start) + emoji + caption.slice(end);
+    if (next.length > 300) return;
+    setCaption(next);
+    window.requestAnimationFrame(() => {
+      if (!field) return;
+      const caret = start + emoji.length;
+      field.focus();
+      field.setSelectionRange(caret, caret);
+    });
+  };
   // Mural aberto: quem publica só informa o nome (vem preenchido com o último usado neste aparelho).
   const [name, setName] = useState(viewerAdmin?.name ?? authorName);
   const [progress, setProgress] = useState<number | null>(null);
@@ -1633,9 +2253,13 @@ export function Composer({
   const isUploading = progress !== null;
   useLockScroll(true);
 
-  useEffect(() => () => {
-    if (picked) URL.revokeObjectURL(picked.previewUrl);
-  }, [picked]);
+  // Libera as prévias ao fechar.
+  useEffect(
+    () => () => {
+      itemsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    },
+    []
+  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1676,31 +2300,59 @@ export function Composer({
     setIsEditing(false);
   }, []);
 
-  const pickFile = async (file: File | undefined) => {
+  /** Acrescenta fotos/vídeos ao post (da galeria, várias de uma vez, ou da câmera). */
+  const addFiles = async (files: File[]) => {
     setError('');
-    if (!file) return;
-    const kind = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name) ? 'image' : null;
-    if (!kind) {
+    if (!files.length) return;
+    const room = MAX_MEDIA_PER_POST - itemsRef.current.length;
+    if (room <= 0) {
       setShowCamera(false);
-      setError('Escolha uma foto ou um vídeo.');
+      setError(`No máximo ${MAX_MEDIA_PER_POST} fotos ou vídeos por post.`);
       return;
     }
-    if (kind === 'video' && file.size > MAX_VIDEO_BYTES) {
-      setShowCamera(false);
-      setError('Vídeo muito grande (máximo 100 MB). Grave um vídeo mais curto ou corte antes de enviar.');
-      return;
+    const accepted: Picked[] = [];
+    let problem = '';
+    for (const file of files.slice(0, room)) {
+      const kind = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name) ? 'image' : null;
+      if (!kind) {
+        problem = 'Escolha fotos ou vídeos.';
+        continue;
+      }
+      if (kind === 'video' && file.size > MAX_VIDEO_BYTES) {
+        problem = 'Vídeo muito grande (máximo 100 MB). Grave um vídeo mais curto ou corte antes de enviar.';
+        continue;
+      }
+      const meta = kind === 'video' ? await readVideoMeta(file) : { duration: null, width: null, height: null };
+      accepted.push({ file, kind, previewUrl: URL.createObjectURL(file), ...meta, original: file, edit: null, crop: null });
     }
-    const meta = kind === 'video' ? await readVideoMeta(file) : { duration: null, width: null, height: null };
-    setPicked({ file, kind, previewUrl: URL.createObjectURL(file), ...meta, original: file, edit: null, crop: null });
+    if (files.length > room) problem = `Cabem no máximo ${MAX_MEDIA_PER_POST} fotos ou vídeos por post; as demais ficaram de fora.`;
     setShowCamera(false);
-    setIsEditing(true);
+    if (problem) setError(problem);
+    if (!accepted.length) return;
+    const start = itemsRef.current.length;
+    setItems((list) => [...list, ...accepted].slice(0, MAX_MEDIA_PER_POST));
+    setCurrent(start);
+    // Uma foto só: abre o editor na hora (como antes); várias: cada uma pode ser editada pelo botão "Editar".
+    if (accepted.length === 1) setIsEditing(true);
   };
+  const pickFile = (file: File | undefined) => addFiles(file ? [file] : []);
 
-  const retake = () => {
-    setPicked(null);
+  /** Mais fotos/vídeos no mesmo post: câmera (se tiver) ou galeria. */
+  const addMore = () => {
     setError('');
     if (isCameraSupported()) setShowCamera(true);
     else inputRef.current?.click();
+  };
+
+  /** Tira a mídia da tela do post; se era a única, volta para escolher de novo (como o antigo "Refazer"). */
+  const removeCurrent = () => {
+    setError('');
+    const removed = itemsRef.current[current];
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
+    const next = itemsRef.current.filter((_, index) => index !== current);
+    setItems(next);
+    setCurrent((value) => Math.max(0, Math.min(value, next.length - 1)));
+    if (!next.length) addMore();
   };
 
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequestView | null>(null);
@@ -1721,7 +2373,7 @@ export function Composer({
       return;
     }
     setConfirmRequest({
-      title: picked.kind === 'video' ? 'Publicar este vídeo?' : 'Publicar esta foto?',
+      title: items.length > 1 ? `Publicar estas ${items.length} fotos e vídeos?` : picked.kind === 'video' ? 'Publicar este vídeo?' : 'Publicar esta foto?',
       message: 'Ele aparece na hora para todos os convidados. Você terá só 2 minutos para apagar, se precisar; depois disso, não será mais possível (só os noivos podem apagar).',
       confirmLabel: 'Publicar',
       tone: 'primary',
@@ -1740,29 +2392,51 @@ export function Composer({
     setError('');
     setProgress(0);
     try {
-      let upload: Blob = picked.file;
-      let width = picked.width;
-      let height = picked.height;
-      if (picked.kind === 'image') {
-        setStage('Preparando a foto…');
-        const compressed = await compressImage(picked.file);
-        upload = compressed.blob;
-        width = compressed.width ?? width;
-        height = compressed.height ?? height;
-        if (upload.size > MAX_IMAGE_BYTES) throw new Error('Foto muito grande (máximo 10 MB).');
+      // Envia cada foto/vídeo ao Cloudinary, uma de cada vez (a barra mostra o total).
+      const total = items.length;
+      const uploaded: Record<string, unknown>[] = [];
+      for (let index = 0; index < total; index += 1) {
+        const item = items[index];
+        const label = total > 1 ? ` (${index + 1} de ${total})` : '';
+        let upload: Blob = item.file;
+        let width = item.width;
+        let height = item.height;
+        if (item.kind === 'image') {
+          setStage(`Preparando a foto${label}…`);
+          const compressed = await compressImage(item.file);
+          upload = compressed.blob;
+          width = compressed.width ?? width;
+          height = compressed.height ?? height;
+          if (upload.size > MAX_IMAGE_BYTES) throw new Error(`Foto muito grande (máximo 10 MB)${label}.`);
+        }
+
+        setStage(`Enviando${label}…`);
+        const signResponse = await fetch('/api/mural/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ viewerId, name: trimmedName, kind: item.kind, crop: item.crop ?? undefined }),
+        });
+        const sign = await signResponse.json();
+        if (!signResponse.ok) throw new Error(sign?.error || 'Não foi possível preparar o envio.');
+
+        const fileName = item.kind === 'image' && upload !== item.file ? 'foto.jpg' : item.file.name || 'arquivo';
+        const done = index;
+        const result = await uploadToCloudinary(upload, fileName, sign, (fraction) => setProgress((done + fraction) / total));
+        uploaded.push({
+          publicId: result.public_id,
+          version: result.version,
+          signature: result.signature,
+          resourceType: result.resource_type,
+          // Vídeo recortado: o tamanho que vale é o do recorte (o Cloudinary devolve o do arquivo original).
+          width: item.crop ? width : (result.width ?? width),
+          height: item.crop ? height : (result.height ?? height),
+          duration: result.duration ?? item.duration,
+          crop: item.crop ?? undefined,
+          // Parte da foto/vídeo que aparece no card (escolhida no editor).
+          focus: item.edit?.muralFocus ?? 0.5,
+        });
       }
-
-      setStage('Enviando…');
-      const signResponse = await fetch('/api/mural/sign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ viewerId, name: trimmedName, kind: picked.kind, crop: picked.crop ?? undefined }),
-      });
-      const sign = await signResponse.json();
-      if (!signResponse.ok) throw new Error(sign?.error || 'Não foi possível preparar o envio.');
-
-      const fileName = picked.kind === 'image' && upload !== picked.file ? 'foto.jpg' : picked.file.name || 'arquivo';
-      const result = await uploadToCloudinary(upload, fileName, sign, (fraction) => setProgress(fraction));
+      const [first, ...extra] = uploaded;
 
       setStage('Publicando…');
       const response = await fetch('/api/mural/posts', {
@@ -1773,15 +2447,9 @@ export function Composer({
           name: trimmedName,
           // Se a pessoa também entrou com o código do convite, o post fica ligado a ele (só referência).
           code: readStoredCode() || undefined,
-          publicId: result.public_id,
-          version: result.version,
-          signature: result.signature,
-          resourceType: result.resource_type,
-          // Vídeo recortado: o tamanho que vale é o do recorte (o Cloudinary devolve o do arquivo original).
-          width: picked.crop ? width : (result.width ?? width),
-          height: picked.crop ? height : (result.height ?? height),
-          duration: result.duration ?? picked.duration,
-          crop: picked.crop ?? undefined,
+          ...first,
+          // Carrossel: as demais fotos/vídeos, na ordem.
+          extra,
           caption,
         }),
       });
@@ -1816,9 +2484,10 @@ export function Composer({
           exit={{ y: 40 }}
           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           onClick={(event) => event.stopPropagation()}
-          className="max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] p-6 shadow-2xl sm:rounded-[2rem] sm:p-8"
-          style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+          className="flex max-h-[92svh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#fffaf1] shadow-2xl sm:rounded-[2rem]"
         >
+          {/* Conteúdo que rola; o rodapé com os botões fica fora dele (nada fica escondido atrás dos botões). */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pb-6 sm:p-8 sm:pb-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className={EYEBROW}>Mural do casamento</p>
@@ -1841,18 +2510,30 @@ export function Composer({
             ref={inputRef}
             type="file"
             accept="image/*,video/*"
+            multiple
             className="hidden"
             onChange={(event) => {
-              pickFile(event.target.files?.[0]);
+              void addFiles(Array.from(event.target.files ?? []));
               event.target.value = '';
             }}
           />
-          {showCamera && !picked ? (
-            <CameraCapture onCapture={(file) => pickFile(file)} onGallery={() => inputRef.current?.click()} onClose={onClose} />
+          {showCamera ? (
+            <CameraCapture
+              onCapture={(file) => pickFile(file)}
+              onGallery={() => inputRef.current?.click()}
+              // Fechar a câmera ao acrescentar mais fotos volta para o post; sem nenhuma foto, fecha a janela.
+              onClose={() => (itemsRef.current.length ? setShowCamera(false) : onClose())}
+            />
           ) : null}
 
           {picked ? (
+            <>
             <div className="safari-clip relative mt-6 overflow-hidden rounded-2xl bg-black">
+              {items.length > 1 ? (
+                <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium tabular-nums text-white">
+                  {current + 1}/{items.length}
+                </span>
+              ) : null}
               {picked.kind === 'video' ? (
                 picked.crop ? (
                   // Prévia do recorte: o vídeo inteiro ampliado e deslocado dentro de uma janela do tamanho do recorte.
@@ -1861,7 +2542,7 @@ export function Composer({
                     style={{
                       aspectRatio: `${picked.width ?? 1} / ${picked.height ?? 1}`,
                       // Cabe na largura e em no máximo 45% da altura da tela, sem distorcer.
-                      width: `min(100%, calc(45svh * ${(picked.width ?? 1) / (picked.height ?? 1)}))`,
+                      width: `min(100%, calc(min(31svh, 330px) * ${(picked.width ?? 1) / (picked.height ?? 1)}))`,
                     }}
                   >
                     <video
@@ -1880,22 +2561,83 @@ export function Composer({
                     />
                   </div>
                 ) : (
-                  <video src={picked.previewUrl} controls playsInline className="max-h-[45svh] w-full" />
+                  <video src={picked.previewUrl} controls playsInline className="max-h-[min(31svh,330px)] w-full" />
                 )
               ) : (
-                <img src={picked.previewUrl} alt="Pré-visualização" className="max-h-[45svh] w-full object-contain" />
+                // Prévia como o card do mural: no formato do card (4:5 a 1,91:1), cortando pelo centro igual ao mural.
+                <div
+                  className="relative mx-auto overflow-hidden"
+                  style={{
+                    aspectRatio: String(picked.width && picked.height ? muralCardRatio(picked.width, picked.height) : 4 / 5),
+                    width: `min(100%, calc(min(31svh, 330px) * ${picked.width && picked.height ? muralCardRatio(picked.width, picked.height) : 4 / 5}))`,
+                  }}
+                >
+                  <img
+                    src={picked.previewUrl}
+                    alt="Pré-visualização"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: muralObjectPosition(picked.width, picked.height, picked.edit?.muralFocus) }}
+                  />
+                  <span className="pointer-events-none absolute left-2 top-2 whitespace-nowrap rounded-full bg-black/55 px-2 py-0.5 text-[0.6rem] font-medium uppercase tracking-[0.1em] text-white/90 backdrop-blur-sm sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-[0.65rem] sm:tracking-[0.12em]">
+                    Como fica no mural
+                  </span>
+                </div>
               )}
               {!isUploading ? (
                 <div className="absolute bottom-3 right-3 flex gap-2">
                   <button type="button" onClick={() => setIsEditing(true)} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
                     {picked.kind === 'video' ? 'Recortar' : 'Editar'}
                   </button>
-                  <button type="button" onClick={retake} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
-                    Refazer
+                  <button type="button" onClick={removeCurrent} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
+                    {items.length > 1 ? 'Remover' : 'Refazer'}
                   </button>
                 </div>
               ) : null}
             </div>
+            {/* Carrossel: miniaturas na ordem do post (tocar escolhe qual editar) e "+" para acrescentar mais. */}
+            <div className="-mx-1 mt-2 flex items-center gap-2 overflow-x-auto px-1 pb-1.5 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {items.map((item, index) => (
+                <button
+                  key={item.previewUrl}
+                  type="button"
+                  onClick={() => setCurrent(index)}
+                  disabled={isUploading}
+                  aria-label={`${item.kind === 'video' ? 'Vídeo' : 'Foto'} ${index + 1} de ${items.length}`}
+                  aria-pressed={index === current}
+                  className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-black transition-all ${
+                    index === current ? 'ring-2 ring-champagne-600 ring-offset-2 ring-offset-[#fffaf1]' : 'opacity-75 hover:opacity-100'
+                  }`}
+                >
+                  {item.kind === 'video' ? (
+                    <>
+                      <video src={item.previewUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[0.55rem] text-white">▶</span>
+                    </>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                  )}
+                  <span className="absolute left-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-black/60 px-1 text-[0.6rem] font-semibold text-white">
+                    {index + 1}
+                  </span>
+                </button>
+              ))}
+              {items.length < MAX_MEDIA_PER_POST && !isUploading ? (
+                <button
+                  type="button"
+                  onClick={addMore}
+                  aria-label="Acrescentar fotos ou vídeos"
+                  className="flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-dashed border-zinc-800/20 text-champagne-700 transition-colors hover:border-champagne-600/60 hover:bg-champagne-600/5"
+                >
+                  <span className="text-2xl leading-none">+</span>
+                  <span className="text-[0.6rem] font-medium">{items.length}/{MAX_MEDIA_PER_POST}</span>
+                </button>
+              ) : null}
+            </div>
+            {items.length === 1 ? (
+              <p className="mt-1 text-xs text-zinc-500">Toque no + para colocar mais fotos ou vídeos neste post (carrossel).</p>
+            ) : null}
+            </>
           ) : (
             <div className="mt-6 grid gap-3">
             {isCameraSupported() ? (
@@ -1924,7 +2666,7 @@ export function Composer({
 
           {viewerAdmin ? (
             // Noivo/noiva logados no painel: o nome vem do login e o post sai em destaque.
-            <div className="mt-6 flex items-center gap-2 rounded-2xl border border-[#d6b46e] bg-[#fdf5e3] px-4 py-3 text-sm text-zinc-700">
+            <div className="mt-5 flex items-center gap-2 rounded-2xl border border-[#d6b46e] bg-[#fdf5e3] px-4 py-3 text-sm text-zinc-700">
               <span>
                 Publicando como <strong className="text-zinc-800">{viewerAdmin.name}</strong>
               </span>
@@ -1954,16 +2696,22 @@ export function Composer({
           <label htmlFor="composer-caption" className={`${EYEBROW} mt-5 block`}>
             Legenda <span className="normal-case tracking-normal text-zinc-500">(opcional)</span>
           </label>
-          <textarea
-            id="composer-caption"
-            value={caption}
-            onChange={(event) => setCaption(event.target.value)}
-            maxLength={300}
-            rows={2}
-            disabled={isUploading}
-            placeholder="Escreva algo sobre este momento…"
-            className={`${FIELD} mt-2 resize-none`}
-          />
+          <div className="relative mt-2">
+            <textarea
+              ref={captionRef}
+              id="composer-caption"
+              value={caption}
+              onChange={(event) => setCaption(event.target.value)}
+              maxLength={300}
+              rows={2}
+              disabled={isUploading}
+              placeholder="Escreva algo sobre este momento…"
+              className={`${FIELD} resize-none pr-14`}
+            />
+            <div className="absolute bottom-2.5 right-2.5">
+              <EmojiPicker onSelect={insertCaptionEmoji} disabled={isUploading} />
+            </div>
+          </div>
 
           {isUploading ? (
             <div className="mt-5" aria-live="polite">
@@ -1982,11 +2730,16 @@ export function Composer({
             </p>
           ) : null}
 
-          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={isUploading} className={SECONDARY}>
+          </div>
+          {/* Rodapé com os botões: sempre à vista, mesmo com muita coisa para rolar. */}
+          <div
+            className="flex shrink-0 gap-2 border-t border-zinc-800/10 bg-[#fffaf1] px-6 pt-3 sm:justify-end sm:px-8"
+            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <button type="button" onClick={onClose} disabled={isUploading} className={`${SECONDARY} flex-1 !py-2.5 sm:flex-none`}>
               Cancelar
             </button>
-            <button type="button" onClick={askPublish} disabled={!picked || isUploading} className={PRIMARY}>
+            <button type="button" onClick={askPublish} disabled={!picked || isUploading} className={`${PRIMARY} flex-1 !py-2.5 sm:flex-none`}>
               {isUploading ? 'Publicando…' : 'Publicar'}
             </button>
           </div>

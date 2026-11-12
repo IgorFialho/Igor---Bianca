@@ -4,7 +4,8 @@ import { AnimatePresence } from 'framer-motion';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ConfirmDialog, type ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { Composer } from '@/components/mural/mural-feed';
-import { PhotoEditor, type PhotoEditResult, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
+import { EmojiPicker } from '@/components/emoji-picker';
+import { DEFAULT_PHOTO_EDIT, PhotoEditor, type PhotoEditResult, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
 import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
@@ -31,7 +32,7 @@ const DANGER = `${BUTTON} border border-rose-300 bg-rose-50 text-rose-800 hover:
 const SMALL = 'rounded-full border px-3 py-1 text-xs font-medium transition-colors';
 
 type AdminComment = { id: string; postId: string; authorName: string; authorRole: 'noivo' | 'noiva' | null; text: string; isHidden: boolean; createdAt: string };
-type EditingPost = { id: string; authorName: string; caption: string; thumbUrl: string; fullUrl: string; mediaType: 'image' | 'video' };
+type EditingPost = { id: string; authorName: string; caption: string; thumbUrl: string; fullUrl: string; mediaType: 'image' | 'video'; cardFocus?: number };
 
 /** Foto/vídeo novo escolhido na edição (ainda não enviado). */
 type NewMedia = {
@@ -44,6 +45,8 @@ type NewMedia = {
   height: number | null;
   duration: number | null;
   crop: VideoCrop | null;
+  /** Parte que aparece no card do mural (escolhida no editor). */
+  focus?: number;
 };
 
 export type EditPostSave = { authorName: string; caption: string; media: Record<string, unknown> | null };
@@ -68,6 +71,22 @@ function EditPostDialog({
 }) {
   const [authorName, setAuthorName] = useState(post.authorName);
   const [caption, setCaption] = useState(post.caption);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
+  /** Emoji na legenda: entra onde está o cursor (sem passar do limite). */
+  const insertCaptionEmoji = (emoji: string) => {
+    const field = captionRef.current;
+    const start = field?.selectionStart ?? caption.length;
+    const end = field?.selectionEnd ?? caption.length;
+    const next = caption.slice(0, start) + emoji + caption.slice(end);
+    if (next.length > CAPTION_LIMIT) return;
+    setCaption(next);
+    window.requestAnimationFrame(() => {
+      if (!field) return;
+      const caret = start + emoji.length;
+      field.focus();
+      field.setSelectionRange(caret, caret);
+    });
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -182,6 +201,7 @@ function EditPostDialog({
           height: media.crop ? height : (result.height ?? height),
           duration: result.duration ?? media.duration,
           crop: media.crop ?? undefined,
+          focus: media.focus ?? post.cardFocus ?? 0.5,
         };
       }
       await onSave({ authorName: authorName.trim(), caption: caption.trim(), media: uploaded });
@@ -290,16 +310,22 @@ function EditPostDialog({
         <label htmlFor="edit-post-caption" className={`${EYEBROW} mt-4 block`}>
           Legenda
         </label>
-        <textarea
-          id="edit-post-caption"
-          value={caption}
-          onChange={(event) => setCaption(event.target.value)}
-          maxLength={CAPTION_LIMIT}
-          rows={3}
-          disabled={isSaving}
-          placeholder="Sem legenda"
-          className={`${FIELD} mt-2 resize-none rounded-2xl`}
-        />
+        <div className="relative mt-2">
+          <textarea
+            ref={captionRef}
+            id="edit-post-caption"
+            value={caption}
+            onChange={(event) => setCaption(event.target.value)}
+            maxLength={CAPTION_LIMIT}
+            rows={3}
+            disabled={isSaving}
+            placeholder="Sem legenda"
+            className={`${FIELD} resize-none rounded-2xl pr-14`}
+          />
+          <div className="absolute bottom-2.5 right-2.5">
+            <EmojiPicker onSelect={insertCaptionEmoji} disabled={isSaving} />
+          </div>
+        </div>
         <p className="mt-1 text-right text-xs text-zinc-500">
           {caption.length}/{CAPTION_LIMIT}
         </p>
@@ -329,6 +355,8 @@ function EditPostDialog({
         <PhotoEditor
           file={editorFile.file}
           kind={editorFile.kind}
+          // Começa com a parte do card que o post já usa.
+          initialState={{ ...DEFAULT_PHOTO_EDIT, muralFocus: media?.focus ?? post.cardFocus ?? 0.5 }}
           onCancel={closeEditor}
           onDone={(result: PhotoEditResult) => {
             setMedia({
@@ -340,6 +368,7 @@ function EditPostDialog({
               height: result.height,
               duration: null,
               crop: null,
+              focus: result.state.muralFocus,
             });
             setEditorFile(null);
           }}
@@ -354,6 +383,7 @@ function EditPostDialog({
               height: result.height,
               duration: current.duration,
               crop: result.crop,
+              focus: result.state.muralFocus,
             });
             setEditorFile(null);
           }}
@@ -661,6 +691,10 @@ export function AdminMural() {
                     <a href={post.fullUrl} target="_blank" rel="noopener noreferrer" className="safari-clip relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f6edd7]">
                       <img src={post.thumbUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                       {post.mediaType === 'video' ? <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[0.6rem] text-white">vídeo</span> : null}
+                      {/* Post com várias fotos/vídeos (carrossel). */}
+                      {post.media && post.media.length > 1 ? (
+                        <span className="absolute right-1 top-1 rounded bg-black/60 px-1 text-[0.6rem] font-semibold text-white">1/{post.media.length}</span>
+                      ) : null}
                     </a>
                     <div className="min-w-0 flex-1 text-sm">
                       <p className="truncate font-medium text-zinc-800">
@@ -679,7 +713,7 @@ export function AdminMural() {
                     <div className="flex flex-col items-end gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setEditingPost({ id: post.id, authorName: post.authorName, caption: post.caption ?? '', thumbUrl: post.thumbUrl, fullUrl: post.fullUrl, mediaType: post.mediaType })}
+                        onClick={() => setEditingPost({ id: post.id, authorName: post.authorName, caption: post.caption ?? '', thumbUrl: post.thumbUrl, fullUrl: post.fullUrl, mediaType: post.mediaType, cardFocus: post.cardFocus })}
                         className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
                       >
                         Editar

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, isAdminRequestAuthorized } from '@/lib/admin-auth';
 import { db } from '@/lib/db';
 import { destroyMedia, isCloudinaryConfigured, readVideoCrop, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
-import { CAPTION_MAX_LENGTH, cleanText, ensureMuralSchema, getMuralSettings, listPosts, readAuthorName } from '@/lib/mural';
+import { CAPTION_MAX_LENGTH, cleanText, ensureMuralSchema, getMuralSettings, listExtraMediaFiles, listPosts, readAuthorName, readCardFocus } from '@/lib/mural';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
         }
         const toInt = (value: unknown) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value)) : null);
         await db.query(
-          `UPDATE mural_posts SET author_name = $2, caption = $3, public_id = $4, media_type = $5, media_crop = $6, width = $7, height = $8, duration = $9 WHERE id::text = $1`,
+          `UPDATE mural_posts SET author_name = $2, caption = $3, public_id = $4, media_type = $5, media_crop = $6, width = $7, height = $8, duration = $9, card_focus = $10 WHERE id::text = $1`,
           [
             postId,
             authorName,
@@ -116,6 +116,7 @@ export async function PATCH(request: NextRequest) {
             toInt(media?.width),
             toInt(media?.height),
             kind === 'video' && Number.isFinite(Number(media?.duration)) ? Number(media.duration) : null,
+            readCardFocus(media?.focus),
           ]
         );
         // O arquivo antigo sai do Cloudinary (curtidas e comentários continuam no post).
@@ -155,6 +156,8 @@ export async function DELETE(request: NextRequest) {
       return result.rowCount ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Comentário não encontrado.' }, { status: 404 });
     }
 
+    // Fotos/vídeos a mais do carrossel: os arquivos também saem do Cloudinary.
+    const extraFiles = await listExtraMediaFiles(String(body?.postId ?? ''));
     const result = await db.query<{ public_id: string; media_type: MediaKind }>(
       'DELETE FROM mural_posts WHERE id::text = $1 RETURNING public_id, media_type',
       [String(body?.postId ?? '')]
@@ -164,6 +167,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Post não encontrado.' }, { status: 404 });
     }
     const fileRemoved = await destroyMedia(removed.media_type, removed.public_id).catch(() => false);
+    for (const file of extraFiles) await destroyMedia(file.media_type, file.public_id).catch(() => false);
     return NextResponse.json({ ok: true, fileRemoved });
   } catch (error) {
     console.error('Falha ao excluir do mural (admin)', error);

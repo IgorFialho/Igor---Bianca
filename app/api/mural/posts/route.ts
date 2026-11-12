@@ -6,8 +6,11 @@ import {
   CAPTION_MAX_LENGTH,
   MAX_POSTS_PER_DAY,
   MAX_POSTS_PER_IP_PER_HOUR,
+  MAX_MEDIA_PER_POST,
   POST_DELETE_WINDOW_SECONDS,
   cleanText,
+  listExtraMediaFiles,
+  readCardFocus,
   ensureMuralSchema,
   getMuralSettings,
   readAuthorName,
@@ -47,6 +50,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Envio inválido. Tente de novo.' }, { status: 400 });
     }
 
+    // Carrossel: fotos/vídeos a mais (também conferidos no Cloudinary), até 10 no total.
+    const extraRaw: unknown[] = Array.isArray(body?.extra) ? body.extra : [];
+    if (extraRaw.length > MAX_MEDIA_PER_POST - 1) {
+      return NextResponse.json({ error: `No máximo ${MAX_MEDIA_PER_POST} fotos ou vídeos por post.` }, { status: 400 });
+    }
+    const extra = extraRaw.map((value) => {
+      const item = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+      const itemKind: MediaKind = item.resourceType === 'video' ? 'video' : 'image';
+      const itemId = typeof item.publicId === 'string' ? item.publicId : '';
+      const itemVersion = typeof item.version === 'string' || typeof item.version === 'number' ? item.version : '';
+      const itemSignature = typeof item.signature === 'string' ? item.signature : '';
+      return {
+        valid: Boolean(itemId) && itemId !== publicId && verifyUploadResponse(itemId, itemVersion, itemSignature),
+        kind: itemKind,
+        publicId: itemId,
+        width: toInt(item.width),
+        height: toInt(item.height),
+        duration: itemKind === 'video' && Number.isFinite(Number(item.duration)) ? Number(item.duration) : null,
+        crop: itemKind === 'video' ? readVideoCrop(item.crop) : null,
+        focus: readCardFocus(item.focus),
+      };
+    });
+    if (extra.some((item) => !item.valid) || new Set(extra.map((item) => item.publicId)).size !== extra.length) {
+      return NextResponse.json({ error: 'Envio inválido. Tente de novo.' }, { status: 400 });
+    }
+
     await ensureMuralSchema();
     const ip = requestIp(request.headers);
     const limits = await db.query<{ by_device: number; by_ip: number }>(
@@ -68,8 +97,8 @@ export async function POST(request: NextRequest) {
     const duration = Number.isFinite(Number(body?.duration)) ? Number(body.duration) : null;
     const result = await db.query<{ id: string }>(
       `
-        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, media_crop, caption, media_type, public_id, width, height, duration, ip)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, media_crop, caption, media_type, public_id, width, height, duration, ip, card_focus)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (public_id) DO NOTHING
         RETURNING id::text
       `,
@@ -87,9 +116,22 @@ export async function POST(request: NextRequest) {
         toInt(body?.height),
         duration,
         ip,
+        // Parte da foto escolhida no editor para aparecer no card.
+        readCardFocus(body?.focus),
       ]
     );
-    return NextResponse.json({ ok: true, id: result.rows[0]?.id ?? null });
+    const postId = result.rows[0]?.id ?? null;
+    if (postId) {
+      for (let index = 0; index < extra.length; index += 1) {
+        const item = extra[index];
+        await db.query(
+          `INSERT INTO mural_post_media (post_id, position, media_type, public_id, width, height, duration, media_crop, card_focus)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (public_id) DO NOTHING`,
+          [postId, index + 1, item.kind, item.publicId, item.width, item.height, item.duration, item.crop, item.focus]
+        );
+      }
+    }
+    return NextResponse.json({ ok: true, id: postId });
   } catch (error) {
     console.error('Falha ao publicar no mural', error);
     return NextResponse.json({ error: 'Erro ao publicar.' }, { status: 500 });
@@ -107,6 +149,8 @@ export async function DELETE(request: NextRequest) {
     }
     await ensureMuralSchema();
     const postId = String(body?.postId ?? '');
+    // Fotos/vídeos a mais do carrossel (as linhas saem junto com o post; os arquivos, logo abaixo).
+    const extraFiles = await listExtraMediaFiles(postId);
     const result = await db.query<{ public_id: string; media_type: MediaKind }>(
       `
         DELETE FROM mural_posts
@@ -123,6 +167,7 @@ export async function DELETE(request: NextRequest) {
         : NextResponse.json({ error: 'Post não encontrado.' }, { status: 404 });
     }
     await destroyMedia(removed.media_type, removed.public_id).catch(() => false);
+    for (const file of extraFiles) await destroyMedia(file.media_type, file.public_id).catch(() => false);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Falha ao apagar post do mural', error);

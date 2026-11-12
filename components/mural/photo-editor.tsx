@@ -1,8 +1,15 @@
 "use client";
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { Caveat, Great_Vibes, Oswald, Special_Elite } from 'next/font/google';
 import { Portal } from '@/components/home/portal';
+
+// Fontes extras do texto por cima da foto (além das do site), carregadas só quando o editor é usado.
+const scriptFont = Great_Vibes({ subsets: ['latin'], weight: '400', display: 'swap' });
+const handFont = Caveat({ subsets: ['latin'], weight: ['700'], display: 'swap' });
+const strongFont = Oswald({ subsets: ['latin'], weight: ['600'], display: 'swap' });
+const typewriterFont = Special_Elite({ subsets: ['latin'], weight: '400', display: 'swap' });
 
 // Editor de fotos do mural, no estilo do Instagram:
 // - enquadrar: formato (original, 1:1, 4:5, 16:9), arrastar a foto para posicionar e zoom (pinça, rolagem ou barra);
@@ -21,7 +28,7 @@ export type PhotoTextLayer = {
   /** Tamanho da letra, em fração da largura do quadro. */
   size: number;
   color: string;
-  style: 'classic' | 'simple';
+  style: TextFontKey;
   background: boolean;
   /** Cor do fundo (com `background`). Sem ela (edições antigas), o fundo usa `color` e o texto o contraste. */
   backgroundColor?: string;
@@ -44,11 +51,44 @@ export type PhotoEditState = {
   offsetX: number;
   offsetY: number;
   texts: PhotoTextLayer[];
+  /** Posição da área que aparece no card do mural, quando ele corta a foto (0 = topo/esquerda, 1 = base/direita). */
+  muralFocus?: number;
 };
 export type PhotoEditResult = { blob: Blob; width: number; height: number; state: PhotoEditState };
 /** Recorte de vídeo em frações do quadro original (0 a 1): o Cloudinary aplica ao processar o vídeo. */
 export type VideoCrop = { x: number; y: number; w: number; h: number };
 export type VideoCropResult = { crop: VideoCrop | null; width: number; height: number; state: PhotoEditState };
+
+/** Formatos que o card do mural mostra inteiros (como o Instagram): de retrato 4:5 a paisagem 1,91:1. */
+export const MURAL_MIN_RATIO = 0.8;
+export const MURAL_MAX_RATIO = 1.91;
+
+/** Proporção com que a mídia aparece no card do mural (fora da faixa, o card corta pelo centro). */
+export function muralCardRatio(width: number, height: number) {
+  return Math.min(MURAL_MAX_RATIO, Math.max(MURAL_MIN_RATIO, width / height));
+}
+
+/** Parte do quadro (em frações) que aparece no card do mural; focus posiciona a área (0.5 = centro). */
+function muralVisibleArea(ratio: number, focus = 0.5) {
+  const visible = muralCardRatio(ratio, 1);
+  const f = Math.min(1, Math.max(0, focus));
+  if (visible > ratio) {
+    const h = ratio / visible;
+    return { x: 0, y: (1 - h) * f, w: 1, h, axis: 'y' as const };
+  }
+  const w = visible / ratio;
+  return { x: (1 - w) * f, y: 0, w, h: 1, axis: 'x' as const };
+}
+
+/** Posição CSS (object-position) que mostra no card a mesma parte escolhida no editor. */
+export function muralObjectPosition(width: number | null | undefined, height: number | null | undefined, focus: number | null | undefined) {
+  const f = Math.round(Math.min(1, Math.max(0, focus ?? 0.5)) * 1000) / 10;
+  if (!width || !height) return '50% 50%';
+  const ratio = width / height;
+  if (ratio < MURAL_MIN_RATIO) return `50% ${f}%`;
+  if (ratio > MURAL_MAX_RATIO) return `${f}% 50%`;
+  return '50% 50%';
+}
 
 export const DEFAULT_PHOTO_EDIT: PhotoEditState = { aspect: 'original', zoom: 1, offsetX: 0, offsetY: 0, texts: [] };
 
@@ -73,6 +113,21 @@ const PHOTO_EMOJIS = [
   '😊', '🤩', '😎', '👏', '🙌', '🙏', '💯',
   '☀️', '🌙', '🍰', '🎂', '🦋', '👑', '💋', '🌺', '🎁',
 ];
+/** Fontes do texto: as do site (Clássico e Simples) e outras no mesmo clima de casamento. */
+export type TextFontKey = 'classic' | 'simple' | 'script' | 'hand' | 'strong' | 'typewriter';
+type TextFont = { key: TextFontKey; label: string; className: string; weight: number; italic: boolean; upper: boolean };
+const TEXT_FONTS: TextFont[] = [
+  { key: 'classic', label: 'Clássico', className: 'font-display', weight: 400, italic: true, upper: false },
+  { key: 'simple', label: 'Simples', className: 'font-sans', weight: 600, italic: false, upper: false },
+  { key: 'script', label: 'Romântico', className: scriptFont.className, weight: 400, italic: false, upper: false },
+  { key: 'hand', label: 'Manuscrito', className: handFont.className, weight: 700, italic: false, upper: false },
+  { key: 'strong', label: 'Destaque', className: strongFont.className, weight: 600, italic: false, upper: true },
+  { key: 'typewriter', label: 'Máquina', className: typewriterFont.className, weight: 400, italic: false, upper: false },
+];
+const fontOf = (key: TextFontKey | undefined) => TEXT_FONTS.find((font) => font.key === key) ?? TEXT_FONTS[0];
+/** Estilo CSS da fonte (peso, itálico e caixa alta), igual ao que o canvas desenha. */
+const fontStyle = (font: TextFont) =>
+  ({ fontWeight: font.weight, fontStyle: font.italic ? 'italic' : 'normal', textTransform: font.upper ? 'uppercase' : 'none' }) as const;
 const MAX_ZOOM = 4;
 const MAX_OUTPUT = 2048;
 const LINE_HEIGHT = 1.15;
@@ -226,6 +281,8 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
   const [emojiTray, setEmojiTray] = useState<'add' | 'insert' | null>(null);
   // Na edição do texto, a paleta pinta o texto ou o fundo.
   const [colorTarget, setColorTarget] = useState<ColorTarget>('text');
+  // Mostra no quadro a parte da foto que aparece no card do mural (o resto só aparece ao abrir a foto).
+  const [showMuralArea, setShowMuralArea] = useState(true);
 
   const [stage, setStage] = useState({ width: 0, height: 0 });
 
@@ -466,6 +523,39 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
     else setEditingId(null);
   };
 
+  // Arrastar a área clara (parte que aparece no card): só no sentido em que o card corta, sem sair da foto.
+  const areaDrag = useRef<{ pointerId: number; start: number; origin: number; span: number; axis: 'x' | 'y' } | null>(null);
+  const [isMovingArea, setIsMovingArea] = useState(false);
+  const onAreaPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!frameWidth) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const area = muralVisibleArea(ratio, state.muralFocus ?? 0.5);
+    const span = area.axis === 'y' ? (1 - area.h) * frameHeight : (1 - area.w) * frameWidth;
+    areaDrag.current = {
+      pointerId: event.pointerId,
+      start: area.axis === 'y' ? event.clientY : event.clientX,
+      origin: state.muralFocus ?? 0.5,
+      span: Math.max(1, span),
+      axis: area.axis,
+    };
+    setSelectedId(null);
+    setIsMovingArea(true);
+  };
+  const onAreaPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = areaDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const delta = (drag.axis === 'y' ? event.clientY : event.clientX) - drag.start;
+    const next = clamp(drag.origin + delta / drag.span, 0, 1);
+    // Ímã no centro: fica fácil voltar para o meio.
+    setState((value) => ({ ...value, muralFocus: Math.abs(next - 0.5) < 0.03 ? 0.5 : next }));
+  };
+  const onAreaPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (areaDrag.current?.pointerId !== event.pointerId) return;
+    areaDrag.current = null;
+    setIsMovingArea(false);
+  };
+
   const onTextPointerDown = (event: ReactPointerEvent<HTMLDivElement>, layer: PhotoTextLayer) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -537,18 +627,18 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
       context.drawImage(decoded.source, -decoded.width / 2, -decoded.height / 2);
       context.restore();
 
-      const classicFamily = fontFamilyOf('font-display');
       const simpleFamily = fontFamilyOf('font-sans');
+      const families = new Map<TextFontKey, string>();
       for (const layer of texts) {
         if (!layer.text.trim()) continue;
         const fontSize = layer.size * frameWidth * k;
         const paint = layerPaint(layer);
+        const textFont = fontOf(layer.style);
+        if (!families.has(textFont.key)) families.set(textFont.key, fontFamilyOf(textFont.className));
         const font =
           layer.kind === 'emoji'
             ? `400 ${fontSize}px ${simpleFamily}`
-            : layer.style === 'classic'
-              ? `italic 400 ${fontSize}px ${classicFamily}`
-              : `600 ${fontSize}px ${simpleFamily}`;
+            : `${textFont.italic ? 'italic ' : ''}${textFont.weight} ${fontSize}px ${families.get(textFont.key)}`;
         try {
           await document.fonts?.load(font, layer.text);
         } catch {
@@ -557,7 +647,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
         context.font = font;
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        const lines = layer.text.split('\n');
+        const lines = (layer.kind !== 'emoji' && textFont.upper ? layer.text.toUpperCase() : layer.text).split('\n');
         const lineHeight = fontSize * LINE_HEIGHT;
         const blockHeight = lineHeight * lines.length;
         // Desenha a partir do centro do texto, girado no ângulo escolhido (igual à pré-visualização).
@@ -626,6 +716,17 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
   const imageLeft = frameWidth / 2 + state.offsetX * frameWidth - displayWidth / 2;
   const imageTop = frameHeight / 2 + state.offsetY * frameHeight - displayHeight / 2;
   const isCentered = state.zoom === 1 && state.offsetX === 0 && state.offsetY === 0;
+  const muralArea = muralVisibleArea(ratio, state.muralFocus ?? 0.5);
+  const muralCrops = muralArea.w < 0.995 || muralArea.h < 0.995;
+  const muralLabel = muralArea.h < 1 ? 'retrato 4:5' : 'paisagem 1,91:1';
+  // Texto/figurinha com o centro fora da parte que aparece no card.
+  const textOutsideMural =
+    muralCrops &&
+    texts.some(
+      (layer) =>
+        layer.text.trim() &&
+        (layer.x < muralArea.x || layer.x > muralArea.x + muralArea.w || layer.y < muralArea.y || layer.y > muralArea.y + muralArea.h)
+    );
 
   return (
     <Portal>
@@ -694,14 +795,67 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                 <span className="absolute inset-x-0 top-2/3 h-px bg-white/50" />
               </div>
 
+              {/* Área que aparece no card do mural: o resto fica escurecido (só aparece ao abrir a foto). */}
+              {muralCrops && showMuralArea ? (
+                <div
+                  role="slider"
+                  aria-label="Área que aparece no mural: arraste para escolher"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round((state.muralFocus ?? 0.5) * 100)}
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    const back = muralArea.axis === 'y' ? 'ArrowUp' : 'ArrowLeft';
+                    const forward = muralArea.axis === 'y' ? 'ArrowDown' : 'ArrowRight';
+                    if (event.key !== back && event.key !== forward) return;
+                    event.preventDefault();
+                    const step = event.key === forward ? 0.05 : -0.05;
+                    setState((value) => ({ ...value, muralFocus: clamp((value.muralFocus ?? 0.5) + step, 0, 1) }));
+                  }}
+                  onPointerDown={onAreaPointerDown}
+                  onPointerMove={onAreaPointerMove}
+                  onPointerUp={onAreaPointerUp}
+                  onPointerCancel={onAreaPointerUp}
+                  className={`absolute z-[5] touch-none rounded-[2px] border-2 border-dashed focus:outline-none focus-visible:border-[#e7c88a] ${
+                    isMovingArea ? 'cursor-grabbing border-white' : `border-white/80 ${muralArea.axis === 'y' ? 'cursor-ns-resize' : 'cursor-ew-resize'}`
+                  }`}
+                  style={{
+                    left: muralArea.x * frameWidth,
+                    top: muralArea.y * frameHeight,
+                    width: muralArea.w * frameWidth,
+                    height: muralArea.h * frameHeight,
+                    boxShadow: `0 0 0 9999px rgba(0,0,0,${isMovingArea ? 0.4 : 0.55})`,
+                    transition: isMovingArea ? 'box-shadow 0.2s' : 'top 0.3s, left 0.3s, width 0.3s, height 0.3s, box-shadow 0.2s',
+                  }}
+                >
+                  <span className="pointer-events-none absolute left-1/2 top-2 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-black/60 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-white/90 backdrop-blur-sm">
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                      {muralArea.axis === 'y' ? (
+                        <path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+                      ) : (
+                        <path d="M3 12h18M8 7l-5 5 5 5M16 7l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+                      )}
+                    </svg>
+                    Aparece no mural
+                  </span>
+                  {/* Pegador no meio da borda que pode andar. */}
+                  <span
+                    className={`pointer-events-none absolute rounded-full bg-white/90 shadow ${
+                      muralArea.axis === 'y' ? 'bottom-[-5px] left-1/2 h-[8px] w-10 -translate-x-1/2' : 'right-[-5px] top-1/2 h-10 w-[8px] -translate-y-1/2'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </div>
+              ) : null}
+
               {texts.map((layer) => {
                 if (layer.id === editingId) return null;
                 const paint = layerPaint(layer);
                 return (
                   <div
                     key={layer.id}
-                    className={`absolute cursor-move touch-none whitespace-pre text-center ${
-                      layer.kind === 'emoji' ? 'font-sans' : layer.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'
+                    className={`absolute z-10 cursor-move touch-none whitespace-pre text-center ${
+                      layer.kind === 'emoji' ? 'font-sans' : fontOf(layer.style).className
                     } ${layer.id === selectedId ? 'outline outline-1 outline-offset-4 outline-white/70' : ''}`}
                     style={{
                       left: layer.x * frameWidth,
@@ -709,6 +863,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                       transform: `translate(-50%, -50%) rotate(${layer.rotation ?? 0}deg)`,
                       fontSize: layer.size * frameWidth,
                       lineHeight: LINE_HEIGHT,
+                      ...(layer.kind === 'emoji' ? {} : fontStyle(fontOf(layer.style))),
                       ...layerTextStyle(paint),
                     }}
                     onPointerDown={(event) => onTextPointerDown(event, layer)}
@@ -734,6 +889,25 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
               <button type="button" onClick={() => removeText(selected.id)} className="rounded-full bg-rose-500/20 px-3 py-1.5 text-rose-100 hover:bg-rose-500/30">
                 {selected.kind === 'emoji' ? 'Remover emoji' : 'Remover texto'}
               </button>
+            </div>
+          ) : null}
+          {/* Como a foto aparece no card do mural (só quando o card vai cortar a foto). */}
+          {decoded && frameWidth && muralCrops ? (
+            <div className="flex flex-wrap items-center justify-center gap-2 text-center text-xs">
+              <span className="text-white/75">
+                No mural, o card mostra só a área clara ({muralLabel}): arraste-a para escolher a parte da foto. Ao abrir a foto, ela aparece inteira.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowMuralArea((value) => !value)}
+                aria-pressed={showMuralArea}
+                className={`rounded-full px-3 py-1 font-medium transition-colors ${showMuralArea ? 'bg-white text-zinc-900' : 'bg-white/10 text-white hover:bg-white/20'}`}
+              >
+                {showMuralArea ? 'Esconder área' : 'Ver área do mural'}
+              </button>
+              {textOutsideMural ? (
+                <span className="w-full text-amber-200">Algum texto ou emoji ficou fora da área do mural: só aparece ao abrir a foto.</span>
+              ) : null}
             </div>
           ) : null}
           <div className="flex items-center justify-center gap-2">
@@ -830,29 +1004,36 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                 <button type="button" onClick={() => removeText(editing.id)} className="rounded-full px-3 py-2 text-sm text-rose-200 hover:bg-white/10">
                   Remover
                 </button>
-                {editing.kind !== 'emoji' ? (
-                  <div className="flex gap-1.5">
-                    {(['classic', 'simple'] as const).map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        onClick={() => updateText(editing.id, { style })}
-                        aria-pressed={editing.style === style}
-                        className={`rounded-full px-3 py-1.5 text-xs ${editing.style === style ? 'bg-white text-zinc-900' : 'bg-white/10 text-white/80'} ${
-                          style === 'classic' ? 'font-display text-sm italic' : 'font-semibold'
-                        }`}
-                      >
-                        {style === 'classic' ? 'Clássico' : 'Simples'}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-white/80">Figurinha</p>
-                )}
+                <p className="text-sm text-white/80">{editing.kind === 'emoji' ? 'Figurinha' : 'Texto'}</p>
                 <button type="button" onClick={finishEditing} className="rounded-full bg-champagne-600 px-4 py-2 text-sm font-medium text-[#fff9f1]">
                   Pronto
                 </button>
               </div>
+              {editing.kind !== 'emoji' ? (
+                // Fontes: cada botão já mostra o nome na própria fonte (como no Instagram).
+                <div className="flex justify-center px-3">
+                  <div className="flex max-w-full gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="radiogroup" aria-label="Fonte do texto">
+                    {TEXT_FONTS.map((font) => {
+                      const active = fontOf(editing.style).key === font.key;
+                      return (
+                        <button
+                          key={font.key}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => updateText(editing.id, { style: font.key })}
+                          className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[0.95rem] leading-tight transition-colors ${font.className} ${
+                            active ? 'bg-white text-zinc-900' : 'bg-white/10 text-white/85 hover:bg-white/20'
+                          }`}
+                          style={fontStyle(font)}
+                        >
+                          {font.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6">
                 {editing.kind === 'emoji' ? (
@@ -866,10 +1047,11 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                 ) : (
                   // O campo cresce com o texto (cópia invisível ao lado define o tamanho), então o fundo abraça as letras.
                   <div
-                    className={`inline-grid max-w-full text-center ${editing.style === 'classic' ? 'font-display italic' : 'font-sans font-semibold'}`}
+                    className={`inline-grid max-w-full text-center ${fontOf(editing.style).className}`}
                     style={{
                       fontSize: clamp(editing.size * 420, 18, 44),
                       lineHeight: LINE_HEIGHT,
+                      ...fontStyle(fontOf(editing.style)),
                       ...layerTextStyle(layerPaint(editing)),
                       transform: `rotate(${editing.rotation ?? 0}deg)`,
                     }}
@@ -886,7 +1068,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
                       cols={1}
                       placeholder="Escreva algo…"
                       className="min-w-0 resize-none overflow-hidden bg-transparent p-0 text-center [font:inherit] [grid-area:1/1] placeholder:text-white/40 focus:outline-none"
-                      style={{ color: 'inherit', WebkitTextStroke: 'inherit', paintOrder: 'inherit', textShadow: 'inherit', lineHeight: 'inherit' }}
+                      style={{ color: 'inherit', WebkitTextStroke: 'inherit', paintOrder: 'inherit', textShadow: 'inherit', lineHeight: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
                     />
                   </div>
                 )}
@@ -1043,6 +1225,10 @@ function ColorPicker({
     target === 'text' ? paint.fg : target === 'background' ? paint.bg : target === 'outline' ? paint.stroke : paint.box;
   const width = target === 'outline' ? paint.strokeWidth : paint.boxWidth;
   const isPreset = current ? TEXT_COLORS.includes(current.toLowerCase()) : true;
+  const [customOpen, setCustomOpen] = useState(false);
+  const customButtonRef = useRef<HTMLButtonElement>(null);
+  // Trocar de aba fecha o painel de cor livre.
+  useEffect(() => setCustomOpen(false), [target]);
 
   // Carrossel de cores: setas nas pontas (somem quando não há mais para onde rolar) e bordas esmaecidas.
   const rowRef = useRef<HTMLDivElement>(null);
@@ -1076,7 +1262,27 @@ function ColorPicker({
     'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-opacity hover:bg-white/20 disabled:pointer-events-none disabled:opacity-25';
 
   return (
-    <div className="space-y-2.5">
+    <div className="relative space-y-2.5">
+      {/* Painel de cor livre (no lugar do seletor do sistema). */}
+      <AnimatePresence>
+        {customOpen ? (
+          <motion.div
+            key="custom-color"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="absolute inset-x-0 bottom-full z-20 mb-2"
+          >
+            <CustomColorPanel
+              value={current && /^#[0-9a-f]{6}$/i.test(current) ? current : '#ffffff'}
+              onChange={(color) => onPick(color)}
+              onClose={() => setCustomOpen(false)}
+              ignoreRef={customButtonRef}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
       <div className="flex flex-wrap justify-center gap-1.5">
         {COLOR_TARGETS.map((item) => (
           <button
@@ -1122,20 +1328,23 @@ function ColorPicker({
             style={{ backgroundColor: color }}
           />
         ))}
-        {/* Cor livre: abre o seletor de cores do aparelho. */}
-        <label
-          className={`relative h-8 w-8 shrink-0 snap-start cursor-pointer rounded-full border-2 transition-transform ${current && !isPreset ? 'scale-110 border-white' : 'border-white/40'}`}
+        {/* Cor livre: abre o painel de cores do editor. */}
+        <button
+          ref={customButtonRef}
+          type="button"
+          onClick={() => setCustomOpen((open) => !open)}
+          aria-label="Outra cor"
+          aria-expanded={customOpen}
+          className={`relative h-8 w-8 shrink-0 snap-start rounded-full border-2 transition-transform ${
+            (current && !isPreset) || customOpen ? 'scale-110 border-white' : 'border-white/40'
+          }`}
           style={{ background: current && !isPreset ? current : 'conic-gradient(#ff5f5f, #ffd84d, #7ed957, #4dc9ff, #8a6bff, #ff5fd2, #ff5f5f)' }}
           title="Outra cor"
         >
-          <span className="sr-only">Outra cor</span>
-          <input
-            type="color"
-            value={current && /^#[0-9a-f]{6}$/i.test(current) ? current : '#ffffff'}
-            onChange={(event) => onPick(event.target.value)}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-        </label>
+          {current && !isPreset ? (
+            <span className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-zinc-900" style={{ background: 'conic-gradient(#ff5f5f, #ffd84d, #7ed957, #4dc9ff, #8a6bff, #ff5fd2, #ff5f5f)' }} aria-hidden="true" />
+          ) : null}
+        </button>
       </div>
       <button type="button" onClick={() => scrollColors(1)} disabled={!edges.right} aria-label="Mais cores" className={arrowClass}>
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -1161,6 +1370,207 @@ function ColorPicker({
           />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// ---------- Painel de cor livre ----------
+type Hsv = { h: number; s: number; v: number };
+
+function hexToHsv(hex: string): Hsv {
+  const value = parseInt(hex.slice(1), 16);
+  const r = ((value >> 16) & 255) / 255;
+  const g = ((value >> 8) & 255) / 255;
+  const b = (value & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+function hsvToHex({ h, s, v }: Hsv) {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    const channel = v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+    return Math.round(channel * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${f(5)}${f(3)}${f(1)}`;
+}
+
+/** Painel de cor no estilo do editor: quadrado de tom/brilho, barra de cores, código HEX e prévia. */
+function CustomColorPanel({
+  value,
+  onChange,
+  onClose,
+  ignoreRef,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  onClose: () => void;
+  ignoreRef: RefObject<HTMLElement>;
+}) {
+  const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
+  const [hexDraft, setHexDraft] = useState(value.toUpperCase());
+  const panelRef = useRef<HTMLDivElement>(null);
+  const hex = hsvToHex(hsv);
+
+  // Cor escolhida pela paleta enquanto o painel está aberto: acompanha.
+  useEffect(() => {
+    if (value.toLowerCase() !== hsvToHex(hsv)) {
+      setHsv(hexToHsv(value));
+      setHexDraft(value.toUpperCase());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  // Fecha ao tocar fora (menos no botão que abre o painel).
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target) || ignoreRef.current?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, [onClose, ignoreRef]);
+
+  const apply = (next: Hsv) => {
+    setHsv(next);
+    const nextHex = hsvToHex(next);
+    setHexDraft(nextHex.toUpperCase());
+    onChange(nextHex);
+  };
+
+  /** Arrastar dentro de um elemento: devolve a posição em frações (0 a 1). */
+  const dragOn = (event: ReactPointerEvent<HTMLDivElement>, handle: (x: number, y: number) => void) => {
+    const element = event.currentTarget;
+    element.setPointerCapture(event.pointerId);
+    const read = (clientX: number, clientY: number) => {
+      const rect = element.getBoundingClientRect();
+      handle(clamp((clientX - rect.left) / rect.width, 0, 1), clamp((clientY - rect.top) / rect.height, 0, 1));
+    };
+    read(event.clientX, event.clientY);
+    const move = (moveEvent: PointerEvent) => read(moveEvent.clientX, moveEvent.clientY);
+    const up = () => {
+      element.removeEventListener('pointermove', move);
+      element.removeEventListener('pointerup', up);
+      element.removeEventListener('pointercancel', up);
+    };
+    element.addEventListener('pointermove', move);
+    element.addEventListener('pointerup', up);
+    element.addEventListener('pointercancel', up);
+  };
+
+  const commitHex = (text: string) => {
+    const clean = text.trim().replace(/^#?/, '#');
+    const full = /^#[0-9a-f]{3}$/i.test(clean) ? `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}` : clean;
+    if (/^#[0-9a-f]{6}$/i.test(full)) apply(hexToHsv(full.toLowerCase()));
+    else setHexDraft(hex.toUpperCase());
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label="Escolher outra cor"
+      className="mx-auto max-w-sm space-y-3 rounded-2xl border border-white/10 bg-zinc-900/95 p-3 shadow-2xl backdrop-blur"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-white/70">Outra cor</p>
+        <button type="button" onClick={onClose} aria-label="Fechar" className="rounded-full px-2 py-0.5 text-sm text-white/70 hover:bg-white/10">
+          ✕
+        </button>
+      </div>
+
+      {/* Tom e brilho */}
+      <div
+        className="relative h-36 cursor-crosshair touch-none overflow-hidden rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e7c88a]/60"
+        style={{ backgroundColor: `hsl(${hsv.h}, 100%, 50%)` }}
+        onPointerDown={(event) => dragOn(event, (x, y) => apply({ ...hsv, s: x, v: 1 - y }))}
+        role="slider"
+        aria-label="Intensidade e brilho"
+        aria-valuetext={hex}
+        aria-valuenow={Math.round(hsv.s * 100)}
+        tabIndex={0}
+        onKeyDown={(event) => {
+          const step = 0.04;
+          const moves: Record<string, Partial<Hsv>> = {
+            ArrowLeft: { s: clamp(hsv.s - step, 0, 1) },
+            ArrowRight: { s: clamp(hsv.s + step, 0, 1) },
+            ArrowUp: { v: clamp(hsv.v + step, 0, 1) },
+            ArrowDown: { v: clamp(hsv.v - step, 0, 1) },
+          };
+          if (!moves[event.key]) return;
+          event.preventDefault();
+          apply({ ...hsv, ...moves[event.key] });
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black to-transparent" />
+        <span
+          className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.4)]"
+          style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundColor: hex }}
+        />
+      </div>
+
+      {/* Barra de cores */}
+      <div
+        className="relative mx-2.5 h-4 cursor-pointer touch-none rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e7c88a]/60"
+        style={{ background: 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' }}
+        onPointerDown={(event) => dragOn(event, (x) => apply({ ...hsv, h: Math.min(359.9, x * 360) }))}
+        role="slider"
+        aria-label="Cor"
+        aria-valuemin={0}
+        aria-valuemax={360}
+        aria-valuenow={Math.round(hsv.h)}
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          apply({ ...hsv, h: clamp(hsv.h + (event.key === 'ArrowRight' ? 6 : -6), 0, 359.9) });
+        }}
+      >
+        <span
+          className="pointer-events-none absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_2px_6px_rgba(0,0,0,0.4)]"
+          style={{ left: `${(hsv.h / 360) * 100}%`, backgroundColor: `hsl(${hsv.h}, 100%, 50%)` }}
+        />
+      </div>
+
+      {/* Prévia e código */}
+      <div className="flex items-center gap-2.5">
+        <span className="h-9 w-9 shrink-0 rounded-full border-2 border-white/60 shadow-inner" style={{ backgroundColor: hex }} aria-hidden="true" />
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white/10 px-3 py-2 focus-within:ring-2 focus-within:ring-[#e7c88a]/50">
+          <span className="text-xs font-medium text-white/50">HEX</span>
+          <input
+            value={hexDraft}
+            onChange={(event) => setHexDraft(event.target.value.toUpperCase().slice(0, 7))}
+            onBlur={(event) => commitHex(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitHex(event.currentTarget.value);
+              }
+            }}
+            spellCheck={false}
+            autoCapitalize="characters"
+            aria-label="Código da cor (HEX)"
+            className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider text-white focus:outline-none"
+          />
+        </label>
+        <button type="button" onClick={onClose} className="shrink-0 rounded-full bg-champagne-600 px-4 py-2 text-xs font-medium text-[#fff9f1]">
+          Pronto
+        </button>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,24 @@ export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export type MuralAuthorRole = 'noivo' | 'noiva';
 export type MuralAdminView = { role: MuralAuthorRole; name: string };
 
+/** Uma foto/vídeo de um post com várias (carrossel). */
+export type MuralMediaItemView = {
+  mediaType: 'image' | 'video';
+  thumbUrl: string;
+  fullUrl: string;
+  posterUrl: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  cardFocus: number;
+};
+
+/** Máximo de fotos/vídeos num post (igual ao servidor). */
+export const MAX_MEDIA_PER_POST = 10;
+
 export type MuralPostView = {
+  /** Todas as mídias do post (a 1ª é a do próprio post); mais de uma = carrossel. */
+  media?: MuralMediaItemView[];
   id: string;
   authorName: string;
   authorRole: MuralAuthorRole | null;
@@ -22,6 +39,8 @@ export type MuralPostView = {
   fullUrl: string;
   posterUrl: string | null;
   width: number | null;
+  /** Parte da mídia que aparece no card quando ele corta (0 a 1; 0.5 = centro). */
+  cardFocus?: number;
   height: number | null;
   duration: number | null;
   createdAt: string;
@@ -44,6 +63,9 @@ export type MuralCommentView = {
   isMine: boolean;
   isHidden: boolean;
   deleteSecondsLeft: number;
+  /** Curtidas do comentário e se este aparelho curtiu. */
+  likes?: number;
+  likedByMe?: boolean;
 };
 
 export type MuralSettingsView = {

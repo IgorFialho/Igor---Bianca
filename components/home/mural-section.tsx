@@ -50,7 +50,7 @@ export function MuralSection({ id, eyebrow, title, text, ctaLabel, headingClassN
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      fetch('/api/mural', { cache: 'no-store' })
+      fetch('/api/mural?limit=30', { cache: 'no-store' })
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => {
           if (cancelled || !Array.isArray(data?.posts)) return;

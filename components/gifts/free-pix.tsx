@@ -4,9 +4,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { Portal } from '@/components/home/portal';
 import { Reveal } from '@/components/home/reveal';
+import { INVITE_ACCESS_KEY } from '@/lib/invite';
 
-// Pix avulso: presente em dinheiro com o valor que o convidado quiser (ou em aberto, digitado no app do banco).
-// Usa o mesmo gerador de Pix da lista (/api/gifts/pix): QR Code + "copia e cola", direto na conta dos noivos.
+/** Mesmo nome lembrado pela lista de presentes (quem já presenteou não precisa digitar de novo). */
+const GUEST_NAME_KEY = 'igor-bianca-gift-guest-name';
+const FIELD =
+  'w-full rounded-3xl border border-zinc-800/15 bg-cream px-5 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:border-champagne-600 focus:outline-none focus:ring-2 focus:ring-champagne-600/20';
+
+// Pix avulso: presente em dinheiro com o valor que o convidado escolher. Usa o mesmo gerador de Pix da lista
+// (/api/gifts/pix): QR Code + "copia e cola", direto na conta dos noivos. Depois de pagar, o convidado informa o nome
+// e toca em "Já fiz o Pix": o registro (nome, valor, recado) aparece no painel para os noivos conferirem.
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
@@ -19,7 +26,8 @@ const SECONDARY =
 const QUICK_AMOUNTS = [50, 100, 200, 500];
 
 type PixData = { payload: string; qrSvg: string; receiverName: string };
-type Choice = { kind: 'quick'; value: number } | { kind: 'other' } | { kind: 'open' };
+type Choice = { kind: 'quick'; value: number } | { kind: 'other' };
+type Step = 'amount' | 'pix' | 'confirm' | 'thanks';
 
 function formatPrice(cents: number) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -50,7 +58,11 @@ export function FreePix() {
   const [choice, setChoice] = useState<Choice>({ kind: 'quick', value: 100 });
   const [other, setOther] = useState('');
   const [pix, setPix] = useState<PixData | null>(null);
-  const [amountShown, setAmountShown] = useState<number | null>(null);
+  const [amountShown, setAmountShown] = useState<number>(0);
+  const [step, setStep] = useState<Step>('amount');
+  const [guestName, setGuestName] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -72,29 +84,75 @@ export function FreePix() {
   const open = () => {
     setIsOpen(true);
     setPix(null);
+    setStep('amount');
     setError('');
     setCopied(false);
+    setMessage('');
+    try {
+      setGuestName((current) => current || window.localStorage.getItem(GUEST_NAME_KEY) || '');
+    } catch {
+      // Sem armazenamento: a pessoa digita o nome.
+    }
+  };
+
+  // "Já fiz o Pix": registra nome e valor para os noivos conferirem no painel.
+  const askConfirm = () => {
+    if (guestName.trim().length < 2) {
+      setError('Informe seu nome para os noivos saberem quem presenteou.');
+      document.getElementById('free-pix-name')?.focus();
+      return;
+    }
+    setError('');
+    setStep('confirm');
+  };
+  const sendConfirmation = async () => {
+    const name = guestName.trim();
+    setIsSending(true);
+    setError('');
+    try {
+      try {
+        window.localStorage.setItem(GUEST_NAME_KEY, name);
+      } catch {
+        // Lembrar o nome é só conveniência.
+      }
+      const response = await fetch('/api/gifts/free-pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestName: name,
+          amountCents: amountShown,
+          message: message.trim() || undefined,
+          inviteCode: window.sessionStorage.getItem(INVITE_ACCESS_KEY) || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'Não foi possível registrar.');
+      setStep('thanks');
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : 'Não foi possível registrar.');
+      setStep('pix');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const generate = async () => {
-    let amount: number | null = null;
-    if (choice.kind === 'quick') amount = choice.value * 100;
-    if (choice.kind === 'other') {
-      amount = parseAmount(other);
-      if (!amount || amount < 100) {
-        setError('Digite um valor a partir de R$ 1,00.');
-        otherRef.current?.focus();
-        return;
-      }
+    let amount = choice.kind === 'quick' ? choice.value * 100 : parseAmount(other);
+    if (!amount || amount < 100) {
+      setError('Digite um valor a partir de R$ 1,00.');
+      otherRef.current?.focus();
+      return;
     }
+    if (amount > 10_000_000) amount = 10_000_000;
     setError('');
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/gifts/pix?amount=${amount ?? 'open'}`, { cache: 'no-store' });
+      const response = await fetch(`/api/gifts/pix?amount=${amount}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || 'Erro ao gerar o Pix.');
       setPix(data);
       setAmountShown(amount);
+      setStep('pix');
     } catch (generateError) {
       setError(generateError instanceof Error ? generateError.message : 'Erro ao gerar o Pix.');
     } finally {
@@ -188,14 +246,14 @@ export function FreePix() {
                     </span>
                     <p className={`${EYEBROW} mt-3`}>Pix avulso</p>
                     <h2 className="mt-2 font-display text-4xl leading-tight">Presente com carinho</h2>
-                    {pix ? (
-                      <p className="mt-2 text-2xl text-champagne-700">{amountShown ? formatPrice(amountShown) : 'Valor em aberto'}</p>
+                    {step !== 'amount' ? (
+                      <p className="mt-2 text-2xl text-champagne-700">{formatPrice(amountShown)}</p>
                     ) : (
                       <p className="mx-auto mt-3 max-w-sm text-sm text-zinc-600">Escolha quanto quer enviar. O valor vai direto para a conta dos noivos.</p>
                     )}
                   </div>
 
-                  {!pix ? (
+                  {step === 'amount' ? (
                     <div className="space-y-5">
                       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4" role="radiogroup" aria-label="Valor do Pix">
                         {QUICK_AMOUNTS.map((value) => {
@@ -245,36 +303,13 @@ export function FreePix() {
                         />
                       </label>
 
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={choice.kind === 'open'}
-                        onClick={() => {
-                          setChoice({ kind: 'open' });
-                          setError('');
-                        }}
-                        className={`mx-auto flex items-center gap-2 text-sm transition-colors ${
-                          choice.kind === 'open' ? 'font-medium text-champagne-700' : 'text-zinc-600 hover:text-zinc-800'
-                        }`}
-                      >
-                        <span
-                          className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                            choice.kind === 'open' ? 'border-champagne-600 bg-champagne-600' : 'border-zinc-800/30'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {choice.kind === 'open' ? <span className="h-1.5 w-1.5 rounded-full bg-[#fff9f1]" /> : null}
-                        </span>
-                        Prefiro digitar o valor no app do banco
-                      </button>
-
                       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
 
                       <button type="button" onClick={generate} disabled={isLoading} className={`${PRIMARY} w-full`}>
                         {isLoading ? 'Gerando o Pix…' : 'Gerar Pix'}
                       </button>
                     </div>
-                  ) : (
+                  ) : step === 'pix' && pix ? (
                     <motion.div className="space-y-5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }}>
                       <div
                         className="mx-auto w-52 overflow-hidden rounded-2xl border border-zinc-800/10 [&_svg]:h-auto [&_svg]:w-full"
@@ -288,21 +323,81 @@ export function FreePix() {
                           {copied ? 'Código copiado ✓' : 'Copiar código Pix'}
                         </button>
                         <p className="text-xs text-zinc-500">
-                          Cole no app do seu banco em &quot;Pix copia e cola&quot;. Recebedor: {pix.receiverName}.{' '}
-                          {amountShown ? 'O valor já vem preenchido.' : 'Digite o valor no app do banco.'}
+                          Cole no app do seu banco em &quot;Pix copia e cola&quot;. Recebedor: {pix.receiverName}. O valor já vem preenchido.
                         </p>
                       </div>
-                      <p className="font-display text-xl italic text-zinc-700">Obrigado pelo carinho! 💛</p>
+                      <div className="space-y-3 border-t border-zinc-800/10 pt-5 text-left">
+                        <p className="text-center text-sm text-zinc-600">Depois de pagar, conte para a gente quem enviou:</p>
+                        <label htmlFor="free-pix-name" className={EYEBROW}>
+                          Seu nome
+                        </label>
+                        <input
+                          id="free-pix-name"
+                          value={guestName}
+                          onChange={(event) => {
+                            setGuestName(event.target.value);
+                            setError('');
+                          }}
+                          maxLength={150}
+                          autoComplete="name"
+                          placeholder="Para os noivos saberem quem presenteou"
+                          className={FIELD}
+                        />
+                        <label htmlFor="free-pix-message" className={`${EYEBROW} block pt-1`}>
+                          Recado <span className="normal-case tracking-normal text-zinc-500">(opcional)</span>
+                        </label>
+                        <textarea
+                          id="free-pix-message"
+                          value={message}
+                          onChange={(event) => setMessage(event.target.value.slice(0, 300))}
+                          rows={2}
+                          placeholder="Um carinho para os noivos…"
+                          className={`${FIELD} resize-none`}
+                        />
+                      </div>
+                      {error ? <p className="text-sm text-rose-700">{error}</p> : null}
                       <div className="flex flex-col gap-2">
-                        <button type="button" onClick={() => setIsOpen(false)} className={`${PRIMARY} w-full`}>
-                          Concluir
+                        <button type="button" onClick={askConfirm} className={`${PRIMARY} w-full`}>
+                          Já fiz o Pix
                         </button>
-                        <button type="button" onClick={() => setPix(null)} className={`${EYEBROW} py-2 hover:opacity-70`}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPix(null);
+                            setStep('amount');
+                            setError('');
+                          }}
+                          className={`${EYEBROW} py-2 hover:opacity-70`}
+                        >
                           ← Mudar o valor
                         </button>
                       </div>
                     </motion.div>
-                  )}
+                  ) : step === 'confirm' ? (
+                    <motion.div className="space-y-5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+                      <h3 className="font-display text-3xl leading-tight">Você já enviou o Pix?</h3>
+                      <p className="text-sm text-zinc-600">
+                        Confirme só depois de pagar os <strong className="text-zinc-800">{formatPrice(amountShown)}</strong>. O registro fica no nome de{' '}
+                        <strong className="text-zinc-800">{guestName.trim()}</strong> para os noivos conferirem.
+                      </p>
+                      <div className="flex flex-col gap-3">
+                        <button type="button" onClick={sendConfirmation} disabled={isSending} className={`${PRIMARY} w-full`}>
+                          {isSending ? 'Enviando…' : 'Sim, já enviei'}
+                        </button>
+                        <button type="button" onClick={() => setStep('pix')} disabled={isSending} className={`${SECONDARY} w-full`}>
+                          Ainda não
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : step === 'thanks' ? (
+                    <motion.div className="space-y-5" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }}>
+                      <p className="font-display text-3xl italic leading-tight text-zinc-800">Muito obrigado! 💛</p>
+                      <p className="text-zinc-600">Ficamos muito felizes com o seu carinho.</p>
+                      <button type="button" onClick={() => setIsOpen(false)} className={`${PRIMARY} w-full`}>
+                        Voltar à lista
+                      </button>
+                    </motion.div>
+                  ) : null}
                 </div>
               </motion.div>
             </motion.div>

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const MAX_FREE_AMOUNT_CENTS = 10_000_000;
 
 // Gera o Pix (copia e cola + QR Code). Aberto a qualquer pessoa na lista de presentes.
-// ?gift=<id>: valor do presente. Pix avulso: ?amount=<centavos> (valor escolhido) ou ?amount=open (valor em aberto).
+// ?gift=<id>: valor do presente. Pix avulso: ?amount=<centavos> (valor escolhido pelo convidado).
 export async function GET(request: NextRequest) {
   const giftId = request.nextUrl.searchParams.get('gift')?.trim() ?? '';
   const amountParam = request.nextUrl.searchParams.get('amount')?.trim() ?? '';
@@ -34,8 +34,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Presente não encontrado.' }, { status: 404 });
       }
       amountCents = gift.price_cents;
-    } else if (amountParam === 'open') {
-      amountCents = null;
     } else if (/^\d+$/.test(amountParam) && Number(amountParam) >= 100 && Number(amountParam) <= MAX_FREE_AMOUNT_CENTS) {
       amountCents = Number(amountParam);
     } else {

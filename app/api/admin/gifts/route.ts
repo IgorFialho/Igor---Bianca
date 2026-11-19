@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminRequestAuthorized } from '@/lib/admin-auth';
 import { db } from '@/lib/db';
+import { ensureFreePixSchema } from '@/lib/gifts';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,17 @@ type AdminContributionRow = {
   confirmed_at: string | null;
 };
 
+type AdminFreePixRow = {
+  id: string;
+  guest_name: string;
+  amount_cents: number;
+  message: string | null;
+  invite_code: string | null;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  created_at: string;
+  confirmed_at: string | null;
+};
+
 const unauthorized = () => NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 });
 
 function readGiftInput(body: Record<string, unknown>) {
@@ -48,7 +60,8 @@ export async function GET(request: NextRequest) {
   if (!(await isAdminRequestAuthorized(request))) return unauthorized();
 
   try {
-    const [gifts, contributions] = await Promise.all([
+    await ensureFreePixSchema();
+    const [gifts, contributions, freePix] = await Promise.all([
       db.query<AdminGiftRow>(
         `SELECT id::text, title, description, image_url, price_cents, store_url, is_active, created_at::text
          FROM gifts ORDER BY created_at DESC`
@@ -61,9 +74,15 @@ export async function GET(request: NextRequest) {
          ORDER BY (c.status = 'pending') DESC, c.created_at DESC
          LIMIT 300`
       ),
+      db.query<AdminFreePixRow>(
+        `SELECT id::text, guest_name, amount_cents, message, invite_code, status, created_at::text, confirmed_at::text
+         FROM gift_free_pix
+         ORDER BY (status = 'pending') DESC, created_at DESC
+         LIMIT 500`
+      ),
     ]);
 
-    return NextResponse.json({ gifts: gifts.rows, contributions: contributions.rows });
+    return NextResponse.json({ gifts: gifts.rows, contributions: contributions.rows, freePix: freePix.rows });
   } catch (error) {
     console.error('Falha ao listar presentes (admin)', error);
     return NextResponse.json({ error: 'Erro ao buscar presentes.' }, { status: 500 });
@@ -120,6 +139,19 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Pix avulso: confirmar (depois de conferir no extrato), cancelar ou voltar para aguardando.
+    if (body?.action === 'free-pix' && ['confirmed', 'cancelled', 'pending'].includes(body.status)) {
+      await ensureFreePixSchema();
+      const result = await db.query(
+        `UPDATE gift_free_pix
+         SET status = $2::varchar, confirmed_at = CASE WHEN $2::varchar = 'confirmed' THEN NOW() ELSE NULL END
+         WHERE id::text = $1`,
+        [String(body.freePixId), body.status]
+      );
+      if (!result.rowCount) return NextResponse.json({ error: 'Registro não encontrado.' }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
+
     if (body?.action === 'contribution' && ['confirmed', 'cancelled', 'pending'].includes(body.status)) {
       try {
         await db.query(
@@ -150,6 +182,12 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const body = await request.json();
+    if (body?.freePixId) {
+      await ensureFreePixSchema();
+      const result = await db.query(`DELETE FROM gift_free_pix WHERE id::text = $1`, [String(body.freePixId)]);
+      if (!result.rowCount) return NextResponse.json({ error: 'Registro não encontrado.' }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
     // Registro do histórico "Quem presenteou": apagar um ativo libera o presente na lista.
     if (body?.contributionId) {
       const result = await db.query(`DELETE FROM gift_contributions WHERE id = $1`, [String(body.contributionId)]);

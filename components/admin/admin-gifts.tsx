@@ -28,6 +28,18 @@ type AdminContribution = {
   confirmed_at: string | null;
 };
 
+/** Pix avulso: o convidado informou nome e valor ao tocar em "Já fiz o Pix" (na página de presentes). */
+type AdminFreePix = {
+  id: string;
+  guest_name: string;
+  amount_cents: number;
+  message: string | null;
+  invite_code: string | null;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  created_at: string;
+  confirmed_at: string | null;
+};
+
 const CARD = 'rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8';
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
 const FIELD =
@@ -84,6 +96,7 @@ function formatNames(raw: string | null, fallback: string) {
 export function AdminGifts() {
   const [gifts, setGifts] = useState<AdminGift[]>([]);
   const [contributions, setContributions] = useState<AdminContribution[]>([]);
+  const [freePix, setFreePix] = useState<AdminFreePix[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -107,6 +120,7 @@ export function AdminGifts() {
       if (!response.ok) throw new Error(data?.error || 'Erro ao carregar presentes.');
       setGifts(data.gifts ?? []);
       setContributions(data.contributions ?? []);
+      setFreePix(data.freePix ?? []);
       setError('');
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Erro ao carregar presentes.');
@@ -213,10 +227,13 @@ export function AdminGifts() {
     return true;
   });
   const isFiltering = query !== '' || giftFilter !== 'all';
-  const pendingCount = contributions.filter((item) => item.status === 'pending').length;
-  const confirmedTotal = contributions
-    .filter((item) => item.status === 'confirmed')
-    .reduce((total, item) => total + item.price_cents, 0);
+  // Totais incluem os Pix avulsos.
+  const pendingCount =
+    contributions.filter((item) => item.status === 'pending').length + freePix.filter((item) => item.status === 'pending').length;
+  const confirmedTotal =
+    contributions.filter((item) => item.status === 'confirmed').reduce((total, item) => total + item.price_cents, 0) +
+    freePix.filter((item) => item.status === 'confirmed').reduce((total, item) => total + item.amount_cents, 0);
+  const freePixConfirmedTotal = freePix.filter((item) => item.status === 'confirmed').reduce((total, item) => total + item.amount_cents, 0);
 
   return (
     <section className={CARD}>
@@ -483,6 +500,126 @@ export function AdminGifts() {
           </table>
           {!isLoading && contributions.length === 0 ? <p className="p-4 text-sm text-zinc-600">Ninguém presenteou ainda.</p> : null}
         </div>
+        </div>
+      </div>
+
+      {/* Pix avulsos: valor escolhido pelo convidado, fora da lista de presentes. */}
+      <div className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className={EYEBROW}>Pix avulsos</p>
+            <p className="mt-2 text-sm text-zinc-600">
+              Valor livre enviado pelos convidados. Confira no extrato (valor e nome de quem enviou) e confirme.
+            </p>
+          </div>
+          {freePixConfirmedTotal > 0 ? (
+            <span className="rounded-full bg-olive-50 px-4 py-2 text-sm text-olive-800">{formatPrice(freePixConfirmedTotal)} confirmados</span>
+          ) : null}
+        </div>
+        <div className="mt-4 safari-clip overflow-hidden rounded-2xl border border-zinc-800/10 bg-cream">
+          <div className="scroll-pill max-h-[28rem] overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-[#f6edd7] text-[0.68rem] font-medium uppercase tracking-[0.14em] text-zinc-800/70">
+                <tr>
+                  <th className="px-4 py-3">Convidado</th>
+                  <th className="px-4 py-3">Valor</th>
+                  <th className="px-4 py-3">Recado</th>
+                  <th className="px-4 py-3">Situação</th>
+                  <th className="px-4 py-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {freePix.map((item) => (
+                  <tr key={item.id} className="border-t border-zinc-800/10 align-top text-zinc-700">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-zinc-800">{item.guest_name}</p>
+                      <p className="text-xs text-zinc-500">
+                        {new Date(item.created_at).toLocaleString('pt-BR')}
+                        {item.invite_code ? ` · ${item.invite_code}` : ''}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-800">{formatPrice(item.amount_cents)}</td>
+                    <td className="max-w-[16rem] px-4 py-3 text-zinc-600">{item.message ? <span className="whitespace-pre-line break-words">{item.message}</span> : <span className="text-zinc-400">—</span>}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_CLASS[item.status]}`}>{STATUS_LABEL[item.status]}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        {item.status !== 'confirmed' ? (
+                          <button
+                            type="button"
+                            disabled={busyId === item.id}
+                            onClick={() =>
+                              setConfirmAction({
+                                title: 'Confirmar Pix avulso',
+                                message: (
+                                  <>
+                                    Confirmar o Pix de <strong className="text-zinc-900">{formatPrice(item.amount_cents)}</strong> enviado por{' '}
+                                    <strong className="text-zinc-900">{item.guest_name}</strong>? Confira antes se ele caiu no extrato.
+                                  </>
+                                ),
+                                confirmLabel: 'Confirmar',
+                                onConfirm: () => request('PATCH', { action: 'free-pix', freePixId: item.id, status: 'confirmed' }, item.id),
+                              })
+                            }
+                            className={`${SMALL} border-olive-300 bg-olive-50 text-olive-800 hover:bg-olive-100`}
+                          >
+                            Confirmar
+                          </button>
+                        ) : null}
+                        {item.status !== 'cancelled' ? (
+                          <button
+                            type="button"
+                            disabled={busyId === item.id}
+                            onClick={() =>
+                              setConfirmAction({
+                                title: 'Cancelar Pix avulso',
+                                message: (
+                                  <>
+                                    Marcar como cancelado o Pix de <strong className="text-zinc-900">{formatPrice(item.amount_cents)}</strong> de{' '}
+                                    <strong className="text-zinc-900">{item.guest_name}</strong> (por exemplo, se não caiu no extrato)?
+                                  </>
+                                ),
+                                confirmLabel: 'Cancelar registro',
+                                tone: 'danger',
+                                onConfirm: () => request('PATCH', { action: 'free-pix', freePixId: item.id, status: 'cancelled' }, item.id),
+                              })
+                            }
+                            className={`${SMALL} border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100`}
+                          >
+                            Cancelar
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={busyId === item.id}
+                          onClick={() =>
+                            setConfirmAction({
+                              eyebrow: 'Confirmar exclusão',
+                              title: 'Excluir Pix avulso',
+                              message: (
+                                <>
+                                  Excluir o registro do Pix de <strong className="text-zinc-900">{formatPrice(item.amount_cents)}</strong> de{' '}
+                                  <strong className="text-zinc-900">{item.guest_name}</strong>? Esta ação não pode ser desfeita.
+                                </>
+                              ),
+                              confirmLabel: 'Excluir',
+                              tone: 'danger',
+                              onConfirm: () => request('DELETE', { freePixId: item.id }, item.id),
+                            })
+                          }
+                          className={`${SMALL} border-zinc-800/20 text-zinc-700 hover:bg-zinc-800/5`}
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!isLoading && freePix.length === 0 ? <p className="p-4 text-sm text-zinc-600">Nenhum Pix avulso ainda.</p> : null}
+          </div>
         </div>
       </div>
 

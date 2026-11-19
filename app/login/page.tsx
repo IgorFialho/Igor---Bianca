@@ -454,8 +454,7 @@ export default function LoginPage() {
           </Reveal>
           <Reveal delay={0.14}>
             <p className="mx-auto mt-6 max-w-xl text-base text-zinc-600 md:text-lg">
-              Sua presença já é o nosso maior presente. Se quiser, escolha um item da nossa lista e envie o valor
-              por Pix ou compre na loja.
+              Se quiser nos presentear, escolha um item da nossa lista e envie o valor por Pix ou compre na loja.
             </p>
           </Reveal>
           <Reveal delay={0.28} className="mt-8">

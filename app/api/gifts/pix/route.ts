@@ -5,13 +5,14 @@ import { buildPixPayload, getPixConfig } from '@/lib/pix';
 
 export const dynamic = 'force-dynamic';
 
-// Gera o Pix (copia e cola + QR Code) com o valor do presente. Aberto a qualquer pessoa na lista de presentes.
+/** Maior valor aceito no Pix avulso (R$ 100.000,00), só para evitar códigos absurdos. */
+const MAX_FREE_AMOUNT_CENTS = 10_000_000;
+
+// Gera o Pix (copia e cola + QR Code). Aberto a qualquer pessoa na lista de presentes.
+// ?gift=<id>: valor do presente. Pix avulso: ?amount=<centavos> (valor escolhido) ou ?amount=open (valor em aberto).
 export async function GET(request: NextRequest) {
   const giftId = request.nextUrl.searchParams.get('gift')?.trim() ?? '';
-
-  if (!/^\d+$/.test(giftId)) {
-    return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
-  }
+  const amountParam = request.nextUrl.searchParams.get('amount')?.trim() ?? '';
 
   const config = getPixConfig();
   if (!config) {
@@ -19,17 +20,29 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await db.query<{ price_cents: number }>(
-      `SELECT price_cents FROM gifts WHERE id = $1 AND is_active = TRUE`,
-      [giftId]
-    );
-    const gift = result.rows[0];
-    if (!gift) {
-      return NextResponse.json({ error: 'Presente não encontrado.' }, { status: 404 });
+    let amountCents: number | null;
+    if (giftId) {
+      if (!/^\d+$/.test(giftId)) {
+        return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
+      }
+      const result = await db.query<{ price_cents: number }>(
+        `SELECT price_cents FROM gifts WHERE id = $1 AND is_active = TRUE`,
+        [giftId]
+      );
+      const gift = result.rows[0];
+      if (!gift) {
+        return NextResponse.json({ error: 'Presente não encontrado.' }, { status: 404 });
+      }
+      amountCents = gift.price_cents;
+    } else if (amountParam === 'open') {
+      amountCents = null;
+    } else if (/^\d+$/.test(amountParam) && Number(amountParam) >= 100 && Number(amountParam) <= MAX_FREE_AMOUNT_CENTS) {
+      amountCents = Number(amountParam);
+    } else {
+      return NextResponse.json({ error: 'Informe um valor a partir de R$ 1,00.' }, { status: 400 });
     }
 
-    // A referência aparece no extrato e ajuda os noivos a saber de qual presente é o Pix.
-    const payload = buildPixPayload(config, gift.price_cents);
+    const payload = buildPixPayload(config, amountCents);
     const qrSvg = await QRCode.toString(payload, {
       type: 'svg',
       margin: 1,

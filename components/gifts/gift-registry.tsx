@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Portal } from '@/components/home/portal';
+import { FreePix } from '@/components/gifts/free-pix';
 import { Reveal } from '@/components/home/reveal';
 import { SiteHeader } from '@/components/home/site-header';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
@@ -312,6 +313,9 @@ export function GiftRegistry() {
           </p>
         </Reveal>
       </header>
+
+      {/* Pix avulso: presente em dinheiro com o valor que o convidado quiser. */}
+      <FreePix />
 
       <section aria-label="Presentes" className="mx-auto mt-14 w-full max-w-6xl">
         {!isLoading && !loadError && gifts.length > 0 ? (

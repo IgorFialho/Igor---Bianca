@@ -42,7 +42,7 @@ function ChapterPhotos({ photos, chapterIndex, align, onOpen }: { photos: Timeli
       viewport={{ once: true, amount: 0.35 }}
       transition={{ duration: 0.9, delay, ease: EASE }}
       whileHover={{ y: -6, rotate: rotate * 0.4, transition: { duration: 0.3 } }}
-      className={`group absolute block cursor-zoom-in rounded-[0.4rem] border border-black/10 bg-[#f8f3e8] p-[4%] pb-[14%] shadow-[0_14px_36px_rgba(47,36,27,0.22)] will-change-transform ${className}`}
+      className={`group absolute block cursor-zoom-in rounded-[0.4rem] border border-black/10 bg-[#f8f3e8] p-[2.2%] pb-[6%] shadow-[0_14px_36px_rgba(47,36,27,0.22)] will-change-transform ${className}`}
     >
       <span className="relative block aspect-[4/5] w-full overflow-hidden rounded-[0.2rem] bg-black/5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -56,15 +56,12 @@ function ChapterPhotos({ photos, chapterIndex, align, onOpen }: { photos: Timeli
           style={{ objectPosition: photo.position }}
         />
       </span>
-      <span className="absolute bottom-[4%] left-1/2 max-w-[90%] -translate-x-1/2 truncate text-center font-display text-[clamp(0.8rem,1.6vw,1.05rem)] italic text-zinc-700">
-        {photo.caption}
-      </span>
     </motion.button>
   );
   return (
     <div className={`relative mx-auto aspect-[5/4.6] w-full max-w-[22rem] md:max-w-[26rem] ${align === 'left' ? 'md:mr-0' : 'md:ml-0'}`}>
-      {first ? polaroid(first, tilt, 'left-0 top-0 w-[62%]', 0.05) : null}
-      {second ? polaroid(second, -tilt * 0.8, 'bottom-0 right-0 z-10 w-[58%]', 0.2) : null}
+      {first ? polaroid(first, tilt, 'left-0 top-0 w-[64%]', 0.05) : null}
+      {second ? polaroid(second, -tilt * 0.8, 'bottom-0 right-0 z-10 w-[60%]', 0.2) : null}
     </div>
   );
 }
@@ -241,7 +238,7 @@ export function StoryTimeline({ id, title, intro, chapters, closing }: StoryTime
                 // Moldura proporcional à largura do cartão (em % ela seguiria a largura da tela).
                 style={{
                   width: 'var(--card-w)',
-                  padding: 'calc(var(--card-w) * 0.035) calc(var(--card-w) * 0.035) calc(var(--card-w) * 0.13)',
+                  padding: 'calc(var(--card-w) * 0.025) calc(var(--card-w) * 0.025) calc(var(--card-w) * 0.07)',
                   ['--card-w' as string]: 'min(88vw, 62svh, 34rem)',
                 }}
                 initial={{ scale: 0.85, rotate: -4, y: 30, opacity: 0 }}
@@ -259,9 +256,6 @@ export function StoryTimeline({ id, title, intro, chapters, closing }: StoryTime
                     style={{ objectPosition: openPhoto.position }}
                   />
                 </span>
-                <figcaption className="absolute bottom-[3.5%] left-1/2 max-w-[90%] -translate-x-1/2 truncate text-center font-display text-[clamp(1.1rem,3.6vw,1.6rem)] italic text-zinc-700">
-                  {openPhoto.caption}
-                </figcaption>
               </motion.figure>
             </motion.div>
           ) : null}

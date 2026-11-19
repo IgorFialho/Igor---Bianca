@@ -1,15 +1,14 @@
 "use client";
 
-import { Poppins } from 'next/font/google';
 import Link from 'next/link';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { AttendanceChoice } from '@/lib/invite';
 import { INVITE_ACCESS_KEY, MESSAGE_MAX_LENGTH, limitMessage, messageLength, weddingDetails } from '@/lib/invite';
-import { FittedText } from '@/components/home/fitted-text';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { SiteHeader } from '@/components/home/site-header';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
+import { INVITE_CARD_BODY_CLASS, INVITE_CARD_CLASS, SealedEnvelope } from '@/components/convite/sealed-envelope';
 
 // Menu da home, sem "Confirmar presença" (é esta página); as seções ficam na home (/login#secao).
 const NAV_LINKS = [
@@ -21,11 +20,6 @@ const NAV_LINKS = [
   { label: 'Mural', href: '/mural' },
   { label: 'Perguntas', href: '/login#perguntas' },
 ];
-
-// Fonte do design "Save the Date" (textos em branco sobre as flores).
-const poppins = Poppins({ subsets: ['latin'], weight: ['400', '500'] });
-
-type EnvelopeState = 'fechado' | 'abrindo' | 'aberto';
 
 type InteractiveEnvelopeInviteProps = {
   className?: string;
@@ -62,8 +56,9 @@ function BowIcon() {
 }
 
 export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInviteProps) {
-  const [envelopeState, setEnvelopeState] = useState<EnvelopeState>('fechado');
   const [showFinalCard, setShowFinalCard] = useState(false);
+  // O formulário veio do envelope: o papel já está no lugar, então ele aparece sem animação de entrada.
+  const [openedFromEnvelope, setOpenedFromEnvelope] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [hasResolvedInitialStatus, setHasResolvedInitialStatus] = useState(false);
@@ -162,7 +157,6 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           setIsLocked(true);
           setIsSubmitted(true);
           setShowFinalCard(true);
-          setEnvelopeState('aberto');
           const saved = data.response;
           if (saved?.attendance === 'yes' || saved?.attendance === 'no') {
             setAttendance(saved.attendance);
@@ -253,27 +247,6 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     setChildren(0);
     setChildrenDetails([]);
   }, [requiresChildrenDetails]);
-
-  const handleEnvelopeClick = () => {
-    if (envelopeState !== 'fechado') {
-      return;
-    }
-
-    setShowFinalCard(false);
-    setEnvelopeState('abrindo');
-  };
-
-  const handleFlapAnimationComplete = () => {
-    if (envelopeState === 'abrindo') {
-      setEnvelopeState('aberto');
-    }
-  };
-
-  const handleInviteCardAnimationComplete = () => {
-    if (envelopeState === 'aberto') {
-      setShowFinalCard(true);
-    }
-  };
 
   const updateChildrenCount = (operation: 'increment' | 'decrement') => {
     setChildren((current) => {
@@ -446,10 +419,6 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
     .filter((item) => item.length > 0)
     .join(' e ');
   const headingDisplayName = responderHeading || inviteGuestNames.join(' e ') || 'Convidado';
-
-  // Textura de papel sutil (ruído em SVG) usada nas partes do envelope.
-  const paperTextureClass =
-    "absolute inset-0 pointer-events-none opacity-[0.08] mix-blend-multiply bg-[url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E')]";
 
   // Estilos no mesmo padrão da home: rótulos em maiúsculas espaçadas, campos e botões em pílula.
   const eyebrowClass = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/80';
@@ -790,104 +759,28 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
         <h1 className="sr-only">Igor &amp; Bianca · 18 de abril de 2027</h1>
       </header>
 
-      {/* Espaço extra no topo para o cartão subir para fora do envelope ao abrir. */}
+      {/* Palco do envelope: largura que cabe na tela (o palco tem espaço em cima para a aba e o cartão). */}
       <div
-        className="relative z-10 w-full max-w-7xl pt-[min(24vw,9rem)]"
-        style={{ minHeight: isEnvelopeVisible ? 'calc(min(24vw, 9rem) + min(56.8vw, 28.4rem) + 6rem)' : undefined }}
+        className="relative z-10 w-full max-w-7xl"
+        style={
+          {
+            '--env-w': 'min(92vw, 42rem, calc((100svh - 9rem) * 0.9))',
+            // Continua com a altura do palco depois que o formulário entra: a página não encolhe nem pula na troca.
+            minHeight: isEnvelopeVisible || openedFromEnvelope ? 'calc(var(--env-w) * 1.09 + 4rem)' : undefined,
+          } as CSSProperties
+        }
       >
         <AnimatePresence>
           {isEnvelopeVisible ? (
-            <motion.div
-              key="envelope"
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 30 }}
-              transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}
-              className="absolute inset-x-0 top-0 z-20 flex flex-col items-center pt-[min(24vw,9rem)]"
-            >
-              <motion.div
-                role="button"
-                tabIndex={0}
-                onClick={handleEnvelopeClick}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    handleEnvelopeClick();
-                  }
+            <motion.div key="envelope" exit={{ opacity: 0, transition: { duration: 0 } }} className="absolute inset-x-0 top-0 z-20">
+              <SealedEnvelope
+                onOpened={() => {
+                  setOpenedFromEnvelope(true);
+                  setShowFinalCard(true);
                 }}
-                aria-label="Abrir o convite"
-                whileHover={envelopeState === 'fechado' ? { scale: 1.02, y: -4 } : {}}
-                transition={{ type: 'spring', stiffness: 120, damping: 20 }}
-                className="relative aspect-[1.55] w-[min(88vw,44rem)] cursor-pointer rounded-[4px] shadow-[0_24px_60px_rgba(0,0,0,0.22)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-                style={{ perspective: '1600px' }}
               >
-                {/* 1. Parte de dentro do envelope */}
-                <div className="absolute inset-0 z-10 overflow-hidden rounded-[4px] bg-[#e7e9de] shadow-[inset_0_18px_30px_rgba(0,0,0,0.10)]">
-                  <div className={paperTextureClass} />
-                </div>
-
-                {/* 2. Cartão que sobe de dentro do envelope */}
-                {/* O z-index fica aqui: o translate deste elemento cria uma camada própria que prenderia o cartão. */}
-                <div className={`absolute left-1/2 top-[6%] w-[90%] -translate-x-1/2 ${envelopeState === 'aberto' ? 'z-[60]' : 'z-20'}`}>
-                  <motion.div
-                    className="relative w-full"
-                    initial={false}
-                    animate={{
-                      y: envelopeState === 'aberto' ? '-68%' : '0%',
-                      opacity: envelopeState === 'aberto' ? 1 : 0,
-                      rotate: envelopeState === 'aberto' ? -1.5 : 0, // Leve rotação orgânica ao sair
-                      zIndex: envelopeState === 'aberto' ? 60 : 20,
-                    }}
-                    transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                    onAnimationComplete={handleInviteCardAnimationComplete}
-                  >
-                    <article className="relative w-full select-none overflow-hidden rounded-[0.6rem] border border-zinc-800/10 bg-[#fffaf1] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:p-8">
-                      <div className={paperTextureClass} />
-                      <div className="relative z-10 flex flex-col items-center gap-1 text-center text-zinc-800">
-                        <FittedText text="Igor & Bianca" />
-                        <p className={`${poppins.className} text-[0.7rem] uppercase tracking-[0.2em] text-zinc-600 sm:text-xs`}>18 . 04 . 2027</p>
-                      </div>
-                    </article>
-                  </motion.div>
-                </div>
-
-                {/* 3. Abas da frente: laterais e de baixo, em tons de marfim como o envelope do design */}
-                <div className="absolute inset-0 z-30 drop-shadow-[3px_0_8px_rgba(0,0,0,0.16)]">
-                  <div className="h-full w-full bg-[#eff0e7] [clip-path:polygon(0_0,52%_55%,0_100%)]" />
-                </div>
-                <div className="absolute inset-0 z-30 drop-shadow-[-3px_0_8px_rgba(0,0,0,0.16)]">
-                  <div className="h-full w-full bg-[#ecede4] [clip-path:polygon(100%_0,48%_55%,100%_100%)]" />
-                </div>
-                <div className="absolute inset-0 z-40 drop-shadow-[0_-5px_10px_rgba(0,0,0,0.18)]">
-                  <div className="h-full w-full bg-[#f6f7f1] [clip-path:polygon(0_100%,50%_47%,100%_100%)]" />
-                </div>
-
-                {/* 4. Aba de cima: dobra para cima ao abrir e depois fica atrás do cartão */}
-                <motion.div
-                  className="absolute inset-x-0 top-0 h-[58%] [transform-origin:top_center]"
-                  initial={false}
-                  animate={
-                    envelopeState === 'fechado'
-                      ? { rotateX: 0, zIndex: 50 }
-                      : { rotateX: -179.9, transitionEnd: { zIndex: 15 } }
-                  }
-                  transition={{ duration: 0.85, ease: [0.25, 1, 0.5, 1] }}
-                  onAnimationComplete={handleFlapAnimationComplete}
-                >
-                  <div className="h-full w-full drop-shadow-[0_8px_12px_rgba(0,0,0,0.22)]">
-                    <div
-                      className="h-full w-full transition-colors duration-500 [clip-path:polygon(0_0,100%_0,50%_100%)]"
-                      style={{ backgroundColor: envelopeState === 'fechado' ? '#e8eadf' : '#dfe1d5' }}
-                    />
-                  </div>
-                </motion.div>
-              </motion.div>
-
-              {envelopeState === 'fechado' ? (
-                <p className={`${poppins.className} mt-8 animate-pulse text-center text-sm uppercase tracking-[0.04em] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)] sm:mt-10 sm:text-lg`}>
-                  Toque para abrir o convite
-                </p>
-              ) : null}
+                {finalInviteContent}
+              </SealedEnvelope>
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -914,15 +807,15 @@ export function InteractiveEnvelopeInvite({ className }: InteractiveEnvelopeInvi
           {showFinalCard ? (
             <motion.section
               key="final-card"
-              initial={{ opacity: 0, y: 20 }}
+              initial={openedFromEnvelope ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.76, delay: 0.35, ease: [0.22, 0.72, 0.36, 1] }}
               className="relative z-10 flex justify-center"
             >
               <div className="w-full max-w-xl sm:max-w-2xl">
-                <article className="relative overflow-hidden rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] shadow-[0_24px_60px_rgba(47,36,27,0.12)]">
-                  <div className="relative z-10 p-6 sm:p-10">
+                <article className={INVITE_CARD_CLASS}>
+                  <div className={INVITE_CARD_BODY_CLASS}>
                     {finalInviteContent}
                   </div>
                 </article>

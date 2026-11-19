@@ -13,6 +13,18 @@ export const TRACK_ARTIST_MAX_LENGTH = 120;
 /** Maior ponto de início aceito (segundos). */
 export const TRACK_START_MAX = 3600;
 
+/** Volume com que cada música começa no player do site, em % (o convidado pode mudar depois). Padrão: 25%. */
+export const TRACK_VOLUME_MIN = 5;
+export const TRACK_VOLUME_MAX = 100;
+export const TRACK_VOLUME_DEFAULT = 25;
+
+/** Volume válido em % (25 quando vazio ou inválido). */
+export function readTrackVolume(value: unknown) {
+  const number = Number(value);
+  if (value === null || value === undefined || value === '' || !Number.isFinite(number)) return TRACK_VOLUME_DEFAULT;
+  return Math.min(TRACK_VOLUME_MAX, Math.max(TRACK_VOLUME_MIN, Math.round(number)));
+}
+
 /** Ponto de início válido em segundos (0 quando vazio ou inválido). */
 export function readTrackStart(value: unknown) {
   const number = Number(value);
@@ -31,8 +43,17 @@ export type MusicPageKey = (typeof MUSIC_PAGES)[number]['key'];
 export const MUSIC_PAGE_KEYS = MUSIC_PAGES.map((page) => page.key) as MusicPageKey[];
 
 export type MusicMode = 'single' | 'per_page';
-/** start: segundo em que a música começa (e para onde volta ao repetir). */
-export type MusicTrack = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null; start: number };
+/** start: segundo em que a música começa (e para onde volta ao repetir); volume: % com que ela começa no player. */
+export type MusicTrack = {
+  id: string;
+  title: string;
+  artist: string | null;
+  url: string;
+  builtIn: boolean;
+  duration: number | null;
+  start: number;
+  volume: number;
+};
 /** Por página: id da música ou null ("sem música"). */
 export type MusicSettings = { mode: MusicMode; singleTrack: string; pageTracks: Record<MusicPageKey, string | null> };
 
@@ -69,6 +90,20 @@ export function ensureMusicSchema() {
         -- A partir de que segundo cada música toca (e para onde volta ao repetir).
         ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS start_at NUMERIC(7, 1) NOT NULL DEFAULT 0;
         ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_start NUMERIC(7, 1) NOT NULL DEFAULT 0;
+
+        -- Volume com que cada música começa no player do site (%). Na criação, aproveita o valor já salvo na
+        -- primeira versão (volume_pct/default_volume, que eram "% sobre o volume do convidado", 100 = normal):
+        -- valores abaixo de 100 viram o volume do player; o resto começa no padrão (${TRACK_VOLUME_DEFAULT}%).
+        ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS volume_pct SMALLINT NOT NULL DEFAULT 100;
+        ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_volume SMALLINT NOT NULL DEFAULT 100;
+        ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS player_volume SMALLINT;
+        ALTER TABLE music_settings ADD COLUMN IF NOT EXISTS default_player_volume SMALLINT;
+        UPDATE music_tracks SET player_volume = CASE WHEN volume_pct BETWEEN ${TRACK_VOLUME_MIN} AND 99 THEN volume_pct ELSE ${TRACK_VOLUME_DEFAULT} END
+          WHERE player_volume IS NULL;
+        UPDATE music_settings SET default_player_volume = CASE WHEN default_volume BETWEEN ${TRACK_VOLUME_MIN} AND 99 THEN default_volume ELSE ${TRACK_VOLUME_DEFAULT} END
+          WHERE default_player_volume IS NULL;
+        ALTER TABLE music_tracks ALTER COLUMN player_volume SET DEFAULT ${TRACK_VOLUME_DEFAULT};
+        ALTER TABLE music_settings ALTER COLUMN default_player_volume SET DEFAULT ${TRACK_VOLUME_DEFAULT};
       `
     )
     .then(() => undefined)
@@ -82,16 +117,29 @@ export function ensureMusicSchema() {
 export async function listTracks(): Promise<MusicTrack[]> {
   await ensureMusicSchema();
   const [result, defaults] = await Promise.all([
-    db.query<{ id: string; title: string; artist: string | null; public_id: string; duration: string | null; start_at: string | null }>(
-      'SELECT id::text, title, artist, public_id, duration::text, start_at::text FROM music_tracks ORDER BY created_at ASC'
-    ),
-    db.query<{ default_title: string | null; default_artist: string | null; default_start: string | null }>(
-      'SELECT default_title, default_artist, default_start::text FROM music_settings WHERE id = 1'
+    db.query<{
+      id: string;
+      title: string;
+      artist: string | null;
+      public_id: string;
+      duration: string | null;
+      start_at: string | null;
+      player_volume: number | null;
+    }>('SELECT id::text, title, artist, public_id, duration::text, start_at::text, player_volume FROM music_tracks ORDER BY created_at ASC'),
+    db.query<{ default_title: string | null; default_artist: string | null; default_start: string | null; default_player_volume: number | null }>(
+      'SELECT default_title, default_artist, default_start::text, default_player_volume FROM music_settings WHERE id = 1'
     ),
   ]);
   const original = defaults.rows[0];
   return [
-    { ...DEFAULT_TRACK, title: original?.default_title || DEFAULT_TRACK.title, artist: original?.default_artist || null, duration: null, start: readTrackStart(original?.default_start) },
+    {
+      ...DEFAULT_TRACK,
+      title: original?.default_title || DEFAULT_TRACK.title,
+      artist: original?.default_artist || null,
+      duration: null,
+      start: readTrackStart(original?.default_start),
+      volume: readTrackVolume(original?.default_player_volume),
+    },
     ...result.rows.map((row) => ({
       id: row.id,
       title: row.title,
@@ -100,6 +148,7 @@ export async function listTracks(): Promise<MusicTrack[]> {
       builtIn: false,
       duration: row.duration ? Number(row.duration) : null,
       start: readTrackStart(row.start_at),
+      volume: readTrackVolume(row.player_volume),
     })),
   ];
 }
@@ -128,10 +177,11 @@ export async function getPublicMusic() {
   const resolve = (id: string | null) => {
     if (id === null) return null;
     const track = byId.get(id) ?? byId.get(DEFAULT_TRACK_ID)!;
-    return { id: track.id, title: track.title, artist: track.artist, url: track.url, start: track.start };
+    // volume vai de 0 a 1: é onde a barra do player começa nesta música.
+    return { id: track.id, title: track.title, artist: track.artist, url: track.url, start: track.start, volume: track.volume / 100 };
   };
   const pages = Object.fromEntries(
     MUSIC_PAGE_KEYS.map((key) => [key, resolve(settings.mode === 'single' ? settings.singleTrack : settings.pageTracks[key])])
-  ) as Record<MusicPageKey, { id: string; title: string; artist: string | null; url: string; start: number } | null>;
+  ) as Record<MusicPageKey, { id: string; title: string; artist: string | null; url: string; start: number; volume: number } | null>;
   return { mode: settings.mode, pages };
 }

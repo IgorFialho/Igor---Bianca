@@ -17,7 +17,13 @@ const SMALL = 'rounded-full border px-3 py-1 text-xs font-medium transition-colo
 const MAX_MUSIC_BYTES = 40 * 1024 * 1024;
 const NO_MUSIC = '__sem__';
 
-type Track = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null; start: number };
+/** volume: % com que a música começa no player do site (o convidado pode mudar depois). */
+type Track = { id: string; title: string; artist: string | null; url: string; builtIn: boolean; duration: number | null; start: number; volume: number };
+
+// Volume por música: mesmos limites e padrão do servidor (lib/music.ts).
+const VOLUME_MIN = 5;
+const VOLUME_MAX = 100;
+const VOLUME_DEFAULT = 25;
 type Page = { key: string; label: string; path: string };
 type Settings = { mode: 'single' | 'per_page'; singleTrack: string; pageTracks: Record<string, string | null> };
 
@@ -78,7 +84,7 @@ export function AdminMusic() {
   const [message, setMessage] = useState('');
   const [upload, setUpload] = useState<{ file: File; title: string; artist: string; duration: number | null } | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; title: string; artist: string; start: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; title: string; artist: string; start: string; volume: number } | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmRequest | null>(null);
   const closeConfirm = useCallback(() => setConfirmAction(null), []);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -203,7 +209,7 @@ export function AdminMusic() {
     }
     setError('');
     try {
-      await request('PATCH', { action: 'edit', id: renaming.id, title: renaming.title, artist: renaming.artist, start });
+      await request('PATCH', { action: 'edit', id: renaming.id, title: renaming.title, artist: renaming.artist, start, volume: renaming.volume });
       setRenaming(null);
       setMessage('Música atualizada.');
       await load();
@@ -413,7 +419,8 @@ export function AdminMusic() {
                 <div key={track.id} className="space-y-2 border-b border-zinc-800/10 p-4 last:border-b-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     {renaming?.id === track.id ? (
-                      <div className="grid min-w-0 flex-1 gap-2">
+                      <div className="grid min-w-0 flex-1 gap-3">
+                        <div className="grid gap-2">
                         <input
                           value={renaming.title}
                           onChange={(event) => setRenaming({ ...renaming, title: event.target.value })}
@@ -430,13 +437,21 @@ export function AdminMusic() {
                           placeholder="Autoria (artista/intérprete; compositor, licença)"
                           className={FIELD}
                         />
-                        <StartTimeField trackId={track.id} value={renaming.start} onChange={(start) => setRenaming({ ...renaming, start })} />
-                        <div className="flex gap-1.5">
-                          <button type="button" onClick={saveRename} className={`${SMALL} border-champagne-600 bg-champagne-600 text-[#fff9f1]`}>
-                            Salvar
-                          </button>
+                        </div>
+                        {/* Tudo sobre como a música toca no site, na ordem de uso: ouvir, escolher o início, ajustar o volume. */}
+                        <div className="space-y-3 rounded-xl border border-zinc-800/10 bg-[#fffaf1]/70 p-3">
+                          <p className="text-[0.68rem] font-medium uppercase tracking-[0.16em] text-zinc-500">Como toca no site</p>
+                          <audio id={`music-audio-${track.id}`} src={track.url} controls preload="none" className="h-9 w-full" />
+                          <StartTimeField trackId={track.id} value={renaming.start} onChange={(start) => setRenaming({ ...renaming, start })} />
+                          <div className="border-t border-zinc-800/10" />
+                          <VolumeField trackId={track.id} value={renaming.volume} onChange={(volume) => setRenaming({ ...renaming, volume })} />
+                        </div>
+                        <div className="flex justify-end gap-1.5">
                           <button type="button" onClick={() => setRenaming(null)} className={`${SMALL} border-zinc-800/20 text-zinc-800`}>
                             Cancelar
+                          </button>
+                          <button type="button" onClick={saveRename} className={`${SMALL} border-champagne-600 bg-champagne-600 text-[#fff9f1]`}>
+                            Salvar
                           </button>
                         </div>
                       </div>
@@ -452,13 +467,23 @@ export function AdminMusic() {
                         ) : (
                           <p className="text-xs font-medium text-rose-700">Sem autoria informada: clique em Editar para incluir</p>
                         )}
+                        {track.start > 0 || track.volume !== VOLUME_DEFAULT ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
                         {track.start > 0 ? (
-                          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-champagne-600/10 px-2 py-0.5 text-[0.7rem] font-medium text-champagne-700">
+                          <p className="inline-flex items-center gap-1 rounded-full bg-champagne-600/10 px-2 py-0.5 text-[0.7rem] font-medium text-champagne-700">
                             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden="true">
                               <path d="M8 5.5v13l10-6.5z" />
                             </svg>
                             Começa em {formatTime(track.start)}
                           </p>
+                        ) : null}
+                        {track.volume !== VOLUME_DEFAULT ? (
+                          <p className="inline-flex items-center gap-1 rounded-full bg-champagne-600/10 px-2 py-0.5 text-[0.7rem] font-medium text-champagne-700">
+                            <SpeakerIcon className="h-3 w-3" />
+                            Volume {track.volume}%
+                          </p>
+                        ) : null}
+                          </div>
                         ) : null}
                       </div>
                     )}
@@ -466,7 +491,15 @@ export function AdminMusic() {
                       <div className="flex gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setRenaming({ id: track.id, title: track.title, artist: track.artist ?? '', start: track.start ? formatTime(track.start) : '0:00' })}
+                          onClick={() =>
+                            setRenaming({
+                              id: track.id,
+                              title: track.title,
+                              artist: track.artist ?? '',
+                              start: track.start ? formatTime(track.start) : '0:00',
+                              volume: track.volume ?? VOLUME_DEFAULT,
+                            })
+                          }
                           className={`${SMALL} border-zinc-800/20 text-zinc-800 hover:bg-zinc-800/5`}
                         >
                           Editar
@@ -479,7 +512,9 @@ export function AdminMusic() {
                       </div>
                     ) : null}
                   </div>
-                  <audio id={`music-audio-${track.id}`} src={track.url} controls preload="none" className="h-9 w-full" />
+                  {renaming?.id !== track.id ? (
+                    <audio id={`music-audio-${track.id}`} src={track.url} controls preload="none" className="h-9 w-full" />
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -702,7 +737,7 @@ function StartTimeField({ trackId, value, onChange }: { trackId: string; value: 
   };
   const small = 'rounded-full border border-zinc-800/15 bg-[#fffaf1] px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-800/5';
   return (
-    <div className="space-y-2 rounded-xl border border-zinc-800/10 bg-[#fffaf1]/70 p-3">
+    <div className="space-y-2">
       <label htmlFor={`music-start-${trackId}`} className="flex items-center gap-1.5 text-xs font-medium text-zinc-700">
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-champagne-700" fill="currentColor" aria-hidden="true">
           <path d="M8 5.5v13l10-6.5z" />
@@ -734,8 +769,48 @@ function StartTimeField({ trackId, value, onChange }: { trackId: string; value: 
         </button>
       </div>
       <p className="text-[0.7rem] text-zinc-500">
-        No site, a música começa nesse ponto e, ao terminar, recomeça dele. Dica: toque a música no player abaixo, pause no momento certo e use
+        No site, a música começa nesse ponto e, ao terminar, recomeça dele. Dica: toque a música no player acima, pause no momento certo e use
         &quot;Usar ponto do player&quot;.
+      </p>
+    </div>
+  );
+}
+
+function SpeakerIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Volume com que esta música começa no player do site (o convidado pode mudar depois). */
+function VolumeField({ trackId, value, onChange }: { trackId: string; value: number; onChange: (value: number) => void }) {
+  // O player de cima segue a barra: tocando ali, ouve-se a música no volume em que ela começa no site.
+  useEffect(() => {
+    const audio = trackAudio(trackId);
+    if (audio) audio.volume = value / 100;
+  }, [trackId, value]);
+  return (
+    <div className="space-y-2">
+      <label htmlFor={`music-volume-${trackId}`} className="flex items-center gap-1.5 text-xs font-medium text-zinc-700">
+        <SpeakerIcon className="h-3.5 w-3.5 text-champagne-700" />
+        Volume no site <span className="ml-auto tabular-nums text-sm text-zinc-800">{value}%</span>
+      </label>
+      <input
+        id={`music-volume-${trackId}`}
+        type="range"
+        min={VOLUME_MIN}
+        max={VOLUME_MAX}
+        step={5}
+        value={value}
+        onChange={(event) => onChange(Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, Number(event.target.value))))}
+        className="w-full accent-champagne-600"
+      />
+      <p className="text-[0.7rem] text-zinc-500">
+        Volume com que a música começa no player do site (padrão: {VOLUME_DEFAULT}%). O convidado ainda pode ajustar na barra do player.
+        Toque a música no player acima para ouvir como fica.
       </p>
     </div>
   );

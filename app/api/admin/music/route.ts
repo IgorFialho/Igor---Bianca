@@ -13,6 +13,7 @@ import {
   getMusicSettings,
   listTracks,
   readTrackStart,
+  readTrackVolume,
   type MusicPageKey,
 } from '@/lib/music';
 
@@ -79,7 +80,7 @@ export async function PATCH(request: NextRequest) {
     const tracks = await listTracks();
     const validIds = new Set(tracks.map((track) => track.id));
 
-    // Editar nome, autoria e ponto de início de uma música (a original do site guarda os dados nas configurações).
+    // Editar nome, autoria, ponto de início e volume de uma música (a original do site guarda os dados nas configurações).
     if (body?.action === 'edit') {
       const title = cleanText(body?.title, TRACK_TITLE_MAX_LENGTH);
       const artist = cleanText(body?.artist, TRACK_ARTIST_MAX_LENGTH) || null;
@@ -87,18 +88,25 @@ export async function PATCH(request: NextRequest) {
       const id = String(body?.id ?? '');
       const track = tracks.find((item) => item.id === id);
       const start = readTrackStart(body?.start);
+      // Sem volume no pedido: mantém o atual.
+      const volume = body?.volume === undefined ? track?.volume ?? readTrackVolume(null) : readTrackVolume(body.volume);
       if (track?.duration && start >= track.duration - 1) {
         return NextResponse.json({ error: 'O início precisa ser antes do fim da música.' }, { status: 400 });
       }
       if (id === DEFAULT_TRACK_ID) {
-        await db.query('UPDATE music_settings SET default_title = $1, default_artist = $2, default_start = $3, updated_at = NOW() WHERE id = 1', [
-          title,
-          artist,
-          start,
-        ]);
+        await db.query(
+          'UPDATE music_settings SET default_title = $1, default_artist = $2, default_start = $3, default_player_volume = $4, updated_at = NOW() WHERE id = 1',
+          [title, artist, start, volume]
+        );
         return NextResponse.json({ ok: true });
       }
-      const result = await db.query('UPDATE music_tracks SET title = $2, artist = $3, start_at = $4 WHERE id::text = $1', [id, title, artist, start]);
+      const result = await db.query('UPDATE music_tracks SET title = $2, artist = $3, start_at = $4, player_volume = $5 WHERE id::text = $1', [
+        id,
+        title,
+        artist,
+        start,
+        volume,
+      ]);
       return result.rowCount ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Música não encontrada.' }, { status: 404 });
     }
 

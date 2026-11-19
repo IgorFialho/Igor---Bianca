@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { INTRO_ENTER_EVENT } from '@/components/intro-arco';
+import { MUSIC_DUCK_EVENT } from '@/lib/seal-crack-sound';
 
 const MUSIC_STATE_KEY = 'igor-bianca-music';
 /** Disparado pela câmera do mural ao começar (detail: true) e terminar (false) uma gravação. */
@@ -16,8 +17,9 @@ const DEFAULT_MUSIC_URL = '/sons/musica-fundo.mp3';
 const FADE_OUT_MS = 700;
 const FADE_IN_MS = 1200;
 
-/** start: segundo em que a música começa (definido no painel) e para onde volta ao repetir. */
-type PageTrack = { id: string; title: string; artist?: string | null; url: string; start?: number } | null;
+/** start: segundo em que a música começa (definido no painel) e para onde volta ao repetir;
+ *  volume: volume com que a música começa no player (0–1, definido no painel; o convidado pode mudar depois). */
+type PageTrack = { id: string; title: string; artist?: string | null; url: string; start?: number; volume?: number } | null;
 type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
 
 /** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite). */
@@ -71,6 +73,20 @@ export function SiteMusicPlayer() {
   const pageTrackStart =
     (config && pageTrackUrl ? Object.values(config.pages).find((page) => page?.url === pageTrackUrl)?.start : 0) || 0;
   const trackStartRef = useRef(0);
+  // Volume com que esta música começa no player (definido no painel); 25% enquanto o painel não responde.
+  const pageTrackVolume =
+    (config && pageTrackUrl ? Object.values(config.pages).find((page) => page?.url === pageTrackUrl)?.volume : undefined) ?? 0.25;
+  // Último volume do painel aplicado ao player (para aplicar de novo só quando a música ou o painel mudar).
+  const appliedTrackVolumeRef = useRef<number | null>(null);
+  // Volume vindo da música (e não da barra): o efeito do volume não deve cortar o fade em andamento.
+  const skipVolumeEffectRef = useRef(false);
+  const setTrackVolume = useCallback((next: number) => {
+    const normalized = Math.min(1, Math.max(0, next));
+    if (Math.abs(normalized - volumeRef.current) < 0.0001) return;
+    volumeRef.current = normalized;
+    skipVolumeEffectRef.current = true;
+    setVolume(normalized);
+  }, []);
 
   // Configuração do painel (de novo ao voltar para a aba, para pegar mudanças feitas no painel).
   useEffect(() => {
@@ -140,13 +156,13 @@ export function SiteMusicPlayer() {
       }
 
       fadeRef.current?.cancel();
-      audioElement.volume = fadeIn ? 0 : volume;
+      audioElement.volume = fadeIn ? 0 : volumeRef.current;
       audioElement.muted = false;
 
       try {
         await audioElement.play();
         setIsMusicPlaying(true);
-        if (fadeIn) void fadeTo(audioElement, volume, FADE_IN_MS);
+        if (fadeIn) void fadeTo(audioElement, volumeRef.current, FADE_IN_MS);
         return true;
       } catch {
         if (!allowMutedFallback) {
@@ -157,10 +173,10 @@ export function SiteMusicPlayer() {
         try {
           audioElement.muted = true;
           await audioElement.play();
-          audioElement.volume = fadeIn ? 0 : volume;
+          audioElement.volume = fadeIn ? 0 : volumeRef.current;
           audioElement.muted = false;
           setIsMusicPlaying(true);
-          if (fadeIn) void fadeTo(audioElement, volume, FADE_IN_MS);
+          if (fadeIn) void fadeTo(audioElement, volumeRef.current, FADE_IN_MS);
           return true;
         } catch {
           setIsMusicPlaying(false);
@@ -168,7 +184,7 @@ export function SiteMusicPlayer() {
         }
       }
     },
-    [volume, fadeTo]
+    [fadeTo]
   );
 
   useEffect(() => {
@@ -178,6 +194,11 @@ export function SiteMusicPlayer() {
       return;
     }
 
+    // Mudança vinda da música nova: o volume já foi aplicado (ou está subindo aos poucos).
+    if (skipVolumeEffectRef.current) {
+      skipVolumeEffectRef.current = false;
+      return;
+    }
     fadeRef.current?.cancel();
     audioElement.volume = volume;
   }, [volume]);
@@ -339,6 +360,10 @@ export function SiteMusicPlayer() {
       audioElement.src = pageTrackUrl;
       audioElement.load();
       trackStartRef.current = pageTrackStart;
+      // A música começa no volume definido no painel (a barra do player acompanha).
+      appliedTrackVolumeRef.current = pageTrackVolume;
+      setTrackVolume(pageTrackVolume);
+      audioElement.volume = volumeRef.current;
       // Começa no ponto definido no painel (aplicado assim que o navegador lê a duração).
       if (pageTrackStart > 0) {
         const src = pageTrackUrl;
@@ -373,15 +398,20 @@ export function SiteMusicPlayer() {
       return;
     }
 
-    // Mesma música: só atualiza o ponto para onde ela volta ao repetir (se mudou no painel).
+    // Mesma música: atualiza o ponto para onde ela volta ao repetir e o volume dela (se mudaram no painel).
     trackStartRef.current = pageTrackStart;
+    if (appliedTrackVolumeRef.current !== pageTrackVolume) {
+      appliedTrackVolumeRef.current = pageTrackVolume;
+      setTrackVolume(pageTrackVolume);
+      if (!audioElement.paused && !pausedForPageRef.current) void fadeTo(audioElement, volumeRef.current, 600);
+    }
     if (pausedForPageRef.current) {
       pausedForPageRef.current = false;
       // Voltou de uma página sem música: se ainda estava baixando, sobe de novo; se já pausou, recomeça subindo.
       if (!audioElement.paused) void fadeTo(audioElement, volumeRef.current, FADE_IN_MS);
       else void startPlayback(true, true);
     }
-  }, [pageTrackUrl, pageTrackStart, isAdminRoute, startPlayback, restoreSavedState, fadeTo]);
+  }, [pageTrackUrl, pageTrackStart, pageTrackVolume, isAdminRoute, startPlayback, restoreSavedState, fadeTo, setTrackVolume]);
 
   // Ao repetir, a música volta ao ponto de início definido no painel (e não ao 0:00).
   useEffect(() => {
@@ -410,6 +440,28 @@ export function SiteMusicPlayer() {
     audioElement.addEventListener('timeupdate', onTime);
     return () => audioElement.removeEventListener('timeupdate', onTime);
   }, [isAdminRoute]);
+
+  // Efeito sonoro rápido (ex.: selo do convite quebrando): a música abaixa para 30% do volume escolhido,
+  // segura enquanto o efeito toca (detail, em ms) e volta suavemente. No iPhone o volume é fixo pelo sistema.
+  useEffect(() => {
+    if (isAdminRoute) return;
+    let restoreTimer = 0;
+    const onDuck = (event: Event) => {
+      const audioElement = audioRef.current;
+      if (!audioElement || audioElement.paused || audioElement.muted) return;
+      const hold = Number((event as CustomEvent<number>).detail) || 1200;
+      window.clearTimeout(restoreTimer);
+      void fadeTo(audioElement, volumeRef.current * 0.3, 160);
+      restoreTimer = window.setTimeout(() => {
+        if (!audioElement.paused) void fadeTo(audioElement, volumeRef.current, 1400);
+      }, hold);
+    };
+    window.addEventListener(MUSIC_DUCK_EVENT, onDuck);
+    return () => {
+      window.removeEventListener(MUSIC_DUCK_EVENT, onDuck);
+      window.clearTimeout(restoreTimer);
+    };
+  }, [isAdminRoute, fadeTo]);
 
   // Vídeo com som (ex.: post do mural) ou gravação pela câmera: a música pausa e volta sozinha ao terminar.
   useEffect(() => {
@@ -570,16 +622,14 @@ export function SiteMusicPlayer() {
   }
 
   const volumePercent = Math.round(volume * 100);
-  const spring = { type: 'spring', stiffness: 420, damping: 34, mass: 0.8 } as const;
+  // Abrir/fechar: só a largura dos controles anima (a pílula não é reescalada quadro a quadro).
+  const panelEase = [0.22, 1, 0.36, 1] as const;
 
   return (
     // Página "sem música": o player some, mas o áudio continua montado (para voltar do mesmo ponto).
     <div className={`fixed left-5 top-[22px] z-[60] sm:left-7 sm:top-[26px] ${hasMusic ? '' : 'hidden'}`} aria-hidden={!hasMusic}>
-      <motion.div
-        layout
-        transition={spring}
-        className={`music-pill relative flex items-center ${isCollapsed ? 'gap-0 p-1' : 'gap-2.5 p-1 pr-2 sm:gap-3'}`}
-        style={{ borderRadius: 999 }}
+      <div
+        className="music-pill relative flex items-center rounded-full p-1"
         // Qualquer toque, clique ou tecla no player adia o fechamento automático.
         onPointerDownCapture={() => setInteraction((value) => value + 1)}
         onClickCapture={() => setInteraction((value) => value + 1)}
@@ -587,7 +637,6 @@ export function SiteMusicPlayer() {
       >
         {/* Disco: abre/fecha o player. Gira tocando; brilho pulsando em volta. */}
         <motion.button
-          layout="position"
           type="button"
           onClick={() => setIsCollapsed((current) => !current)}
           className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
@@ -595,35 +644,22 @@ export function SiteMusicPlayer() {
           aria-expanded={!isCollapsed}
           whileTap={{ scale: 0.92 }}
         >
-          <AnimatePresence>
-            {isMusicPlaying ? (
-              <motion.span
-                key="halo"
-                className="music-halo pointer-events-none absolute inset-0 rounded-full"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.55, 0], scale: [1, 1.55] }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 2.4, ease: 'easeOut', repeat: Infinity }}
-              />
-            ) : null}
-          </AnimatePresence>
-          <motion.span
-            className="music-disc relative block h-10 w-10 rounded-full"
-            animate={isMusicPlaying ? { rotate: 360 } : { rotate: 0 }}
-            transition={isMusicPlaying ? { duration: 3.2, ease: 'linear', repeat: Infinity } : { duration: 0.6, ease: 'easeOut' }}
-          />
+          {isMusicPlaying ? <span className="music-halo pointer-events-none absolute inset-0 rounded-full" /> : null}
+          {/* Gira só enquanto toca; em pausa, para onde está. */}
+          <span className={`music-disc relative block h-10 w-10 rounded-full ${isMusicPlaying ? '' : 'music-disc--paused'}`} />
         </motion.button>
 
         <AnimatePresence initial={false}>
           {!isCollapsed ? (
             <motion.div
               key="controls"
-              initial={{ opacity: 0, x: -8, filter: 'blur(4px)' }}
-              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="flex items-center gap-2.5 sm:gap-3"
+              // A largura abre do 0 até o tamanho dos controles; o espaço depois do disco (pl) e no fim (pr) vem junto.
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 'auto', opacity: 1, transition: { width: { duration: 0.34, ease: panelEase }, opacity: { duration: 0.22, delay: 0.08 } } }}
+              exit={{ width: 0, opacity: 0, transition: { width: { duration: 0.28, ease: panelEase }, opacity: { duration: 0.12 } } }}
+              className="overflow-hidden"
             >
+              <div className="flex w-max items-center gap-2.5 pl-2.5 pr-1 sm:gap-3 sm:pl-3">
               {/* Tocando agora + nome da música (desliza quando é longo) */}
               <div className="min-w-0 w-[7.5rem] sm:w-[10rem]">
                 <p className="flex items-center gap-1.5 whitespace-nowrap text-[0.55rem] font-medium uppercase tracking-[0.16em] text-champagne-700/80 sm:tracking-[0.22em]">
@@ -697,7 +733,6 @@ export function SiteMusicPlayer() {
               </motion.button>
 
               {/* Volume */}
-              <div className="relative">
                 <motion.button
                   type="button"
                   whileTap={{ scale: 0.88 }}
@@ -721,40 +756,6 @@ export function SiteMusicPlayer() {
                     )}
                   </svg>
                 </motion.button>
-                <AnimatePresence>
-                  {isVolumeOpen ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -6, scale: 0.95 }}
-                      transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="music-volume-pop absolute right-0 top-[calc(100%+0.6rem)] flex w-48 items-center gap-3 rounded-2xl px-4 py-3"
-                      onPointerEnter={() => setIsVolumeInteracting(true)}
-                      onPointerLeave={() => setIsVolumeInteracting(false)}
-                      onPointerDown={() => setIsVolumeInteracting(true)}
-                      onPointerUp={() => setIsVolumeInteracting(false)}
-                      onFocusCapture={() => setIsVolumeInteracting(true)}
-                      onBlurCapture={(event) => {
-                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                          setIsVolumeInteracting(false);
-                        }
-                      }}
-                    >
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        value={volume}
-                        onChange={(event) => handleVolumeChange(Number(event.target.value))}
-                        className="music-range flex-1"
-                        style={{ ['--fill' as string]: `${volumePercent}%` }}
-                        aria-label="Volume da música"
-                      />
-                      <span className="w-8 text-right text-[0.7rem] font-medium tabular-nums text-champagne-700">{volumePercent}%</span>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
               </div>
             </motion.div>
           ) : null}
@@ -764,7 +765,8 @@ export function SiteMusicPlayer() {
           ref={audioRef}
           loop
           playsInline
-          preload="auto"
+          // Só os dados da faixa ao abrir; o áudio é baixado aos poucos enquanto toca (a música tem ~9 MB).
+          preload="metadata"
           onPlay={() => setIsMusicPlaying(true)}
           onPause={() => setIsMusicPlaying(false)}
           onEnded={() => setIsMusicPlaying(false)}
@@ -774,7 +776,43 @@ export function SiteMusicPlayer() {
           {/* A música (src) é definida conforme a página, pela configuração do painel. */}
           Seu navegador nao suporta audio.
         </audio>
-      </motion.div>
+      </div>
+
+      {/* Volume: preso ao player (fora da área que abre/fecha, para não ser cortado). */}
+      <AnimatePresence>
+        {isVolumeOpen && !isCollapsed ? (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.95 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="music-volume-pop absolute right-2 top-[calc(100%+0.6rem)] flex w-48 items-center gap-3 rounded-2xl px-4 py-3"
+            onPointerEnter={() => setIsVolumeInteracting(true)}
+            onPointerLeave={() => setIsVolumeInteracting(false)}
+            onPointerDown={() => setIsVolumeInteracting(true)}
+            onPointerUp={() => setIsVolumeInteracting(false)}
+            onFocusCapture={() => setIsVolumeInteracting(true)}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setIsVolumeInteracting(false);
+              }
+            }}
+          >
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(event) => handleVolumeChange(Number(event.target.value))}
+              className="music-range flex-1"
+              style={{ ['--fill' as string]: `${volumePercent}%` }}
+              aria-label="Volume da música"
+            />
+            <span className="w-8 text-right text-[0.7rem] font-medium tabular-nums text-champagne-700">{volumePercent}%</span>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

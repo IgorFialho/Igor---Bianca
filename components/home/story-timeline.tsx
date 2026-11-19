@@ -207,13 +207,13 @@ export function StoryTimeline({ id, title, intro, chapters, closing }: StoryTime
       </div>
 
       {/* O próximo capítulo: logo abaixo das alianças, fora da linha. */}
-      <div className="mx-auto mt-8 max-w-2xl text-center md:mt-10">
+      <div className="mx-auto mt-8 max-w-4xl text-center md:mt-12">
           <motion.p
             initial={reduceMotion ? false : { opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.5 }}
             transition={{ duration: 0.9, delay: 0.15, ease: EASE }}
-            className="font-display text-[1.45rem] italic leading-snug text-zinc-700 md:text-[2rem]"
+            className="font-display text-[1.85rem] italic leading-[1.2] text-zinc-700 md:text-[2.9rem] md:leading-[1.15]"
           >
             {closing}
           </motion.p>

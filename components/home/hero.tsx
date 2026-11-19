@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { INTRO_ENTER_EVENT, introHoleRect, isIntroPending, shouldSkipIntro } from '@/components/intro-arco';
+import { INTRO_ENTER_EVENT, introHoleRect, shouldSkipIntro } from '@/components/intro-arco';
 import { FittedText } from './fitted-text';
 
 /** Foto com ponto de foco (object-position, ex.: "50% 30%") para enquadrar os rostos. */
@@ -220,7 +220,11 @@ export function Hero({ id, imageSrc, imagePosition, imageAlt, introFocus, headli
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
   const [progress, setProgress] = useState(0);
-  const [introOpen, setIntroOpen] = useState(() => Boolean(introFocus) && isIntroPending());
+  // Começa igual no servidor e no navegador (introdução aberta) e o efeito abaixo fecha quando ela é pulada.
+  // Ler o navegador aqui (isIntroPending) dava um valor no servidor e outro no navegador: o React não corrige
+  // essa diferença em produção e o texto da foto de abertura ficava invisível (opacity 0) para quem chegava
+  // por um link com #seção ou já tinha entrado antes.
+  const [introOpen, setIntroOpen] = useState(() => Boolean(introFocus));
   const [justEntered, setJustEntered] = useState(false);
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);

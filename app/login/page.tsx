@@ -11,7 +11,7 @@ import { Reveal, REVEAL_EASE } from '@/components/home/reveal';
 import { ScrollWords } from '@/components/home/scroll-words';
 import { SiteHeader } from '@/components/home/site-header';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
-import { StoryScroll, type StoryChapter } from '@/components/home/story-scroll';
+import { StoryTimeline, type TimelineChapter } from '@/components/home/story-timeline';
 import { ClickPetals } from '@/components/home/click-petals';
 import { DetailsSection, type GuestMessage } from '@/components/home/details-section';
 import { FaqSection, type FaqItem } from '@/components/home/faq-section';
@@ -46,34 +46,48 @@ const FOOTER_PHOTOS: FooterPhoto[] = [
   { src: '/imagens/convite/flores-fundo.jpg', mobileSrc: '/imagens/convite/flores-fundo-mobile.jpg', position: '50% 60%', quote: 'obrigado por fazerem parte da nossa história. nos vemos no grande dia!' },
 ];
 
-const STORY_CHAPTERS: StoryChapter[] = [
+// "Nossa história": linha do tempo vertical (texto do casal).
+const STORY_INTRO = 'Quando deixamos Deus escrever uma história de amor, Ele faz com que dois corações se encontrem no momento certo!';
+const STORY_CHAPTERS: TimelineChapter[] = [
   {
-    title: 'capítulo um: como nos conhecemos',
-    text: 'O começo de tudo: o dia em que nossos caminhos se cruzaram e uma conversa virou muitas outras.',
+    label: 'Capítulo um',
+    title: 'Como nos conhecemos',
+    text: 'Tudo começou no Carisma em 2024, foi ali que nossos caminhos se cruzaram pela primeira vez, mas ainda não era tempo desse amor florescer.',
     photos: [
       { src: '/imagens/casal/casal-12.jpeg', caption: 'O começo de tudo' },
-      { src: '/imagens/casal/casal-13.jpeg', caption: 'Primeiros passeios' },
-      { src: '/imagens/casal/casal-03.jpeg', caption: 'Juntos' },
+      { src: '/imagens/casal/casal-13.jpeg', caption: 'Carisma, 2024' },
     ],
   },
   {
-    title: 'capítulo dois: nos apaixonando',
-    text: 'Jantares, viagens, rotinas compartilhadas e todos os pequenos momentos que fizeram a vida parecer maior.',
+    label: 'Capítulo dois',
+    title: 'O reencontro',
+    text: 'Perdemos contato e um ano se passou até que chegou o tempo oportuno para esse amor recomeçar. Voltamos a trocar mensagens e bastou a proximidade para sabermos que havíamos encontrado a pessoa com quem queríamos compartilhar a vida.',
     photos: [
+      { src: '/imagens/casal/casal-03.jpeg', caption: 'De novo, juntos' },
       { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha' },
+    ],
+  },
+  {
+    label: 'Capítulo três',
+    title: 'Nos apaixonando',
+    text: 'Piquenique na chuva, passeios de bicicleta, idas ao shopping e tardes de jogos fizeram parte dos nossos momentos favoritos juntos.',
+    photos: [
       { src: '/imagens/casal/casal-09.jpeg', caption: 'Flores e carinho' },
       { src: '/imagens/casal/casal-07.jpeg', caption: 'Nossas aventuras' },
     ],
   },
   {
-    title: 'capítulo três: o próximo passo',
-    text: 'Uma pergunta, um sim muito fácil, e de repente o futuro que imaginávamos virou algo para celebrar com vocês.',
+    label: 'Capítulo quatro',
+    title: 'O próximo passo',
+    text: 'E, em meio a essa história linda, chegou um dos momentos mais esperados: o pedido de casamento e a certeza de um futuro que está só começando.',
     photos: [
       { src: '/imagens/casal/casal-04.jpeg', caption: 'O pedido' },
       { src: '/imagens/casal/casal-05.jpeg', caption: 'Sim!' },
     ],
   },
 ];
+const STORY_CLOSING =
+  'Agora, nos preparamos para viver o próximo capítulo, certos de que o mesmo Deus que escreveu o início dessa história continuará guiando cada página que ainda está por vir.';
 
 const FAQ_ITEMS: FaqItem[] = [
   {
@@ -306,7 +320,7 @@ export default function LoginPage() {
         />
       </section>
 
-      <StoryScroll id="nossa-historia" title="Nossa história" chapters={STORY_CHAPTERS} />
+      <StoryTimeline id="nossa-historia" title="Nossa história" intro={STORY_INTRO} chapters={STORY_CHAPTERS} closing={STORY_CLOSING} />
 
       <section id="cerimonia" className="relative w-full scroll-mt-24">
         <div className="flex min-h-screen flex-col items-center justify-center px-4 py-24 text-center">

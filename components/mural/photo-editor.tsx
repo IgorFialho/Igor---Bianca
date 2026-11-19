@@ -1181,7 +1181,7 @@ function EmojiGrid({ onSelect, onClose, label }: { onSelect: (emoji: string) => 
           ✕
         </button>
       </div>
-      <div className="grid max-h-[11.5rem] grid-cols-8 gap-1 overflow-y-auto">
+      <div className="scroll-soft grid max-h-[11.5rem] grid-cols-8 gap-1 overflow-y-auto">
         {PHOTO_EMOJIS.map((emoji) => (
           <button
             key={emoji}

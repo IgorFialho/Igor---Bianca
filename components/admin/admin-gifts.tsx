@@ -309,7 +309,7 @@ export function AdminGifts() {
           ) : null}
           {isLoading ? <p className="text-sm text-zinc-600">Carregando…</p> : null}
           {!isLoading && gifts.length === 0 ? <p className="text-sm text-zinc-600">Nenhum presente cadastrado ainda.</p> : null}
-          <div className="max-h-[26rem] space-y-3 overflow-auto pr-1">
+          <div className="scroll-soft max-h-[26rem] space-y-3 overflow-auto pr-1">
             {filteredGifts.map((gift) => {
               const taken = activeByGift.get(gift.id);
               return (

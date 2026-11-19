@@ -226,7 +226,7 @@ function EditPostDialog({
     >
       <form
         onSubmit={save}
-        className="max-h-[92svh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8"
+        className="scroll-soft max-h-[92svh] w-full max-w-md overflow-y-auto rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-2xl sm:p-8"
         onClick={(event) => event.stopPropagation()}
       >
         <p className={EYEBROW}>Mural</p>

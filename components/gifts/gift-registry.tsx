@@ -494,7 +494,7 @@ export function GiftRegistry() {
               onClick={() => setSelected(null)}
             >
               <motion.div
-                className={`relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] text-center shadow-2xl transition-[max-width] duration-300 sm:rounded-[2rem] ${
+                className={`scroll-soft relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] text-center shadow-2xl transition-[max-width] duration-300 sm:rounded-[2rem] ${
                   // Na escolha, sem espaçamento interno: a foto vai até as bordas (o texto tem o próprio espaçamento).
                   // No celular a folha começa mais alta (pelo menos 82% da tela) e cresce com descrições longas (até 92%, depois rola).
                   step === 'choose' ? 'flex min-h-[82svh] flex-col md:block md:min-h-0 md:max-w-4xl md:overflow-hidden' : 'p-6 sm:p-8'

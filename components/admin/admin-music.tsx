@@ -642,7 +642,7 @@ function TrackSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="absolute inset-x-0 top-full z-30 mt-2 max-h-72 origin-top space-y-1 overflow-y-auto rounded-2xl border border-zinc-800/10 bg-[#fffaf1] p-1.5 shadow-[0_24px_50px_rgba(47,36,27,0.18)]"
+            className="scroll-soft absolute inset-x-0 top-full z-30 mt-2 max-h-72 origin-top space-y-1 overflow-y-auto rounded-2xl border border-zinc-800/10 bg-[#fffaf1] p-1.5 shadow-[0_24px_50px_rgba(47,36,27,0.18)]"
           >
             {choices.map((choice, index) => {
               const isSelected = index === selectedIndex;

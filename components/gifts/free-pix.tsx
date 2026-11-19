@@ -220,7 +220,7 @@ export function FreePix() {
               onClick={() => setIsOpen(false)}
             >
               <motion.div
-                className="relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] p-6 text-center shadow-2xl sm:rounded-[2rem] sm:p-8"
+                className="scroll-soft relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-[#fffaf1] p-6 text-center shadow-2xl sm:rounded-[2rem] sm:p-8"
                 style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
                 initial={{ y: 40 }}
                 animate={{ y: 0 }}

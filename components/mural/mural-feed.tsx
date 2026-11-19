@@ -1763,7 +1763,7 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
           onClick={(event) => event.stopPropagation()}
-          className="safari-clip flex h-full w-full max-w-6xl flex-col overflow-y-auto bg-[#fffaf1] sm:h-[88vh] sm:flex-row sm:overflow-hidden sm:rounded-[1.25rem]"
+          className="scroll-soft safari-clip flex h-full w-full max-w-6xl flex-col overflow-y-auto bg-[#fffaf1] sm:h-[88vh] sm:flex-row sm:overflow-hidden sm:rounded-[1.25rem]"
         >
           <div
             className="relative flex shrink-0 select-none items-center justify-center overscroll-x-contain bg-black sm:h-full sm:flex-1"
@@ -1885,7 +1885,7 @@ function PostModal({ post, viewerId, authorName, onAuthorName, canInteract, hasP
               </div>
             </div>
 
-            <div className="flex-1 space-y-4 px-4 py-4 text-sm sm:min-h-0 sm:overflow-y-auto">
+            <div className="scroll-soft flex-1 space-y-4 px-4 py-4 text-sm sm:min-h-0 sm:overflow-y-auto">
               {post.caption ? (
                 <div className="flex gap-3">
                   <Avatar name={post.authorName} size="h-8 w-8" role={post.authorRole} />
@@ -2124,7 +2124,7 @@ function CommentsSheet({ post, viewerId, authorName, onAuthorName, canInteract, 
             </button>
           </div>
 
-          <div className="min-h-[8rem] flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 text-sm">
+          <div className="scroll-soft min-h-[8rem] flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 text-sm">
             {post.caption ? (
               <div className="flex gap-3 border-b border-zinc-800/10 pb-4">
                 <Avatar name={post.authorName} size="h-8 w-8" role={post.authorRole} />
@@ -2487,7 +2487,7 @@ export function Composer({
           className="flex max-h-[92svh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-[#fffaf1] shadow-2xl sm:rounded-[2rem]"
         >
           {/* Conteúdo que rola; o rodapé com os botões fica fora dele (nada fica escondido atrás dos botões). */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pb-6 sm:p-8 sm:pb-7">
+          <div className="scroll-soft min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pb-6 sm:p-8 sm:pb-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className={EYEBROW}>Mural do casamento</p>

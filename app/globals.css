@@ -163,6 +163,38 @@ textarea:-webkit-autofill {
   border-radius: 0;
 }
 
+/* Janelas e painéis arredondados que rolam (Pix, presentes, comentários, listas): a barra fica por dentro da curva.
+   Trilho transparente (sem a faixa areia quadrada que "vaza" pelos cantos), alça fina em pílula e uma margem em cima
+   e embaixo para a barra não encostar nos cantos arredondados. */
+.scroll-soft {
+  scrollbar-color: rgba(138, 90, 43, 0.45) transparent;
+  scrollbar-gutter: auto;
+}
+@supports selector(::-webkit-scrollbar) {
+  .scroll-soft {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+.scroll-soft::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.scroll-soft::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 1.75rem;
+}
+.scroll-soft::-webkit-scrollbar-thumb {
+  background: rgba(138, 90, 43, 0.4);
+  background-clip: padding-box;
+  border: 2.5px solid transparent;
+  border-radius: 999px;
+}
+.scroll-soft::-webkit-scrollbar-thumb:hover {
+  background: rgba(138, 90, 43, 0.7);
+  background-clip: padding-box;
+}
+
 /* Áreas que escondem a barra de propósito (ex.: carrossel de post-its) continuam escondidas. */
 [class*='scrollbar-width:none'] {
   scrollbar-width: none;

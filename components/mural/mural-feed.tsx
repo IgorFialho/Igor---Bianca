@@ -32,11 +32,11 @@ import {
 
 const NAV_LINKS = [
   { label: 'Início', href: INTRO_HOME_HREF },
-  { label: 'Nossa história', href: '/login#nossa-historia' },
-  { label: 'Cerimônia', href: '/login#cerimonia' },
-  { label: 'Confirmar presença', href: '/login#rsvp' },
+  { label: 'Nossa história', href: '/home#nossa-historia' },
+  { label: 'Cerimônia', href: '/home#cerimonia' },
+  { label: 'Confirmar presença', href: '/home#rsvp' },
   { label: 'Lista de presentes', href: '/presentes' },
-  { label: 'Perguntas', href: '/login#perguntas' },
+  { label: 'Perguntas', href: '/home#perguntas' },
 ];
 
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';

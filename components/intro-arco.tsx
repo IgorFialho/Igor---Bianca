@@ -247,14 +247,14 @@ function IntroArcoOverlay() {
   );
 }
 
-// A introdução só existe na home (/login; a raiz "/" redireciona para lá).
-const INTRO_PATH = '/login';
+// A introdução só existe na home (/home; a raiz "/" e o antigo /login redirecionam para lá).
+const INTRO_PATH = '/home';
 // Depois que a pessoa entra, voltar para a home (pela navegação ou recarregando) não repete a introdução.
 let hasEnteredSite = false;
 const ENTERED_KEY = 'igor-bianca-entered';
 
 /** Link "Início" do menu: abre a home mostrando a introdução de novo. */
-export const INTRO_HOME_HREF = '/login?intro';
+export const INTRO_HOME_HREF = '/home?intro';
 
 function wantsIntro() {
   return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro');
@@ -273,7 +273,7 @@ function markEnteredSite() {
 
 /**
  * A introdução não aparece quando a pessoa já entrou no site nesta visita, nem quando chega na home
- * indo direto para uma seção (ex.: /login#rsvp a partir da lista de presentes). Só no navegador.
+ * indo direto para uma seção (ex.: /home#rsvp a partir da lista de presentes). Só no navegador.
  */
 export function shouldSkipIntro() {
   // "Início" pede a introdução explicitamente: mostra mesmo para quem já entrou.

@@ -22,7 +22,7 @@ Feito com Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion e Pos
 
 ## Funcionalidades
 
-**Home (`/login`)**
+**Home (`/home`)**
 
 - Introdução com arco de flores em camadas (efeito 3D com o mouse) e “Clique para entrar”, que também inicia a música.
 - Topo com a foto do casal que encolhe ao rolar enquanto outras quatro fotos entram ao redor.
@@ -65,7 +65,7 @@ Feito com Next.js 14 (App Router), TypeScript, Tailwind CSS, Framer Motion e Pos
 
 ```text
 app/
-  login/            Home do site (página principal)
+  home/             Home do site (página principal)
   convite/          Envelope e formulário de RSVP
   admin/            Painel administrativo e login
   api/              Rotas de API (convite, RSVP, admin)
@@ -110,7 +110,7 @@ node scripts/create-gifts-tables.mjs
 npm run dev
 ```
 
-Acesse <http://localhost:3000>. A raiz `/` redireciona para a home em `/login`.
+Acesse <http://localhost:3000>. A raiz `/` (e o antigo `/login`) redireciona para a home em `/home`.
 
 ## Variáveis de ambiente
 
@@ -160,7 +160,7 @@ O esquema está em [`db/schema.sql`](db/schema.sql) e é aplicado por `node scri
 
 | Rota | Descrição |
 | --- | --- |
-| `/login` | Home do site (a raiz `/` redireciona para cá). |
+| `/home` | Home do site (a raiz `/` e o antigo `/login` redirecionam para cá). |
 | `/convite` | Envelope e RSVP; exige um código válido informado na home. |
 | `/presentes` | Lista de presentes; exige o código do convite para presentear. |
 | `/admin/login` · `/admin` | Login e painel administrativo. |
@@ -176,9 +176,9 @@ O esquema está em [`db/schema.sql`](db/schema.sql) e é aplicado por `node scri
 
 | O que mudar | Onde |
 | --- | --- |
-| Fotos e textos da home, capítulos da história e perguntas frequentes | Constantes no topo de [`app/login/page.tsx`](app/login/page.tsx) |
-| Ponto de foco de cada foto (para não cortar rostos) | Campo `position` das fotos em `app/login/page.tsx` |
-| Data, horário e local do evento | [`lib/invite.ts`](lib/invite.ts) e `EVENT_DATE` em `app/login/page.tsx` |
+| Fotos e textos da home, capítulos da história e perguntas frequentes | Constantes no topo de [`app/home/page.tsx`](app/home/page.tsx) |
+| Ponto de foco de cada foto (para não cortar rostos) | Campo `position` das fotos em `app/home/page.tsx` |
+| Data, horário e local do evento | [`lib/invite.ts`](lib/invite.ts) e `EVENT_DATE` em `app/home/page.tsx` |
 | Cores e fontes | [`tailwind.config.ts`](tailwind.config.ts) e [`app/layout.tsx`](app/layout.tsx) |
 | Texto da introdução | [`components/intro-arco.tsx`](components/intro-arco.tsx) |
 

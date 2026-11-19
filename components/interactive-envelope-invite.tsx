@@ -10,15 +10,15 @@ import { SiteHeader } from '@/components/home/site-header';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import { INVITE_CARD_BODY_CLASS, INVITE_CARD_CLASS, SealedEnvelope } from '@/components/convite/sealed-envelope';
 
-// Menu da home, sem "Confirmar presença" (é esta página); as seções ficam na home (/login#secao).
+// Menu da home, sem "Confirmar presença" (é esta página); as seções ficam na home (/home#secao).
 const NAV_LINKS = [
   { label: 'Início', href: INTRO_HOME_HREF },
-  { label: 'Nossa história', href: '/login#nossa-historia' },
-  { label: 'Cerimônia', href: '/login#cerimonia' },
-  { label: 'Mensagens', href: '/login#mensagens' },
+  { label: 'Nossa história', href: '/home#nossa-historia' },
+  { label: 'Cerimônia', href: '/home#cerimonia' },
+  { label: 'Mensagens', href: '/home#mensagens' },
   { label: 'Lista de presentes', href: '/presentes' },
   { label: 'Mural', href: '/mural' },
-  { label: 'Perguntas', href: '/login#perguntas' },
+  { label: 'Perguntas', href: '/home#perguntas' },
 ];
 
 type InteractiveEnvelopeInviteProps = {

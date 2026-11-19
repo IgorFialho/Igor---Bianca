@@ -63,7 +63,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     title: 'O reencontro',
     text: 'Perdemos contato e um ano se passou até que chegou o tempo oportuno para esse amor recomeçar. Voltamos a trocar mensagens e bastou a proximidade para sabermos que havíamos encontrado a pessoa com quem queríamos compartilhar a vida.',
     photos: [
-      { src: '/imagens/casal/casal-03.jpeg', caption: 'De novo, juntos' },
+      { src: '/imagens/casal/casal-04.jpeg', caption: 'De novo, juntos' },
       { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha' },
     ],
   },
@@ -81,7 +81,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     title: 'O próximo passo',
     text: 'E, em meio a essa história linda, chegou um dos momentos mais esperados: o pedido de casamento e a certeza de um futuro que está só começando.',
     photos: [
-      { src: '/imagens/casal/casal-04.jpeg', caption: 'O pedido' },
+      { src: '/imagens/casal/casal-03.jpeg', caption: 'O pedido' },
       { src: '/imagens/casal/casal-05.jpeg', caption: 'Sim!' },
     ],
   },
@@ -168,7 +168,7 @@ function pad(value: number) {
   return String(value).padStart(2, '0');
 }
 
-export default function LoginPage() {
+export default function HomePage() {
   const router = useRouter();
   const pageBackground = useSectionBackground(SECTION_BACKGROUNDS, PAGE_BACKGROUND);
   const [inviteCode, setInviteCode] = useState('');

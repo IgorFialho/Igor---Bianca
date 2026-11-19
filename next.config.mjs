@@ -13,6 +13,11 @@ const ADMIN_HEADERS = [
 
 const nextConfig = {
   reactStrictMode: true,
+  // A home era /login: links antigos (convites enviados, WhatsApp, QR Codes) continuam funcionando.
+  // O ?intro e o #seção (ex.: /login#rsvp) seguem junto no redirecionamento.
+  async redirects() {
+    return [{ source: '/login', destination: '/home', permanent: true }];
+  },
   async headers() {
     return [
       { source: '/admin', headers: ADMIN_HEADERS },

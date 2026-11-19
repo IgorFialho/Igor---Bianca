@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 type NavLink = { label: string; href: string };
 
-// Outra página do site (ex.: /presentes, /login#rsvp) usa <Link>, sem recarregar, para a música não parar.
+// Outra página do site (ex.: /presentes, /home#rsvp) usa <Link>, sem recarregar, para a música não parar.
 // "#seção" da própria página e "?intro" (que precisa recarregar para mostrar a introdução) ficam com <a>.
 function SmartLink({ href, className, onClick, children }: { href: string; className: string; onClick?: () => void; children: ReactNode }) {
   if (href.startsWith('/') && !href.includes('?intro')) {

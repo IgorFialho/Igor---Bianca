@@ -22,9 +22,10 @@ const FADE_IN_MS = 1200;
 type PageTrack = { id: string; title: string; artist?: string | null; url: string; start?: number; volume?: number } | null;
 type MusicConfig = { mode: 'single' | 'per_page'; pages: Record<string, PageTrack> };
 
-/** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite). */
+/** Qual configuração do painel vale para a página aberta (o /rsvp faz parte do convite).
+ *  A home usa a chave "login" (nome antigo da rota), que é como ela está salva no banco. */
 function musicPageKey(pathname: string) {
-  if (pathname.startsWith('/login')) return 'login';
+  if (pathname.startsWith('/home')) return 'login';
   if (pathname.startsWith('/convite') || pathname.startsWith('/rsvp')) return 'convite';
   if (pathname.startsWith('/presentes')) return 'presentes';
   if (pathname.startsWith('/mural')) return 'mural';
@@ -230,7 +231,7 @@ export function SiteMusicPlayer() {
     const handleIntroEnter = () => {
       const audioElement = audioRef.current;
 
-      // Entrada pela introdução (/login): a música começa aqui, como sempre — se a página tiver música.
+      // Entrada pela introdução (/home): a música começa aqui, como sempre — se a página tiver música.
       if (!audioElement || !audioElement.paused) return;
       if (audioElement.getAttribute('src')) void startPlayback(false);
       else pendingStartRef.current = true;

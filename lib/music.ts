@@ -32,9 +32,10 @@ export function readTrackStart(value: unknown) {
   return Math.min(TRACK_START_MAX, Math.round(number * 10) / 10);
 }
 
-/** Páginas que podem ter música própria (o /rsvp faz parte do convite). */
+/** Páginas que podem ter música própria (o /rsvp faz parte do convite).
+ *  A home fica em /home; a chave continua "login" (nome antigo da rota) porque é a que está salva no banco. */
 export const MUSIC_PAGES = [
-  { key: 'login', label: 'Página principal', path: '/login' },
+  { key: 'login', label: 'Página principal', path: '/home' },
   { key: 'convite', label: 'Convite e confirmação de presença', path: '/convite' },
   { key: 'presentes', label: 'Lista de presentes', path: '/presentes' },
   { key: 'mural', label: 'Mural', path: '/mural' },

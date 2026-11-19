@@ -14,7 +14,7 @@ export default function RsvpPage() {
     const storedAccess = window.sessionStorage.getItem(INVITE_ACCESS_KEY);
 
     if (!storedAccess) {
-      router.replace('/login');
+      router.replace('/home');
       setHasAccess(false);
       return;
     }

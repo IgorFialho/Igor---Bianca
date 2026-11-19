@@ -13,15 +13,15 @@ import type { PublicGift } from '@/lib/gifts';
 const THANK_YOU_PHOTO = '/imagens/casal/casal-08.jpeg';
 const GUEST_NAME_KEY = 'igor-bianca-gift-guest-name';
 
-// Mesmo menu da home, sem "Lista de presentes" (já estamos nela); as seções ficam lá, então os links apontam para /login#secao.
+// Mesmo menu da home, sem "Lista de presentes" (já estamos nela); as seções ficam lá, então os links apontam para /home#secao.
 const NAV_LINKS = [
   { label: 'Início', href: INTRO_HOME_HREF },
-  { label: 'Nossa história', href: '/login#nossa-historia' },
-  { label: 'Cerimônia', href: '/login#cerimonia' },
-  { label: 'Confirmar presença', href: '/login#rsvp' },
-  { label: 'Mensagens', href: '/login#mensagens' },
+  { label: 'Nossa história', href: '/home#nossa-historia' },
+  { label: 'Cerimônia', href: '/home#cerimonia' },
+  { label: 'Confirmar presença', href: '/home#rsvp' },
+  { label: 'Mensagens', href: '/home#mensagens' },
   { label: 'Mural', href: '/mural' },
-  { label: 'Perguntas', href: '/login#perguntas' },
+  { label: 'Perguntas', href: '/home#perguntas' },
 ];
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -299,7 +299,7 @@ export function GiftRegistry() {
 
   return (
     <main className="relative min-h-screen bg-cream px-6 pb-24 pt-8 text-zinc-800 md:px-10">
-      <SiteHeader ctaLabel="Confirmar presença" ctaHref="/login#rsvp" links={NAV_LINKS} alwaysDark />
+      <SiteHeader ctaLabel="Confirmar presença" ctaHref="/home#rsvp" links={NAV_LINKS} alwaysDark />
 
       <header className="mx-auto mt-16 max-w-3xl text-center md:mt-20">
         <Reveal>

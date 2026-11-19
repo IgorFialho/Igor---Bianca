@@ -40,6 +40,13 @@ type AdminFreePix = {
   confirmed_at: string | null;
 };
 
+/** Histórico embaixo da lista: um de cada vez (como "Convidado | Casal" no gerador de códigos). */
+const HISTORY_VIEWS = [
+  { key: 'gifts', label: 'Quem presenteou' },
+  { key: 'freePix', label: 'Pix avulsos' },
+] as const;
+type HistoryView = (typeof HISTORY_VIEWS)[number]['key'];
+
 const CARD = 'rounded-[2rem] border border-zinc-800/10 bg-[#fffaf1] p-6 shadow-[0_24px_60px_rgba(47,36,27,0.08)] sm:p-8';
 const EYEBROW = 'text-xs font-medium uppercase tracking-[0.2em] text-zinc-800/70';
 const FIELD =
@@ -97,6 +104,7 @@ export function AdminGifts() {
   const [gifts, setGifts] = useState<AdminGift[]>([]);
   const [contributions, setContributions] = useState<AdminContribution[]>([]);
   const [freePix, setFreePix] = useState<AdminFreePix[]>([]);
+  const [historyView, setHistoryView] = useState<HistoryView>('gifts');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -309,7 +317,9 @@ export function AdminGifts() {
           ) : null}
           {isLoading ? <p className="text-sm text-zinc-600">Carregando…</p> : null}
           {!isLoading && gifts.length === 0 ? <p className="text-sm text-zinc-600">Nenhum presente cadastrado ainda.</p> : null}
-          <div className="scroll-soft max-h-[26rem] space-y-3 overflow-auto pr-1">
+          {/* Os cards vão até a borda da coluna (alinhados com a busca e com "confirmados", como nas outras abas);
+              a barra de rolagem (9px) fica na margem do card, à direita dessa linha, sempre reservada. */}
+          <div className="scroll-soft -mr-4 max-h-[26rem] space-y-3 overflow-auto pr-[7px] [scrollbar-gutter:stable]">
             {filteredGifts.map((gift) => {
               const taken = activeByGift.get(gift.id);
               return (
@@ -389,8 +399,43 @@ export function AdminGifts() {
       </div>
 
       <div className="mt-10">
-        <p className={EYEBROW}>Quem presenteou</p>
-        <p className="mt-2 text-sm text-zinc-600">
+        <div role="radiogroup" aria-label="Histórico" className="grid w-full max-w-md grid-cols-2 gap-1 rounded-full border border-zinc-800/10 bg-cream p-1">
+          {HISTORY_VIEWS.map((view) => {
+            const pending =
+              view.key === 'gifts'
+                ? contributions.filter((item) => item.status === 'pending').length
+                : freePix.filter((item) => item.status === 'pending').length;
+            return (
+              <button
+                key={view.key}
+                type="button"
+                role="radio"
+                aria-checked={historyView === view.key}
+                onClick={() => setHistoryView(view.key)}
+                className={`flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition-colors ${
+                  historyView === view.key ? 'bg-champagne-600 text-[#fff9f1]' : 'text-zinc-700 hover:bg-zinc-800/5'
+                }`}
+              >
+                {view.label}
+                {/* Pendentes de confirmação nesta lista (aparece mesmo com a outra aberta). */}
+                {pending > 0 ? (
+                  <span
+                    className={`min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-[0.65rem] leading-none tracking-normal ${
+                      historyView === view.key ? 'bg-[#fff9f1]/25 text-[#fff9f1]' : 'bg-[#f6edd7] text-zinc-800'
+                    }`}
+                    aria-label={`${pending} aguardando confirmação`}
+                  >
+                    {pending}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        {historyView === 'gifts' ? (
+        <div className="mt-5">
+        <p className="text-sm text-zinc-600">
           Pix: confira no extrato (pelo valor e pelo nome de quem enviou) e confirme. Cancelar
           libera o presente na lista; Excluir apaga o registro do histórico.
         </p>
@@ -501,17 +546,14 @@ export function AdminGifts() {
           {!isLoading && contributions.length === 0 ? <p className="p-4 text-sm text-zinc-600">Ninguém presenteou ainda.</p> : null}
         </div>
         </div>
-      </div>
-
-      {/* Pix avulsos: valor escolhido pelo convidado, fora da lista de presentes. */}
-      <div className="mt-10">
+        </div>
+        ) : (
+      /* Pix avulsos: valor escolhido pelo convidado, fora da lista de presentes. */
+      <div className="mt-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className={EYEBROW}>Pix avulsos</p>
-            <p className="mt-2 text-sm text-zinc-600">
-              Valor livre enviado pelos convidados. Confira no extrato (valor e nome de quem enviou) e confirme.
-            </p>
-          </div>
+          <p className="text-sm text-zinc-600">
+            Valor livre enviado pelos convidados. Confira no extrato (valor e nome de quem enviou) e confirme.
+          </p>
           {freePixConfirmedTotal > 0 ? (
             <span className="rounded-full bg-olive-50 px-4 py-2 text-sm text-olive-800">{formatPrice(freePixConfirmedTotal)} confirmados</span>
           ) : null}
@@ -621,6 +663,8 @@ export function AdminGifts() {
             {!isLoading && freePix.length === 0 ? <p className="p-4 text-sm text-zinc-600">Nenhum Pix avulso ainda.</p> : null}
           </div>
         </div>
+      </div>
+        )}
       </div>
 
       <ConfirmDialog request={confirmAction} onClose={closeConfirm} />

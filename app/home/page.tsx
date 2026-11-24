@@ -33,9 +33,9 @@ const HERO_COUPLE = { centerX: 0.525, centerY: 0.675, width: 0.32, height: 0.46 
 // Fotos que aparecem em volta da principal ao rolar o topo (esquerda: 1 e 2; direita: 3 e 4).
 const HERO_GALLERY: [HeroPhoto, HeroPhoto, HeroPhoto, HeroPhoto] = [
   { src: '/imagens/casal/casal-01.jpeg' },
-  { src: '/imagens/casal/casal-02.jpeg' },
+  { src: '/imagens/casal/casal-03.jpeg' },
   { src: '/imagens/casal/casal-10.jpeg' },
-  { src: '/imagens/casal/casal-11.jpeg' },
+  { src: '/imagens/casal/casal-12.jpeg' },
 ];
 // Carrossel do rodapé (troca a cada 8s): o jardim do convite (Roman Odintsov / Pexels), o campo de flores
 // ao pôr do sol, a parede de rosas (karaz flowers / Unsplash) e as flores do Save the Date.
@@ -54,7 +54,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     title: 'Como nos conhecemos',
     text: 'Tudo começou no Carisma em 2024, foi ali que nossos caminhos se cruzaram pela primeira vez, mas ainda não era tempo desse amor florescer.',
     photos: [
-      { src: '/imagens/casal/casal-12.jpeg', caption: 'O começo de tudo' },
+      { src: '/imagens/casal/casal-11.jpeg', caption: 'O começo de tudo' },
       { src: '/imagens/casal/casal-13.jpeg', caption: 'Carisma, 2024' },
     ],
   },
@@ -64,7 +64,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     text: 'Perdemos contato e um ano se passou até que chegou o tempo oportuno para esse amor recomeçar. Voltamos a trocar mensagens e bastou a proximidade para sabermos que havíamos encontrado a pessoa com quem queríamos compartilhar a vida.',
     photos: [
       { src: '/imagens/casal/casal-04.jpeg', caption: 'De novo, juntos' },
-      { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha' },
+      { src: '/imagens/casal/casal-02.jpeg', caption: 'Lado a lado' },
     ],
   },
   {
@@ -72,7 +72,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     title: 'Nos apaixonando',
     text: 'Piquenique na chuva, passeios de bicicleta, idas ao shopping e tardes de jogos fizeram parte dos nossos momentos favoritos juntos.',
     photos: [
-      { src: '/imagens/casal/casal-09.jpeg', caption: 'Flores e carinho' },
+      { src: '/imagens/casal/casal-06.jpeg', caption: 'Pampulha' },
       { src: '/imagens/casal/casal-07.jpeg', caption: 'Nossas aventuras' },
     ],
   },
@@ -81,7 +81,7 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     title: 'O próximo passo',
     text: 'E, em meio a essa história linda, chegou um dos momentos mais esperados: o pedido de casamento e a certeza de um futuro que está só começando.',
     photos: [
-      { src: '/imagens/casal/casal-03.jpeg', caption: 'O pedido' },
+      { src: '/imagens/casal/casal-09.jpeg', caption: 'Flores e carinho' },
       { src: '/imagens/casal/casal-05.jpeg', caption: 'Sim!' },
     ],
   },

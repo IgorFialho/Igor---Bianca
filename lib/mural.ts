@@ -27,6 +27,8 @@ async function muralSchemaIsReady() {
       AND to_regclass('public.mural_post_media') IS NOT NULL
       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mural_posts' AND column_name = 'card_focus')
       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mural_comments' AND column_name = 'author_role')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mural_posts' AND column_name = 'media_trim')
+      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mural_post_media' AND column_name = 'media_trim')
       AS ok
   `);
   return Boolean(result.rows[0]?.ok);

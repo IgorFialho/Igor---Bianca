@@ -103,6 +103,9 @@ function createMuralSchema() {
         -- Parte da mídia que aparece no card quando ele corta a foto (0 = topo/esquerda, 0.5 = centro, 1 = base/direita).
         ALTER TABLE mural_posts ADD COLUMN IF NOT EXISTS card_focus REAL;
 
+        -- Trecho do vídeo escolhido no editor ("início,fim" em segundos), aplicado pelo Cloudinary.
+        ALTER TABLE mural_posts ADD COLUMN IF NOT EXISTS media_trim VARCHAR(24);
+
         -- Carrossel: fotos/vídeos a mais de um post (a 1ª mídia continua nas colunas do próprio post).
         CREATE TABLE IF NOT EXISTS mural_post_media (
           id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -118,6 +121,7 @@ function createMuralSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         CREATE INDEX IF NOT EXISTS idx_mural_post_media_post ON mural_post_media(post_id, position);
+        ALTER TABLE mural_post_media ADD COLUMN IF NOT EXISTS media_trim VARCHAR(24);
 
         -- Curtidas nos comentários (uma por aparelho); os mais curtidos aparecem primeiro.
         CREATE TABLE IF NOT EXISTS mural_comment_likes (
@@ -276,6 +280,7 @@ type ExtraMediaRow = {
   height: number | null;
   duration: string | null;
   media_crop: string | null;
+  media_trim: string | null;
   card_focus: number | null;
 };
 
@@ -284,12 +289,12 @@ async function extraMediaByPost(postIds: string[]) {
   const byPost = new Map<string, MuralMediaItem[]>();
   if (!postIds.length) return byPost;
   const result = await db.query<ExtraMediaRow>(
-    `SELECT post_id::text, media_type, public_id, width, height, duration::text, media_crop, card_focus
+    `SELECT post_id::text, media_type, public_id, width, height, duration::text, media_crop, media_trim, card_focus
      FROM mural_post_media WHERE post_id::text = ANY($1::text[]) ORDER BY post_id, position`,
     [postIds]
   );
   for (const row of result.rows) {
-    const urls = mediaUrls(row.media_type, row.public_id, row.media_crop);
+    const urls = mediaUrls(row.media_type, row.public_id, row.media_crop, row.media_trim);
     const list = byPost.get(row.post_id) ?? [];
     list.push({
       mediaType: row.media_type,
@@ -354,6 +359,7 @@ type PostRow = {
   author_name: string;
   author_role: string | null;
   media_crop: string | null;
+  media_trim: string | null;
   card_focus: number | null;
   caption: string | null;
   media_type: MediaKind;
@@ -392,7 +398,7 @@ export async function listPosts({
   await ensureMuralSchema();
   const result = await db.query<PostRow>(
     `
-      SELECT p.id::text, p.invite_code, p.author_name, p.author_role, p.media_crop, p.card_focus, p.caption, p.media_type, p.public_id, p.width, p.height,
+      SELECT p.id::text, p.invite_code, p.author_name, p.author_role, p.media_crop, p.media_trim, p.card_focus, p.caption, p.media_type, p.public_id, p.width, p.height,
         p.duration::text, p.is_hidden, p.created_at,
         (SELECT COUNT(*)::int FROM mural_likes l WHERE l.post_id = p.id) AS likes,
         (SELECT COUNT(*)::int FROM mural_comments c WHERE c.post_id = p.id AND (c.is_hidden = FALSE OR $2)) AS comments,
@@ -410,7 +416,7 @@ export async function listPosts({
   );
   const extras = await extraMediaByPost(result.rows.map((row) => row.id));
   return result.rows.map((row: PostRow): MuralPost => {
-    const urls = mediaUrls(row.media_type, row.public_id, row.media_crop);
+    const urls = mediaUrls(row.media_type, row.public_id, row.media_crop, row.media_trim);
     const first: MuralMediaItem = {
       mediaType: row.media_type,
       thumbUrl: urls.thumb,

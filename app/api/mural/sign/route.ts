@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUploadSignature, isCloudinaryConfigured, readVideoCrop } from '@/lib/cloudinary';
+import { createUploadSignature, isCloudinaryConfigured, readVideoCrop, readVideoTrim } from '@/lib/cloudinary';
 import { getAdminSession } from '@/lib/admin-auth';
 import { getMuralSettings, readAuthorName, readViewerId } from '@/lib/mural';
 
@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
     }
     const kind = body?.kind === 'video' ? 'video' : 'image';
     // Vídeo recortado no editor: as versões preparadas no envio já saem recortadas.
-    return NextResponse.json(createUploadSignature(kind, kind === 'video' ? readVideoCrop(body?.crop) : null));
+    return NextResponse.json(
+      createUploadSignature(kind, kind === 'video' ? readVideoCrop(body?.crop) : null, kind === 'video' ? readVideoTrim(body?.trim) : null)
+    );
   } catch (error) {
     console.error('Falha ao assinar envio do mural', error);
     return NextResponse.json({ error: 'Erro ao preparar o envio.' }, { status: 500 });

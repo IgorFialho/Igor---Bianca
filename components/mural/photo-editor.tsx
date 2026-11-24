@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { Caveat, Great_Vibes, Oswald, Special_Elite } from 'next/font/google';
 import { Portal } from '@/components/home/portal';
+import { VideoTrimBar, normalizeTrim, useTrimLoop, type VideoTrim } from '@/components/mural/video-trim';
 
 // Fontes extras do texto por cima da foto (além das do site), carregadas só quando o editor é usado.
 const scriptFont = Great_Vibes({ subsets: ['latin'], weight: '400', display: 'swap' });
@@ -16,6 +17,7 @@ const typewriterFont = Special_Elite({ subsets: ['latin'], weight: '400', displa
 // - texto por cima da foto: escrever (com emojis), arrastar, estilo, tamanho, ângulo e cores do texto, do fundo e da borda;
 // - figurinhas de emoji: arrastar, tamanho e ângulo.
 // O resultado é desenhado num canvas e vira a própria foto enviada (tudo no aparelho, antes do envio).
+// Vídeos: enquadramento (formato, posição, zoom) e trecho (início e fim); quem aplica os dois é o Cloudinary.
 // Posições e tamanhos ficam guardados em frações do quadro, então o mesmo ajuste vale em qualquer tamanho de tela.
 
 export type PhotoAspect = 'original' | '1:1' | '4:5' | '16:9';
@@ -53,11 +55,21 @@ export type PhotoEditState = {
   texts: PhotoTextLayer[];
   /** Posição da área que aparece no card do mural, quando ele corta a foto (0 = topo/esquerda, 1 = base/direita). */
   muralFocus?: number;
+  /** Vídeo: trecho escolhido (início e fim, em segundos). */
+  trim?: VideoTrim | null;
 };
 export type PhotoEditResult = { blob: Blob; width: number; height: number; state: PhotoEditState };
 /** Recorte de vídeo em frações do quadro original (0 a 1): o Cloudinary aplica ao processar o vídeo. */
 export type VideoCrop = { x: number; y: number; w: number; h: number };
-export type VideoCropResult = { crop: VideoCrop | null; width: number; height: number; state: PhotoEditState };
+/** trim: trecho escolhido (null = vídeo inteiro); duration: duração do que vai ao ar. */
+export type VideoCropResult = {
+  crop: VideoCrop | null;
+  trim: VideoTrim | null;
+  duration: number | null;
+  width: number;
+  height: number;
+  state: PhotoEditState;
+};
 
 /** Formatos que o card do mural mostra inteiros (como o Instagram): de retrato 4:5 a paisagem 1,91:1. */
 export const MURAL_MIN_RATIO = 0.8;
@@ -259,7 +271,7 @@ function decodeVideo(file: File): Promise<Decoded> {
 
 type Props = {
   file: File;
-  /** 'video': só recortar (formato, posição e zoom), sem texto. */
+  /** 'video': enquadrar (formato, posição e zoom) e escolher o trecho, sem texto. */
   kind?: 'image' | 'video';
   initialState?: PhotoEditState;
   onCancel: () => void;
@@ -285,6 +297,34 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
   const [showMuralArea, setShowMuralArea] = useState(true);
 
   const [stage, setStage] = useState({ width: 0, height: 0 });
+
+  // ---------- Trecho do vídeo ----------
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoDuration = isVideo && decoded ? (decoded.source as HTMLVideoElement).duration : NaN;
+  const hasTimeline = isVideo && Number.isFinite(videoDuration) && videoDuration > 1;
+  // Sem trecho salvo: o vídeo inteiro.
+  const trim: VideoTrim | null = hasTimeline ? state.trim ?? { start: 0, end: videoDuration } : null;
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [playhead, setPlayhead] = useState(0);
+  useTrimLoop(videoRef, trim, isScrubbing);
+
+  // Arrastando uma ponta: a prévia para e mostra o quadro daquela ponta (o meio arrastado mostra o início).
+  const changeTrim = (next: VideoTrim, edge: 'start' | 'end' | 'move') => {
+    setState((value) => ({ ...value, trim: next }));
+    setIsScrubbing(true);
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = edge === 'end' ? next.end : next.start;
+    setPlayhead(video.currentTime);
+  };
+  const commitTrim = () => {
+    setIsScrubbing(false);
+    const video = videoRef.current;
+    if (!video || !trim) return;
+    video.currentTime = trim.start;
+    void video.play().catch(() => undefined);
+  };
 
   // Abre a foto (uma vez por arquivo).
   useEffect(() => {
@@ -596,11 +636,14 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
       const x = round(clamp(-left / displayWidth, 0, 1 - w));
       const y = round(clamp(-top / displayHeight, 0, 1 - h));
       const isFull = w > 0.999 && h > 0.999;
+      const finalTrim = normalizeTrim(trim, videoDuration);
       onCropDone?.({
         crop: isFull ? null : { x, y, w, h },
+        trim: finalTrim,
+        duration: finalTrim ? Math.round((finalTrim.end - finalTrim.start) * 10) / 10 : Number.isFinite(videoDuration) ? videoDuration : null,
         width: Math.round(decoded.width * (isFull ? 1 : w)),
         height: Math.round(decoded.height * (isFull ? 1 : h)),
-        state,
+        state: { ...state, trim: finalTrim },
       });
       return;
     }
@@ -734,7 +777,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
         className="fixed inset-0 z-[260] flex flex-col bg-zinc-950 text-white"
         role="dialog"
         aria-modal="true"
-        aria-label={isVideo ? 'Recortar vídeo' : 'Editar foto'}
+        aria-label={isVideo ? 'Editar vídeo' : 'Editar foto'}
         // A janela de postar fecha ao tocar fora dela: os toques aqui não podem chegar até lá.
         onClick={(event) => event.stopPropagation()}
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
@@ -743,7 +786,7 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
           <button type="button" onClick={onCancel} disabled={isSaving} className="rounded-full px-3 py-2 text-sm text-white/80 hover:bg-white/10">
             Cancelar
           </button>
-          <p className="font-display text-xl italic">{isVideo ? 'Recortar vídeo' : 'Editar foto'}</p>
+          <p className="font-display text-xl italic">{isVideo ? 'Editar vídeo' : 'Editar foto'}</p>
           <button
             type="button"
             onClick={save}
@@ -768,11 +811,13 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
             >
               {isVideo ? (
                 <video
+                  ref={videoRef}
                   src={decoded.url}
                   autoPlay
                   muted
-                  loop
+                  loop={!hasTimeline}
                   playsInline
+                  onTimeUpdate={(event) => setPlayhead(event.currentTarget.currentTime)}
                   className="pointer-events-none absolute max-w-none object-fill"
                   style={{ left: imageLeft, top: imageTop, width: displayWidth, height: displayHeight }}
                 />
@@ -881,6 +926,9 @@ export function PhotoEditor({ file, kind = 'image', initialState, onCancel, onDo
 
         {/* Ferramentas */}
         <div className="relative space-y-3 px-4 pb-4 pt-3">
+          {hasTimeline && trim && decoded ? (
+            <VideoTrimBar src={decoded.url} duration={videoDuration} trim={trim} currentTime={playhead} onChange={changeTrim} onCommit={commitTrim} />
+          ) : null}
           {selected && !editing ? (
             <div className="flex items-center justify-center gap-2 text-xs">
               <button type="button" onClick={() => openEditing(selected.id)} className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20">

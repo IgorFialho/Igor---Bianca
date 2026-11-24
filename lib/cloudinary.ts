@@ -9,8 +9,8 @@ export const MURAL_TAG = 'mural';
 // Vídeos: já no envio o Cloudinary prepara uma versão MP4/H.264 (toca em qualquer aparelho, inclusive os vídeos
 // HEVC do iPhone) e a capa em JPG. As URLs de exibição usam exatamente estas transformações.
 const VIDEO_PLAYBACK = 'q_auto,vc_h264';
-const VIDEO_POSTER = 'so_0,c_fill,g_auto,w_640,h_640,q_auto';
-const VIDEO_EAGER = `${VIDEO_PLAYBACK}/mp4|${VIDEO_POSTER}/jpg`;
+/** Capa (miniatura do card): o primeiro quadro do vídeo, ou do trecho escolhido. */
+const videoPoster = (start: number) => `so_${start},c_fill,g_auto,w_640,h_640,q_auto`;
 
 export type MediaKind = 'image' | 'video';
 
@@ -28,6 +28,35 @@ export function readVideoCrop(value: unknown): string | null {
   if (cw > 0.999 && ch > 0.999) return null;
   const f = (n: number) => Math.min(1, Math.max(0, n)).toFixed(4);
   return `${f(cx)},${f(cy)},${f(cw)},${f(ch)}`;
+}
+
+/** Menor trecho aceito (segundos). */
+export const MIN_VIDEO_TRIM = 1;
+
+/**
+ * Trecho do vídeo escolhido no editor ("início,fim" em segundos, com 1 casa). Vira so_/eo_ do Cloudinary: o vídeo é
+ * enviado inteiro e o Cloudinary entrega só o trecho (sem processar nada no celular). Vazio = vídeo inteiro.
+ */
+export function readVideoTrim(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const { start, end } = value as Record<string, unknown>;
+  const s = Math.round(Number(start) * 10) / 10;
+  const e = Math.round(Number(end) * 10) / 10;
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s < 0 || e > 36000 || e - s < MIN_VIDEO_TRIM) return null;
+  return `${s},${e}`;
+}
+
+/** "início,fim" → [início, fim] em segundos (ou null). */
+export function trimRange(trim: string | null | undefined): [number, number] | null {
+  if (!trim) return null;
+  const [s, e] = trim.split(',').map(Number);
+  return Number.isFinite(s) && Number.isFinite(e) ? [s, e] : null;
+}
+
+/** "início,fim" → "so_…,eo_…/" (ou vazio, vídeo inteiro). */
+function trimTransform(trim: string | null | undefined) {
+  const range = trimRange(trim);
+  return range ? `so_${range[0]},eo_${range[1]}/` : '';
 }
 
 /** "x,y,w,h" → "c_crop,x_…,y_…,w_…,h_…/" (ou vazio, sem recorte). */
@@ -60,7 +89,7 @@ function sign(params: Record<string, string | number>) {
 }
 
 /** Dados para o celular enviar um arquivo direto ao Cloudinary (válidos por ~1 hora). */
-export function createUploadSignature(kind: MediaKind, videoCrop: string | null = null) {
+export function createUploadSignature(kind: MediaKind, videoCrop: string | null = null, videoTrim: string | null = null) {
   const { cloudName, apiKey } = getConfig();
   const params: Record<string, string | number> = {
     folder: MURAL_FOLDER,
@@ -68,9 +97,11 @@ export function createUploadSignature(kind: MediaKind, videoCrop: string | null 
     timestamp: Math.floor(Date.now() / 1000),
   };
   if (kind === 'video') {
-    // Com recorte, as versões preparadas no envio já saem recortadas (as mesmas URLs que o mural usa).
+    // Com recorte e/ou trecho, as versões preparadas no envio já saem assim (as mesmas URLs que o mural usa).
     const crop = cropTransform(videoCrop);
-    params.eager = crop ? `${crop}${VIDEO_PLAYBACK}/mp4|${crop}${VIDEO_POSTER}/jpg` : VIDEO_EAGER;
+    const trim = trimTransform(videoTrim);
+    const start = trimRange(videoTrim)?.[0] ?? 0;
+    params.eager = `${trim}${crop}${VIDEO_PLAYBACK}/mp4|${crop}${videoPoster(start)}/jpg`;
     params.eager_async = 'true';
   }
   return {
@@ -106,16 +137,18 @@ export function verifyUploadResponse(publicId: string, version: string | number,
   return expected === signature;
 }
 
-/** URLs de exibição de um arquivo do mural. */
-export function mediaUrls(kind: MediaKind, publicId: string, videoCrop: string | null = null) {
+/** URLs de exibição de um arquivo do mural (vídeo: já recortado e só no trecho escolhido). */
+export function mediaUrls(kind: MediaKind, publicId: string, videoCrop: string | null = null, videoTrim: string | null = null) {
   const { cloudName } = getConfig();
   const base = `https://res.cloudinary.com/${cloudName}/${kind}/upload`;
   if (kind === 'video') {
     const crop = cropTransform(videoCrop);
+    const trim = trimTransform(videoTrim);
+    const start = trimRange(videoTrim)?.[0] ?? 0;
     return {
-      thumb: `${base}/${crop}${VIDEO_POSTER}/${publicId}.jpg`,
-      full: `${base}/${crop}${VIDEO_PLAYBACK}/${publicId}.mp4`,
-      poster: `${base}/${crop}so_0,c_limit,w_1600,q_auto/${publicId}.jpg`,
+      thumb: `${base}/${crop}${videoPoster(start)}/${publicId}.jpg`,
+      full: `${base}/${trim}${crop}${VIDEO_PLAYBACK}/${publicId}.mp4`,
+      poster: `${base}/${crop}so_${start},c_limit,w_1600,q_auto/${publicId}.jpg`,
     };
   }
   return {

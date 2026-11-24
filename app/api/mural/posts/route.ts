@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth';
-import { destroyMedia, readVideoCrop, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
+import { destroyMedia, readVideoCrop, readVideoTrim, trimRange, verifyUploadResponse, type MediaKind } from '@/lib/cloudinary';
 import {
   CAPTION_MAX_LENGTH,
   MAX_POSTS_PER_DAY,
@@ -67,8 +67,9 @@ export async function POST(request: NextRequest) {
         publicId: itemId,
         width: toInt(item.width),
         height: toInt(item.height),
-        duration: itemKind === 'video' && Number.isFinite(Number(item.duration)) ? Number(item.duration) : null,
         crop: itemKind === 'video' ? readVideoCrop(item.crop) : null,
+        trim: itemKind === 'video' ? readVideoTrim(item.trim) : null,
+        duration: itemKind === 'video' ? trimmedDuration(item.duration, itemKind === 'video' ? readVideoTrim(item.trim) : null) : null,
         focus: readCardFocus(item.focus),
       };
     });
@@ -94,11 +95,12 @@ export async function POST(request: NextRequest) {
     // Se a pessoa também entrou com o código do convite, o post fica ligado ao convite (só para referência).
     const guest = body?.code ? await resolveGuest(body.code) : null;
     const caption = cleanText(body?.caption, CAPTION_MAX_LENGTH) || null;
-    const duration = Number.isFinite(Number(body?.duration)) ? Number(body.duration) : null;
+    const trim = kind === 'video' ? readVideoTrim(body?.trim) : null;
+    const duration = trimmedDuration(body?.duration, trim);
     const result = await db.query<{ id: string }>(
       `
-        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, media_crop, caption, media_type, public_id, width, height, duration, ip, card_focus)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        INSERT INTO mural_posts (invitation_code_id, invite_code, author_name, author_role, media_crop, caption, media_type, public_id, width, height, duration, ip, card_focus, media_trim)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (public_id) DO NOTHING
         RETURNING id::text
       `,
@@ -118,6 +120,8 @@ export async function POST(request: NextRequest) {
         ip,
         // Parte da foto escolhida no editor para aparecer no card.
         readCardFocus(body?.focus),
+        // Trecho do vídeo escolhido no editor: o mural toca só ele.
+        trim,
       ]
     );
     const postId = result.rows[0]?.id ?? null;
@@ -125,9 +129,9 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < extra.length; index += 1) {
         const item = extra[index];
         await db.query(
-          `INSERT INTO mural_post_media (post_id, position, media_type, public_id, width, height, duration, media_crop, card_focus)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (public_id) DO NOTHING`,
-          [postId, index + 1, item.kind, item.publicId, item.width, item.height, item.duration, item.crop, item.focus]
+          `INSERT INTO mural_post_media (post_id, position, media_type, public_id, width, height, duration, media_crop, card_focus, media_trim)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (public_id) DO NOTHING`,
+          [postId, index + 1, item.kind, item.publicId, item.width, item.height, item.duration, item.crop, item.focus, item.trim]
         );
       }
     }
@@ -173,4 +177,12 @@ export async function DELETE(request: NextRequest) {
     console.error('Falha ao apagar post do mural', error);
     return NextResponse.json({ error: 'Erro ao apagar o post.' }, { status: 500 });
   }
+}
+
+/** Duração do que o mural toca: o trecho escolhido (quando há) ou o vídeo inteiro. */
+function trimmedDuration(value: unknown, trim: string | null) {
+  const range = trimRange(trim);
+  if (range) return Math.round((range[1] - range[0]) * 100) / 100;
+  const number = Number(value);
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(number) ? number : null;
 }

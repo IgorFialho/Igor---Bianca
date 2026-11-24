@@ -8,6 +8,7 @@ import { SiteHeader } from '@/components/home/site-header';
 import { CameraCapture, isCameraSupported } from '@/components/mural/camera-capture';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { PhotoEditor, muralCardRatio, muralObjectPosition, type PhotoEditResult, type PhotoEditState, type VideoCrop, type VideoCropResult } from '@/components/mural/photo-editor';
+import { TrimmedVideo, formatClock, type VideoTrim } from '@/components/mural/video-trim';
 import { INTRO_HOME_HREF } from '@/components/intro-arco';
 import {
   MAX_IMAGE_BYTES,
@@ -2193,6 +2194,8 @@ type Picked = {
   edit: PhotoEditState | null;
   /** Vídeo: recorte escolhido no editor (o Cloudinary aplica ao processar). */
   crop: VideoCrop | null;
+  /** Vídeo: trecho escolhido no editor (o arquivo vai inteiro; o Cloudinary entrega só o trecho). */
+  trim: VideoTrim | null;
 };
 
 /** Janela de postar: escolher/tirar foto ou vídeo, legenda e envio com progresso. Também usada no painel (aba Mural). */
@@ -2292,10 +2295,20 @@ export function Composer({
     setIsEditing(false);
   }, []);
 
-  /** Vídeo recortado: guarda o recorte (o arquivo continua o mesmo; quem recorta é o Cloudinary). */
+  /** Vídeo editado: guarda o recorte e o trecho (o arquivo continua o mesmo; quem aplica os dois é o Cloudinary). */
   const applyVideoCrop = useCallback((result: VideoCropResult) => {
     setPicked((current) =>
-      current ? { ...current, previewUrl: URL.createObjectURL(current.original), crop: result.crop, width: result.width, height: result.height, edit: result.state } : current
+      current
+        ? {
+            ...current,
+            previewUrl: URL.createObjectURL(current.original),
+            crop: result.crop,
+            trim: result.trim,
+            width: result.width,
+            height: result.height,
+            edit: result.state,
+          }
+        : current
     );
     setIsEditing(false);
   }, []);
@@ -2323,7 +2336,7 @@ export function Composer({
         continue;
       }
       const meta = kind === 'video' ? await readVideoMeta(file) : { duration: null, width: null, height: null };
-      accepted.push({ file, kind, previewUrl: URL.createObjectURL(file), ...meta, original: file, edit: null, crop: null });
+      accepted.push({ file, kind, previewUrl: URL.createObjectURL(file), ...meta, original: file, edit: null, crop: null, trim: null });
     }
     if (files.length > room) problem = `Cabem no máximo ${MAX_MEDIA_PER_POST} fotos ou vídeos por post; as demais ficaram de fora.`;
     setShowCamera(false);
@@ -2414,7 +2427,7 @@ export function Composer({
         const signResponse = await fetch('/api/mural/sign', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ viewerId, name: trimmedName, kind: item.kind, crop: item.crop ?? undefined }),
+          body: JSON.stringify({ viewerId, name: trimmedName, kind: item.kind, crop: item.crop ?? undefined, trim: item.trim ?? undefined }),
         });
         const sign = await signResponse.json();
         if (!signResponse.ok) throw new Error(sign?.error || 'Não foi possível preparar o envio.');
@@ -2432,6 +2445,8 @@ export function Composer({
           height: item.crop ? height : (result.height ?? height),
           duration: result.duration ?? item.duration,
           crop: item.crop ?? undefined,
+          // Trecho do vídeo (o servidor guarda e calcula a duração do que vai ao ar).
+          trim: item.trim ?? undefined,
           // Parte da foto/vídeo que aparece no card (escolhida no editor).
           focus: item.edit?.muralFocus ?? 0.5,
         });
@@ -2545,11 +2560,11 @@ export function Composer({
                       width: `min(100%, calc(min(31svh, 330px) * ${(picked.width ?? 1) / (picked.height ?? 1)}))`,
                     }}
                   >
-                    <video
+                    <TrimmedVideo
+                      trim={picked.trim}
                       src={picked.previewUrl}
                       autoPlay
                       muted
-                      loop
                       playsInline
                       className="absolute max-w-none object-fill"
                       style={{
@@ -2561,7 +2576,7 @@ export function Composer({
                     />
                   </div>
                 ) : (
-                  <video src={picked.previewUrl} controls playsInline className="max-h-[min(31svh,330px)] w-full" />
+                  <TrimmedVideo trim={picked.trim} src={picked.previewUrl} controls playsInline className="max-h-[min(31svh,330px)] w-full" />
                 )
               ) : (
                 // Prévia como o card do mural: no formato do card (4:5 a 1,91:1), cortando pelo centro igual ao mural.
@@ -2583,10 +2598,20 @@ export function Composer({
                   </span>
                 </div>
               )}
+              {picked.kind === 'video' && picked.trim ? (
+                <span className="pointer-events-none absolute left-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[0.65rem] font-medium tabular-nums text-white backdrop-blur-sm">
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                    <circle cx="6" cy="6" r="2.5" />
+                    <circle cx="6" cy="18" r="2.5" />
+                    <path d="M8 7.5 20 16M8 16.5 20 8" strokeLinecap="round" />
+                  </svg>
+                  Trecho {formatClock(picked.trim.start)} – {formatClock(picked.trim.end)}
+                </span>
+              ) : null}
               {!isUploading ? (
                 <div className="absolute bottom-3 right-3 flex gap-2">
                   <button type="button" onClick={() => setIsEditing(true)} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
-                    {picked.kind === 'video' ? 'Recortar' : 'Editar'}
+                    Editar
                   </button>
                   <button type="button" onClick={removeCurrent} className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-zinc-800 shadow">
                     {items.length > 1 ? 'Remover' : 'Refazer'}

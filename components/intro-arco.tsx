@@ -21,8 +21,8 @@ const LOAD_TIMEOUT_MS = 4000;
 const ENTER_EASING = 'cubic-bezier(0.74, 0, 0.16, 1)';
 const OPEN_EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 
-// Proporção das imagens de flores (1891x810).
-const PANEL_RATIO = 1891 / 810;
+// Proporção das imagens de flores (2400x1028).
+const PANEL_RATIO = 2400 / 1028;
 const PANEL_OFFSET = `max(50vw, ${50 * PANEL_RATIO}svh)`;
 
 // Disparado no clique de "Clique para entrar"; o player de música escuta para começar a tocar.
@@ -32,25 +32,27 @@ type Phase = 'closed' | 'open' | 'entering' | 'done';
 type Layer = 'background' | 'left' | 'right';
 type Parallax = { x: number; y: number };
 
-// As camadas são enormes e reduzidas com scale(); ao entrar, o scale cresce e a "câmera"
-// atravessa o arco. Cada camada se move numa intensidade diferente com o mouse (profundidade).
+// Cada camada tem o tamanho da tela e, ao entrar, é ampliada com scale(): a "câmera" atravessa o arco.
+// (Antes as camadas eram enormes, 12x e 3x a tela, e reduzidas; em telas grandes isso estourava a memória da
+// placa de vídeo e o Chrome deixava de desenhar pedaços da intro. A nitidez é a mesma: as imagens têm 2400 px.)
+// Cada camada se move numa intensidade diferente com o mouse (profundidade).
 function layerTransform(layer: Layer, phase: Phase, { x, y }: Parallax) {
   const entering = phase === 'entering';
 
   if (layer === 'background') {
-    if (phase === 'closed') return `translate3d(-50%, -50%, 0) scale(${1 / 12})`;
+    if (phase === 'closed') return 'translate3d(-50%, -50%, 0) scale(1)';
     const dx = entering ? 0 : 20 * x - 4 * y;
     const dy = entering ? 0 : 15 * y + 3 * x;
-    return `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(${entering ? 1 : 1.04 / 12})`;
+    return `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(${entering ? 12 : 1.04})`;
   }
 
-  if (phase === 'closed') return `translate3d(-50%, -50%, 0) scale(${1 / 3})`;
+  if (phase === 'closed') return 'translate3d(-50%, -50%, 0) scale(1)';
 
   const sign = layer === 'left' ? '-' : '+';
   const offset = entering ? `calc(52vw + 2.15 * ${PANEL_OFFSET})` : `calc(5vw + ${PANEL_OFFSET})`;
   const dx = entering ? 0 : layer === 'left' ? 48 * x + 7 * y : 54 * x - 9 * y;
   const dy = entering ? 0 : layer === 'left' ? 27 * y - 5 * x : 22 * y + 6 * x;
-  return `translate3d(calc(-50% ${sign} ${offset} + ${dx}px), calc(-50% + ${dy}px), 0) scale(${entering ? 2.15 / 3 : 1.03 / 3})`;
+  return `translate3d(calc(-50% ${sign} ${offset} + ${dx}px), calc(-50% + ${dy}px), 0) scale(${entering ? 2.15 : 1.03})`;
 }
 
 function layerStyle(layer: Layer, phase: Phase, parallax: Parallax): CSSProperties {
@@ -80,8 +82,8 @@ function textStyle(phase: Phase, { x, y }: Parallax): CSSProperties {
 
 const panelSize: CSSProperties = {
   aspectRatio: String(PANEL_RATIO),
-  height: '300svh',
-  width: `max(300vw, ${100 * PANEL_RATIO * 3}svh)`,
+  height: '100svh',
+  width: `max(100vw, ${100 * PANEL_RATIO}svh)`,
 };
 
 function IntroArcoOverlay() {
@@ -198,7 +200,7 @@ function IntroArcoOverlay() {
 
       <div
         className="pointer-events-none absolute left-1/2 top-1/2 z-10 will-change-transform"
-        style={{ width: '1200vw', height: '1200svh', ...layerStyle('background', shownPhase, parallax) }}
+        style={{ width: '100vw', height: '100svh', ...layerStyle('background', shownPhase, parallax) }}
       >
         <img
           src={BACKGROUND_SRC}
@@ -312,13 +314,13 @@ export function isIntroPending() {
   return !shouldSkipIntro();
 }
 
-// Buraco transparente de fundo.webp (1517x903), medido pelo canal alfa: centro e tamanho em frações da imagem.
-const HOLE = { centerX: 0.53, centerY: 0.415, width: 0.24, height: 0.51, left: 0.406, right: 0.657, top: 0.16, bottom: 0.67 };
-const BACKGROUND_RATIO = 1517 / 903;
+// Buraco transparente de fundo.webp (2400x1428), medido pelo canal alfa: centro e tamanho em frações da imagem.
+const HOLE = { centerX: 0.529, centerY: 0.419, width: 0.255, height: 0.507, left: 0.402, right: 0.657, top: 0.158, bottom: 0.665 };
+const BACKGROUND_RATIO = 2400 / 1428;
 
 /**
  * Onde o buraco do arco aparece na tela (px), com a introdução aberta: o fundo ocupa 104% da tela
- * (scale 1.04/12 de uma caixa de 1200vw × 1200svh) com object-fit cover e foco em 54% 50%.
+ * (scale 1.04 de uma caixa de 100vw × 100svh) com object-fit cover e foco em 54% 50%.
  */
 export function introHoleRect(viewportWidth: number, viewportHeight: number) {
   const boxWidth = 1.04 * viewportWidth;

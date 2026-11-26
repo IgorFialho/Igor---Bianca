@@ -15,9 +15,11 @@ export async function GET(request: NextRequest) {
     const limitParam = Number(request.nextUrl.searchParams.get('limit'));
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(50, Math.round(limitParam)) : 400;
     const beforeId = request.nextUrl.searchParams.get('before');
+    // ?autor=casal: só os posts do noivo e da noiva (carrossel da seção do mural na home).
+    const coupleOnly = request.nextUrl.searchParams.get('autor') === 'casal';
     const [settings, posts, guest, admin] = await Promise.all([
       getMuralSettings(),
-      listPosts({ viewerCode: viewerId, limit, beforeId }),
+      listPosts({ viewerCode: viewerId, limit, beforeId, coupleOnly }),
       code ? resolveGuest(code) : Promise.resolve(null),
       getAdminSession(request),
     ]);

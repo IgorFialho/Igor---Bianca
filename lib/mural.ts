@@ -389,6 +389,7 @@ export async function listPosts({
   beforeId = null,
   afterId = null,
   ids = null,
+  coupleOnly = false,
 }: {
   viewerCode?: string | null;
   includeHidden?: boolean;
@@ -396,6 +397,8 @@ export async function listPosts({
   beforeId?: string | null;
   afterId?: string | null;
   ids?: string[] | null;
+  /** Só os posts do noivo e da noiva (seção do mural na home). */
+  coupleOnly?: boolean;
 }) {
   await ensureMuralSchema();
   const result = await db.query<PostRow>(
@@ -411,10 +414,11 @@ export async function listPosts({
         AND ($4::bigint IS NULL OR p.id < $4::bigint)
         AND ($5::bigint IS NULL OR p.id > $5::bigint)
         AND ($6::text[] IS NULL OR p.id::text = ANY($6::text[]))
+        AND ($7::boolean IS NOT TRUE OR p.author_role IN ('noivo', 'noiva'))
       ORDER BY p.id DESC
       LIMIT $3
     `,
-    [viewerCode ?? null, includeHidden, limit, toBigintParam(beforeId), toBigintParam(afterId), ids && ids.length ? ids.slice(0, 200) : null]
+    [viewerCode ?? null, includeHidden, limit, toBigintParam(beforeId), toBigintParam(afterId), ids && ids.length ? ids.slice(0, 200) : null, coupleOnly]
   );
   const extras = await extraMediaByPost(result.rows.map((row) => row.id));
   return result.rows.map((row: PostRow): MuralPost => {

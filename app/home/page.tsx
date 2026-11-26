@@ -115,11 +115,14 @@ const FAQ_ITEMS: FaqItem[] = [
 ];
 
 // Cores de fundo da página por seção (como na Cordially): a contagem regressiva ganha o tom areia,
-// que segue na seção do local, e o fundo volta ao creme na confirmação de presença. Troca suave (0,5s).
+// que segue na seção do local, e o fundo volta ao creme na confirmação de presença; o mural ganha o mesmo tom areia e
+// o fundo volta ao creme nas perguntas. Troca suave (0,5s).
 const PAGE_BACKGROUND = '#fcf7ed';
 const SECTION_BACKGROUNDS: SectionBackground[] = [
   { id: 'cerimonia', color: '#f6edd7' },
   { id: 'rsvp', color: PAGE_BACKGROUND },
+  { id: 'mural', color: '#f6edd7' },
+  { id: 'perguntas', color: PAGE_BACKGROUND },
 ];
 
 const NAV_LINKS = [

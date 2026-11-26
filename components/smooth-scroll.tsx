@@ -17,6 +17,8 @@ const HEADER_OFFSET = 96;
 function sectionScrollTop(element: HTMLElement) {
   const rect = element.getBoundingClientRect();
   const top = rect.top + window.scrollY;
+  // Seção que ocupa a tela inteira (ex.: mural com o carrossel): o topo dela vai para o topo da tela.
+  if (element.dataset.scrollAlign === 'top') return Math.max(0, top);
   const viewport = window.innerHeight;
 
   // Faixa ocupada pelo conteúdo de verdade (títulos, textos, fotos, botões, contagem...), sem o espaçamento da

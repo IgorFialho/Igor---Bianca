@@ -273,6 +273,73 @@ textarea:-webkit-autofill {
     radial-gradient(circle at 34% 64%, rgba(255, 255, 255, 0.7) 0 9%, transparent 10%);
 }
 
+/* ---------- Seção do mural na home: carrossel de pilares com as fotos do casal ---------- */
+.mural-pillars {
+  --pillar-gap: clamp(0.25rem, 0.5vw, 0.5rem);
+  --pillar-width: clamp(9.25rem, 10vw, 20rem);
+  --pillar-radius: calc(var(--pillar-width) * 0.52);
+  overflow: hidden;
+  /* Esmaece só nas laterais, em qualquer cor de fundo (máscara, sem desfoque de fundo, que pesaria no celular com as
+     fotos em movimento). */
+  -webkit-mask-image: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.44) 3.25%, #000 9%, #000 91%, rgb(0 0 0 / 0.44) 96.75%, transparent);
+  mask-image: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.44) 3.25%, #000 9%, #000 91%, rgb(0 0 0 / 0.44) 96.75%, transparent);
+}
+@media (max-width: 639px) {
+  .mural-pillars {
+    --pillar-width: clamp(9.25rem, 42vw, 11.5rem);
+  }
+}
+.mural-pillars-track {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  will-change: transform;
+  animation: mural-pillars-travel var(--pillar-duration, 42s) linear infinite;
+}
+.mural-pillars-sequence {
+  display: flex;
+  flex: none;
+  height: 100%;
+  gap: var(--pillar-gap);
+  padding-right: var(--pillar-gap);
+}
+.mural-pillar {
+  position: relative;
+  width: var(--pillar-width);
+  /* Os pilares ocupam a altura que sobra na tela, abaixo do texto. */
+  height: 100%;
+  flex: none;
+  overflow: hidden;
+  /* Enquanto a foto carrega: um tom translúcido que combina com qualquer cor de fundo da seção. */
+  background: rgb(47 36 27 / 0.06);
+  transform: translateZ(0);
+}
+.mural-pillar[data-shape='forward'] {
+  border-radius: var(--pillar-radius) 0 var(--pillar-radius) 0;
+}
+.mural-pillar[data-shape='reverse'] {
+  border-radius: 0 var(--pillar-radius) 0 var(--pillar-radius);
+}
+@keyframes mural-pillars-travel {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Sem animação: a fileira fica parada e pode ser arrastada para os lados. */
+  .mural-pillars {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mural-pillars::-webkit-scrollbar {
+    display: none;
+  }
+  .mural-pillars-track {
+    animation: none;
+    will-change: auto;
+  }
+}
+
 /* ---------- Player de música (disco de vinil + pílula de vidro) ---------- */
 .music-pill {
   /* Sem backdrop-filter: o desfoque do fundo era refeito a cada quadro ao abrir/fechar e travava a animação.

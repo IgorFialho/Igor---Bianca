@@ -7,7 +7,8 @@ import { Reveal } from '@/components/home/reveal';
 // Seção do mural na página principal: texto e botão em cima e, embaixo, uma fileira de "pilares" com as fotos
 // postadas pelo noivo e pela noiva no mural, deslizando sem parar (carrossel infinito). Os pilares alternam dois
 // formatos (cantos opostos arredondados), formando uma silhueta de pétalas. Fotos de convidados não entram;
-// posts ocultos pelo painel também não.
+// posts ocultos pelo painel também não. Enquanto o casal não postar nada no mural (ou se ele não carregar), o
+// carrossel usa as fotos do casal que já estão na home (fallbackPhotos), sem baixar nada a mais.
 
 type MuralSectionProps = {
   id: string;
@@ -17,6 +18,8 @@ type MuralSectionProps = {
   ctaLabel: string;
   headingClassName: string;
   eyebrowClassName: string;
+  /** Fotos do casal já usadas na home: aparecem no carrossel enquanto não houver nenhuma postagem do casal no mural. */
+  fallbackPhotos: string[];
 };
 
 /** De quanto em quanto tempo busca as postagens novas do casal (ms). */
@@ -51,7 +54,7 @@ function setKey(list: string[]) {
   return [...list].sort().join('|');
 }
 
-export function MuralSection({ id, eyebrow, title, text, ctaLabel, headingClassName, eyebrowClassName }: MuralSectionProps) {
+export function MuralSection({ id, eyebrow, title, text, ctaLabel, headingClassName, eyebrowClassName, fallbackPhotos }: MuralSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -60,34 +63,47 @@ export function MuralSection({ id, eyebrow, title, text, ctaLabel, headingClassN
   // Quantos pilares uma volta precisa para cobrir a largura da tela (com poucas fotos, elas se repetem).
   const [minPillars, setMinPillars] = useState(10);
 
+  // As fotos de reserva só mudam se a página mudar; a chave evita refazer o efeito a cada render.
+  const fallbackKey = fallbackPhotos.join('|');
+  const fallbackRef = useRef(fallbackPhotos);
+  fallbackRef.current = fallbackPhotos;
+
   // Fotos do noivo e da noiva (fotos e capas de vídeo, inclusive de posts com várias mídias), mais recentes primeiro.
   useEffect(() => {
     let cancelled = false;
+    // Mostra um conjunto de fotos: ordem aleatória (e, com muitas fotos, uma seleção de até MAX_PHOTOS) a cada visita.
+    // Na atualização de cada minuto, só sorteia de novo se o conjunto mudou (o carrossel não troca enquanto a pessoa olha).
+    const show = (urls: string[]) => {
+      const key = setKey(urls);
+      if (key === allKeyRef.current) return;
+      allKeyRef.current = key;
+      setPhotos(shuffle(urls).slice(0, MAX_PHOTOS));
+    };
     const load = () =>
       fetch('/api/mural?limit=50&autor=casal', { cache: 'no-store' })
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => {
-          if (cancelled || !Array.isArray(data?.posts)) return;
+          if (cancelled) return;
+          if (!Array.isArray(data?.posts)) throw new Error('mural');
           const urls = (data.posts as CouplePost[])
             .flatMap((post) => (post.media?.length ? post.media : [post]))
             .map((item) => (item.mediaType === 'video' ? item.posterUrl : item.thumbUrl))
             .filter((url): url is string => Boolean(url))
             .map(pillarUrl);
-          // Ordem aleatória (e, com muitas fotos, uma seleção de até MAX_PHOTOS) a cada visita. Na atualização de cada
-          // minuto, só sorteia de novo se as fotos do casal mudaram (o carrossel não troca enquanto a pessoa olha).
-          const key = setKey(urls);
-          if (key === allKeyRef.current) return;
-          allKeyRef.current = key;
-          setPhotos(shuffle(urls).slice(0, MAX_PHOTOS));
+          // Nenhuma postagem do casal ainda: fotos do casal que já estão na home.
+          show(urls.length ? urls : fallbackRef.current);
         })
-        .catch(() => undefined);
+        .catch(() => {
+          // Mural fora do ar: mantém o que já está na tela ou, se ainda não há nada, usa as fotos de reserva.
+          if (!cancelled && !allKeyRef.current) show(fallbackRef.current);
+        });
     load();
     const timer = window.setInterval(load, REFRESH_EVERY);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [fallbackKey]);
 
   // Largura da tela → quantos pilares uma volta precisa.
   useEffect(() => {

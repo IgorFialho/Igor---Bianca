@@ -86,6 +86,10 @@ const STORY_CHAPTERS: TimelineChapter[] = [
     ],
   },
 ];
+// Carrossel do mural enquanto o casal não postar nada lá: as fotos do casal que já estão na home
+// (galeria do topo e "Nossa história"), que o navegador já baixou para essas seções.
+const MURAL_FALLBACK_PHOTOS = [...HERO_GALLERY.map((photo) => photo.src), ...STORY_CHAPTERS.flatMap((chapter) => chapter.photos.map((photo) => photo.src))];
+
 const STORY_CLOSING =
   'Agora, nos preparamos para viver o próximo capítulo, certos de que o mesmo Deus que escreveu o início dessa história continuará guiando cada página que ainda está por vir.';
 
@@ -488,6 +492,7 @@ export default function HomePage() {
         ctaLabel="Ver o mural"
         headingClassName={HEADING}
         eyebrowClassName={EYEBROW}
+        fallbackPhotos={MURAL_FALLBACK_PHOTOS}
       />
 
       <FaqSection id="perguntas" title="Perguntas e respostas" intro="Tudo o que você precisa saber antes do grande dia." items={FAQ_ITEMS} />
